@@ -9,6 +9,12 @@ community project keeping Altered alive — and its dev reached out to integrate
 forces shaping this roadmap are (1) building toward that Re:Union integration and (2) a
 closing window on the old `api.altered.gg` card/unique API before it's retired.
 
+**Update (Jul 2026): that window has closed.** `api.altered.gg` (DNS gone) and both Altered S3
+image buckets are down (`403 AllAccessDisabled`). The app now depends entirely on community
+infrastructure: card data from the PolluxTroy0 GitHub DB, card+unique lookups from
+`cards.alteredcore.org`, and card images from the `cdn.alteredcore.org` community CDN
+(built by reference — see "Recently shipped"). No remaining dependency on Altered-hosted APIs.
+
 ---
 
 ## Now — active priorities (in order)
@@ -375,6 +381,43 @@ This is a DIFFERENT, newer cube than the LuigiNico cube already in the app.
 
 ## Recently shipped
 
+- **Card images migrated to the community CDN** (Jul 2026, **incident fix**). Altered disabled public
+  access to BOTH its S3 image buckets (`altered-prod-eu` AND `altered-dev` now return `403
+  AllAccessDisabled`) and retired `api.altered.gg` (DNS gone), so every card image 404'd/403'd at once
+  (the community DB's `imagePath` and the cards API's `imagePath` both pointed at the dead buckets). New
+  `cardImageUrl(reference, lang)` builds the URL from the reference against
+  `https://cdn.alteredcore.org/cards/<lang>/<SET>/<REF>.webp` (web-optimized `.webp`, CORS `*`,
+  deterministic — no per-card hash). Both `normalizeCard` and `normalizeAlteredCore` route through it;
+  the dead `prodImage()` host-swap is removed. **Uniques** aren't on the CDN but share their base rare's
+  art, so it falls back to the `…_R1` printing (so a live/random unique shows the rare's face — right art,
+  rare's stats; the 24 bundled cube uniques keep their local `/uniques/*.jpg`). (`src/lib/cardData.js`)
+- **Hero-draft overhaul — heroes drafted FIRST** (Jul 2026). Rochester / Rotisserie / Winston now
+  snake-draft heroes at the **very start**, before the cards, instead of an end-of-draft snake. Booster
+  still interleaves a hero pass between card rounds. Implemented with a `heroStart` flag: the build
+  functions seed the full card-phase state but start in `phase:'heroDraft'`; `applyHeroPick` flips to the
+  named card phase once the opening snake completes. Winston gains a **`draft`** hero option; a new
+  **"Heroes per player" stepper** (`config.heroCount`, min 1, max = `floor(pool/players)`) with copy
+  clarifying that **every** hero from the boosters or cube goes into one shared pool. (`draftLogic.js`
+  `heroTargetFor`, `rochesterLogic.js`, `rotisserieLogic.js`, `winstonLogic.js`, `SettingsFields.jsx`)
+- **"My pool" overlay during drafts** (Jul 2026). An accent **My pool (N)** button in the draft top bar
+  opens a full-screen read-only `PoolGrid` of everything drafted so far (heroes + picks), with the same
+  faction filter / group-by / hover zoom as the Results pool. `PoolCard` +/- controls are now conditional
+  so the grid renders read-only. (`Draft.jsx`, `PoolGrid.jsx`)
+- **Two-column Winston board** (Jul 2026). Piles on the left, the **revealed card + take/decline actions +
+  blind-draw shown to the right** (`xl:flex-row`) instead of stacked, so the card you're deciding on sits
+  beside the piles. (`WinstonBoard.jsx`)
+- **Rotisserie / Winston cube duplicate fix** (Jul 2026). Formats that flatten all packs into one shared
+  pool now route recipe cubes (e.g. LuigiNico) through `generateCubeDraftPacks` (no pool recycling)
+  instead of `generateCubeRecipePacks` (which recycles per-pack and produced duplicate cards once
+  flattened). Also: the **Rotisserie grid** was made denser (10 cols at lg, matching the deckbuilder) after
+  it rendered too large, and the sealed **"Advanced" tab was renamed "Multi-Set"** everywhere for
+  consistency. (`Lobby.jsx`, `RotisserieGrid.jsx`)
+- **Wizard recap + crash safety** (Jul 2026). A recap line under the wizard progress bar shows the chosen
+  **mode** (and, from step 3, the **card summary**) so the host can see their selections while on settings.
+  Fixed a **blank-page crash** on room creation (a `const` derived from `equalPacks` was declared before
+  the `useState` — a temporal-dead-zone `ReferenceError` Vite doesn't catch at build); wrapped the app in
+  an **`ErrorBoundary`** so a render crash shows a message + Reload instead of a silent blank page.
+  (`Lobby.jsx`, `ErrorBoundary.jsx`, `main.jsx`)
 - **Lobby reframed as a mode-first 3-step wizard** (Jun 2026). FIFA-style: **how to play → cards →
   settings** (replaces the old draft/sealed toggle + the pre-flight modal). Step 1 picks the **mode**
   (Booster Draft + Sealed up front; Rochester / Rotisserie / Winston behind an "Other draft options"
