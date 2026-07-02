@@ -27,7 +27,54 @@ nice-to-have, not a goal). Backlog ideas (draft log/replay, cube analytics) are 
 Immediate work: **QA the recent batch** (`TESTING.md` checklist — the alternate formats, the lobby wizard,
 mode-driven pool size, random uniques, Winston, hover zoom), then continue UX/visual polish.
 
-### 1. Re:Union (Altered Reunion) account integration — core SHIPPED; site-plugin thread POSTPONED
+### 1. Set 6 preview: tournament-safe sealed + `limited.altered.re` hosting (NEW — Jul 2026, Re:Union proposal)
+Re:Union proposed running **online set 6 preview / prerelease SEALED events** on the tool, hosted at a
+subdomain like **`limited.altered.re`** (they provide DNS; we keep deploy control), and asked for
+**anti-cheat** so the events are trustworthy. Design validated with the user (Jul 2026); the **user handles
+the Discord thread**. Not started.
+
+**The two cheating vectors + the design (the user's idea, validated):**
+- **Re-rolling** the sealed until you get a bomb pool → killed by a **deterministic seed**. The pool is
+  generated from a **server-issued seed = hash(verified Re:Union `sub` + `eventKey`)**, so for a given
+  player + event the pool is ALWAYS the same, however many times they relaunch. `eventKey` encapsulates the
+  time window and is set by the TO — an **explicit event key, NOT the raw calendar day** (avoids a midnight
+  rollover mid-event).
+- **Adding cards outside your pool** → killed by a **server-side validation endpoint** that regenerates the
+  pool from the same seed and checks `deck ⊆ pool` + legality.
+
+**Why it holds despite no trusted backend today:** if validation **regenerates the pool server-side** and the
+seed is bound to the **verified identity**, editing the local pool in DevTools buys nothing — the client
+display is cosmetic, only the validated deck counts.
+
+**Build (all in our Vercel project — reuses the Re:Union token infra + runs the existing JS generator
+server-side, so we keep control):**
+- `GET  /api/sealed-seed?event=<eventKey>` (auth) → `{ seed }`. Derives the seed from the **verified `sub`**
+  (NOT the localStorage `player_{code}`, which is self-assigned → re-rollable) + `eventKey`. Server-issued so
+  we don't trust the client clock and the seed is bound to a real identity.
+- `POST /api/validate-deck { event, deck }` (auth) → `{ valid, reasons[], attestation }`. Regenerates the
+  pool from `sub`+`eventKey`, checks `deck ⊆ pool` + deckbuild legality (≥30 non-hero, ≤3 factions, ≤1 hero,
+  copy limits). Identity comes from the **token, never a parameter**. Returns a **signed attestation** (HMAC,
+  secret in Vercel env) so BGA / the TO can require a **verifiable receipt**.
+- **Determinism refactor:** replace `Math.random()` in `packGenerator.js` (4 sites) with a **seeded PRNG**
+  (mulberry32) drawing in a **fixed order**; the validator imports the same generator to reproduce the pool.
+- **Disable live random uniques in tournament mode** — the 1/6 live-fetched uniques are non-deterministic, so
+  the validator couldn't reproduce the pool. (Set 6: no uniques, or a deterministic pick from a fixed list.)
+- **Lobby "tournament mode" flag:** Re:Union login required, uniques off, seeded non-relaunchable pool.
+
+**Honest limit (tell the TO):** the game is actually played on **BGA**, so the endpoint is a **referee /
+receipt**, NOT in-band enforcement — it only works if BGA or the TO **requires the signed attestation** at
+play time. A player can still see their own pool, but that gives no edge since only the validated deck counts.
+
+**Hosting `limited.altered.re`:** a **Vercel custom domain** — they point a CNAME at our app, the user keeps
+deploying anytime. Needs `https://limited.altered.re/auth/callback` added to the **Keycloak redirect URIs**.
+**Security (unchanged rule):** `KEYCLOAK_CLIENT_SECRET` + the new attestation **HMAC secret** stay in **Vercel
+env vars only** (never git/bundle); the user stays **owner of the Vercel project** so secrets aren't ceded —
+Re:Union provides DNS only. Still no homegrown accounts/DB: identity stays Re:Union's (Keycloak).
+
+**Depends on Re:Union:** set 6 **card data** for the validator's legal-card universe; agreement on the
+**receipt-required** workflow in BGA; the DNS CNAME.
+
+### 2. Re:Union (Altered Reunion) account integration — core SHIPPED; site-plugin thread POSTPONED
 Connect the app to the **official Re:Union identity** so logged-in users can push their
 drafted deck straight into their account. This does NOT mean building our own accounts
 (see Dropped) — Re:Union owns the identity layer (Keycloak), DB, and auth; we're a client.
@@ -189,7 +236,7 @@ it. Verify-on-deploy is sufficient. Kept below for reference only if a future sc
   to ship its own. Card-fetch stays isolated in `cardData.js` so swapping later would be a small
   adapter change if it ever becomes worthwhile.
 
-### 2. Uniques — dying-API dependency REMOVED ✅ (bundling now just an offline hedge)
+### 3. Uniques — dying-API dependency REMOVED ✅ (bundling now just an offline hedge)
 **✅ Shipped (June 2026):** `fetchUnique` was the last live caller of the retiring
 `api.altered.gg` (hit for any non-bundled unique or non-EN locale). Repointed it to
 **`cards.alteredcore.org/api/cards?reference=<ref>`** — the durable community API that resolves
@@ -255,7 +302,7 @@ Prioritise refs from the community cubes people are actually pasting. Needs Node
   superseded if Re:Union ships its own card-data + image API (1🔴), but that's not guaranteed.
 - Possible enhancement: accept a pasted list of unique refs and snapshot them on demand.
 
-### 3. Import Marcus' cube (data-only) — ON HOLD until functionality feedback (user's call, Jun 2026)
+### 4. Import Marcus' cube (data-only) — ON HOLD until functionality feedback (user's call, Jun 2026)
 A cube by a game designer (MarcusK, engaged on Discord). Add it the manual way, like LuigiNico's.
 **On hold:** new cubes wait until there's user feedback on the recently-shipped functionality
 (free-hero pool, full boosters, Re:Union save, etc.) — no point importing more cubes before the
