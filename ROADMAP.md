@@ -51,15 +51,24 @@ server-side, so we keep control):**
 - `GET  /api/sealed-seed?event=<eventKey>` (auth) → `{ seed }`. Derives the seed from the **verified `sub`**
   (NOT the localStorage `player_{code}`, which is self-assigned → re-rollable) + `eventKey`. Server-issued so
   we don't trust the client clock and the seed is bound to a real identity.
-- `POST /api/validate-deck { event, deck }` (auth) → `{ valid, reasons[], attestation }`. Regenerates the
-  pool from `sub`+`eventKey`, checks `deck ⊆ pool` + deckbuild legality (≥30 non-hero, ≤3 factions, ≤1 hero,
-  copy limits). Identity comes from the **token, never a parameter**. Returns a **signed attestation** (HMAC,
-  secret in Vercel env) so BGA / the TO can require a **verifiable receipt**.
+- `POST /api/validate-deck` (auth) → `{ valid, sub, reasons[], attestation }`. **Request body:**
+  `{ event: "<eventKey>", deckCards: [{ cardReference: "ALT_…", quantity: N }] }` — the deck format is the
+  **exact shape of the Re:Union decks API** (`deckCards`), which our tool already emits (`toDeckCards` in
+  `decks.js`) → zero remapping, and the format Re:Union/BGA speak. Hero = a `quantity:1` entry in
+  `deckCards`; refs uppercase `^ALT_[A-Z0-9_]+$`. (May also accept the plaintext altered.re export via the
+  existing `parseDecklist`, but `deckCards` is the canonical contract.) **Identity is derived from the
+  token's verified `sub`, NEVER from the body** — so a caller can only ever validate their OWN pool. Server
+  regenerates the pool from `sub`+`event`, checks `deckCards ⊆ pool` (respecting quantities) + deckbuild
+  legality (≥30 non-hero, ≤3 factions, ≤1 hero, copy limits). Returns a **signed attestation** (HMAC,
+  secret in Vercel env; `{sub, event, deckHash, valid, iat}`) so BGA / the TO can require a **verifiable
+  receipt**. `401` on missing/invalid token.
 - **Determinism refactor:** replace `Math.random()` in `packGenerator.js` (4 sites) with a **seeded PRNG**
   (mulberry32) drawing in a **fixed order**; the validator imports the same generator to reproduce the pool.
 - **Disable live random uniques in tournament mode** — the 1/6 live-fetched uniques are non-deterministic, so
   the validator couldn't reproduce the pool. (Set 6: no uniques, or a deterministic pick from a fixed list.)
-- **Lobby "tournament mode" flag:** Re:Union login required, uniques off, seeded non-relaunchable pool.
+- **Tournament server = one locked config:** the tournament instance offers **ONLY set 6 SEALED, 7
+  boosters** — no other mode / pool / set / setting is selectable. Re:Union login required, uniques off,
+  seeded non-relaunchable pool. (7 boosters is already the sealed default in `BOOSTERS_PER_PLAYER`.)
 
 **Honest limit (tell the TO):** the game is actually played on **BGA**, so the endpoint is a **referee /
 receipt**, NOT in-band enforcement — it only works if BGA or the TO **requires the signed attestation** at
