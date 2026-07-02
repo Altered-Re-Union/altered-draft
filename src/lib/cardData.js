@@ -2,6 +2,26 @@ import { UNIQUES_EN } from './uniquesData.js'
 
 const BASE_URL = 'https://raw.githubusercontent.com/PolluxTroy0/Altered-TCG-Card-Database/main/SETS'
 
+// Card images: the community CDN (cdn.alteredcore.org) — the ONLY working host since Altered
+// disabled public access to BOTH its S3 buckets (altered-prod-eu AND altered-dev now return
+// 403 "AllAccessDisabled") and retired api.altered.gg (DNS gone). Web-optimized .webp keyed by
+// the card reference — deterministic, no per-card hash: /cards/<lang>/<SET>/<REF>.webp
+// (CORS: Access-Control-Allow-Origin: *). The old `imagePath` field in the community DB and
+// the cards API both point at the now-dead buckets, so we IGNORE it and build the URL here.
+const IMG_HOST = 'https://cdn.alteredcore.org/cards'
+const IMG_LANG = { EN: 'en', FR: 'fr', ES: 'es', DE: 'de', IT: 'it' }
+
+// Build a card image URL from its reference. Uniques (…_U_<serial>) aren't on the CDN, but a
+// unique shares the illustration of its base RARE printing, so fall back to that (…_R1).
+export function cardImageUrl(reference, lang = 'EN') {
+  if (!reference) return null
+  const set = reference.split('_')[1]
+  if (!set) return null
+  const lc = IMG_LANG[lang] ?? 'en'
+  const ref = isUniqueRef(reference) ? reference.replace(/_U_\d+$/, '_R1') : reference
+  return `${IMG_HOST}/${lc}/${set}/${ref}.webp`
+}
+
 const cache = {}
 
 export async function fetchSet(setCode, lang = 'EN') {
@@ -14,7 +34,7 @@ export async function fetchSet(setCode, lang = 'EN') {
 
   const json = await res.json()
   const raw = Array.isArray(json) ? json : (json['hydra:member'] || [])
-  const cards = raw.map(normalizeCard).filter(isStandardPrinting)
+  const cards = raw.map(r => normalizeCard(r, lang)).filter(isStandardPrinting)
   cache[key] = cards
   return cards
 }
@@ -93,7 +113,7 @@ export async function fetchUnique(reference, lang = 'EN') {
     if (!res.ok) throw new Error(`Failed to fetch unique ${reference}: ${res.status}`)
     const raw = (await res.json()).member?.[0]
     if (!raw) throw new Error(`Unique ${reference} not found`)
-    const card = normalizeAlteredCore(raw, loc)
+    const card = normalizeAlteredCore(raw, loc, lang)
     uniqueCache[key] = card
     return card
   } catch (err) {
@@ -125,7 +145,7 @@ export async function fetchRandomUniques(setCode, count = 50, lang = 'EN') {
     const res = await fetch(url, { headers: { Accept: 'application/json' } })
     if (!res.ok) throw new Error(`uniques ${setCode}: ${res.status}`)
     const members = (await res.json()).member ?? []
-    const cards = members.map(m => normalizeAlteredCore(m, loc)).filter(c => c.reference)
+    const cards = members.map(m => normalizeAlteredCore(m, loc, lang)).filter(c => c.reference)
     for (const c of cards) uniqueCache[`${c.reference}_${lang}`] = c // warm the by-ref cache
     return cards
   } catch { return [] }
@@ -164,7 +184,7 @@ export function apiSetCode(code) {
   return code
 }
 
-function normalizeCard(raw) {
+function normalizeCard(raw, lang = 'EN') {
   const refStr = raw.reference ?? ''
   return {
     reference: refStr,
@@ -172,7 +192,7 @@ function normalizeCard(raw) {
     faction: raw.mainFaction?.reference ?? raw.faction?.reference ?? 'XX',
     factionName: raw.mainFaction?.name ?? raw.faction?.name ?? 'Unknown',
     rarity: normalizeRarity(raw.rarity, refStr),
-    imagePath: raw.imagePath ?? null,
+    imagePath: cardImageUrl(refStr, lang),
     cardType: raw.cardType?.reference ?? '',
     mainCost: stripMarkers(raw.elements?.MAIN_COST),
     recallCost: stripMarkers(raw.elements?.RECALL_COST),
@@ -182,19 +202,12 @@ function normalizeCard(raw) {
   }
 }
 
-// Image host-swap: cards.alteredcore.org serves imagePath from a LOCKED dev S3 bucket
-// (403 AccessDenied). The same file is public on the prod bucket — rewrite the host
-// (path + filename are identical). Handles both full URLs and relative "Art/…" paths.
-function prodImage(p) {
-  if (!p) return null
-  const path = p.replace(/^https?:\/\/[^/]+\//, '')
-  return `https://altered-prod-eu.s3.amazonaws.com/${path}`
-}
-
 // Map a card from cards.alteredcore.org into our normalized shape. Its JSON differs
 // from the old API: name/imagePath are per-locale objects, faction/cardType/rarity are
-// nested, and powers are flat integers (no #…# markers).
-function normalizeAlteredCore(raw, loc = 'en') {
+// nested, and powers are flat integers (no #…# markers). Its `imagePath` points at the
+// now-dead S3 buckets, so we ignore it and build the image URL from the reference
+// (community CDN) via cardImageUrl instead.
+function normalizeAlteredCore(raw, loc = 'en', lang = 'EN') {
   const refStr = raw.reference ?? ''
   const pick = obj => obj == null ? null
     : typeof obj === 'string' ? obj
@@ -205,7 +218,7 @@ function normalizeAlteredCore(raw, loc = 'en') {
     faction: raw.faction?.code ?? 'XX',
     factionName: raw.faction?.name ?? 'Unknown',
     rarity: normalizeRarity(raw.rarity, refStr),
-    imagePath: prodImage(pick(raw.imagePath)),
+    imagePath: cardImageUrl(refStr, lang),
     cardType: raw.cardType?.reference ?? '',
     mainCost: raw.mainCost ?? null,
     recallCost: raw.recallCost ?? null,
