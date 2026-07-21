@@ -31,44 +31,107 @@ mode-driven pool size, random uniques, Winston, hover zoom), then continue UX/vi
 Re:Union proposed running **online set 6 preview / prerelease SEALED events** on the tool, hosted at a
 subdomain like **`limited.altered.re`** (they provide DNS; we keep deploy control), and asked for
 **anti-cheat** so the events are trustworthy. Design validated with the user (Jul 2026); the **user handles
-the Discord thread**. Not started.
+the Discord thread**. **Backend engine + endpoints built (Jul 2026)** — see "✅ Built" below; the
+tournament-locked frontend, the real event entry, and the BGA/hosting side are still outstanding.
 
 **The two cheating vectors + the design (the user's idea, validated):**
-- **Re-rolling** the sealed until you get a bomb pool → killed by a **deterministic seed**. The pool is
-  generated from a **server-issued seed = hash(verified Re:Union `sub` + `eventKey`)**, so for a given
-  player + event the pool is ALWAYS the same, however many times they relaunch. `eventKey` encapsulates the
-  time window and is set by the TO — an **explicit event key, NOT the raw calendar day** (avoids a midnight
-  rollover mid-event).
+- **Re-rolling** the sealed until you get a bomb pool → killed by a **deterministic seed**, tied to a
+  verified identity and a server-controlled time window — never something the client can pick or reproduce
+  by relaunching.
 - **Adding cards outside your pool** → killed by a **server-side validation endpoint** that regenerates the
   pool from the same seed and checks `deck ⊆ pool` + legality.
 
-**Why it holds despite no trusted backend today:** if validation **regenerates the pool server-side** and the
-seed is bound to the **verified identity**, editing the local pool in DevTools buys nothing — the client
-display is cosmetic, only the validated deck counts.
+**Time windows in a committed JSON config, no tournament ID:** Re:Union won't have a tournament-ID system
+available, and there's no external calendar API to lean on either. Simplest fix: a **hardcoded JSON file
+committed to the repo**, `{ eventKey: { name, starts_at, ends_at } }` (ISO timestamps). Each interval spans
+the **real BGA tournament with 1h padding on both sides**: `starts_at` = 1h before the BGA tournament's
+actual start (that 1h is the deck-building window), `ends_at` = 1h after the BGA tournament's actual end
+(so every in-tournament `validate-deck` call — one per BGA game — lands safely inside the interval, never
+at its edge). Adding/adjusting an event = **edit the JSON + git push** (Vercel redeploy) — fine given how
+infrequent preview events are.
+
+**Both endpoints derive the seed from server time, not a client-supplied event id:**
+- `GET /api/sealed-seed` (auth) → `{ seed }` (or a random one, see below). Checks **`now()` against the
+  config's intervals**. Inside one → deterministic seed = `hash(verified sub + starts_at + ends_at)` of that
+  interval. Outside all of them → plain random seed (normal casual sealed) — which also kills early pool
+  access for free: before `starts_at` no interval matches yet, so a player only ever gets a throwaway random
+  pool, never the real one.
+- `POST /api/validate-deck` (auth) → `{ valid, sub, reasons[], attestation }`. **Request body:**
+  `{ deckCards: [{ cardReference: "ALT_…", quantity: N }] }` — the deck format is the **exact shape of the
+  Re:Union decks API** (`deckCards`), which our tool already emits (`toDeckCards` in `decks.js`) → zero
+  remapping. Hero = a `quantity:1` entry; refs uppercase `^ALT_[A-Z0-9_]+$`. No event id in the body at
+  all: the server re-runs the **same `now()` lookup** as `/sealed-seed`, and since every real validate call
+  happens *during* a BGA game (always inside the padded interval), it re-finds the same interval and
+  recomputes the same seed — nothing to smuggle or fake client-side. **Identity is derived from the token's
+  verified `sub`, NEVER from the body** — a caller can only ever validate their OWN pool. Server regenerates
+  the pool from `sub` + the matched interval, checks `deckCards ⊆ pool` (respecting quantities) + the app's
+  own deckbuild legality — ≥30 total cards (Sealed.jsx counts the hero in that total), ≤3 factions, ≤1 hero;
+  **no separate copy-limit rule**, since the app doesn't enforce one today either and the validator has to
+  match what players actually see. Returns a **signed attestation** (HMAC,
+  secret in Vercel env; `{sub, event, deckHash, valid, iat}`) so BGA / the TO can require a **verifiable
+  receipt**. `401` on missing/invalid token; if somehow no interval is active at validation time (misconfig),
+  reject — shouldn't happen given the 1h padding on both sides.
+- **Why it holds despite no trusted backend today:** the seed is bound to server clock + verified identity,
+  and validation regenerates the pool server-side — editing the local pool in DevTools buys nothing, only
+  the validated deck counts.
 
 **Build (all in our Vercel project — reuses the Re:Union token infra + runs the existing JS generator
 server-side, so we keep control):**
-- `GET  /api/sealed-seed?event=<eventKey>` (auth) → `{ seed }`. Derives the seed from the **verified `sub`**
-  (NOT the localStorage `player_{code}`, which is self-assigned → re-rollable) + `eventKey`. Server-issued so
-  we don't trust the client clock and the seed is bound to a real identity.
-- `POST /api/validate-deck` (auth) → `{ valid, sub, reasons[], attestation }`. **Request body:**
-  `{ event: "<eventKey>", deckCards: [{ cardReference: "ALT_…", quantity: N }] }` — the deck format is the
-  **exact shape of the Re:Union decks API** (`deckCards`), which our tool already emits (`toDeckCards` in
-  `decks.js`) → zero remapping, and the format Re:Union/BGA speak. Hero = a `quantity:1` entry in
-  `deckCards`; refs uppercase `^ALT_[A-Z0-9_]+$`. (May also accept the plaintext altered.re export via the
-  existing `parseDecklist`, but `deckCards` is the canonical contract.) **Identity is derived from the
-  token's verified `sub`, NEVER from the body** — so a caller can only ever validate their OWN pool. Server
-  regenerates the pool from `sub`+`event`, checks `deckCards ⊆ pool` (respecting quantities) + deckbuild
-  legality (≥30 non-hero, ≤3 factions, ≤1 hero, copy limits). Returns a **signed attestation** (HMAC,
-  secret in Vercel env; `{sub, event, deckHash, valid, iat}`) so BGA / the TO can require a **verifiable
-  receipt**. `401` on missing/invalid token.
+- `/api/sealed-seed` and `/api/validate-deck` as above.
 - **Determinism refactor:** replace `Math.random()` in `packGenerator.js` (4 sites) with a **seeded PRNG**
-  (mulberry32) drawing in a **fixed order**; the validator imports the same generator to reproduce the pool.
-- **Disable live random uniques in tournament mode** — the 1/6 live-fetched uniques are non-deterministic, so
-  the validator couldn't reproduce the pool. (Set 6: no uniques, or a deterministic pick from a fixed list.)
-- **Tournament server = one locked config:** the tournament instance offers **ONLY set 6 SEALED, 7
-  boosters** — no other mode / pool / set / setting is selectable. Re:Union login required, uniques off,
-  seeded non-relaunchable pool. (7 boosters is already the sealed default in `BOOSTERS_PER_PLAYER`.)
+  (mulberry32) drawing in a **fixed order**; both endpoints import the same generator to reproduce the pool.
+- **Unique count + faction spread are config knobs, not hardcoded** — the tournament sealed recipe takes
+  `{ uniqueCount, evenFactions }` (e.g. `{3, true}` = 3 uniques, one per faction; `{3, false}` = 3 uniques
+  drawn freely, faction unconstrained). `evenFactions: true` round-robins target factions (wrapping once
+  `uniqueCount` exceeds the 6 factions, e.g. `{12, true}` = 2 per faction) then, for each target faction,
+  picks a family that lists it as one of its two options; `false` draws freely across the whole combinatorial
+  space. Only possible thanks to the per-family faction-window tables below.
+- **Uniques via per-family faction-window tables (from real production data), not the live random API** —
+  the user pulled `faction_ranges_<SET>.csv` (`set,faction,family_id,uid_start,uid_end,count`) from
+  Re:Union/community data. Each **family_id** (a specific rare card slot) has a serial range `1..N` crafted
+  total, split into **non-contiguous windows** between its home faction and exactly **one** out-of-faction
+  (OOF) pairing — confirmed **no gaps**: the two factions' windows fully cover `1..N` between them.
+  Critically, **the OOF pairing is per-card, not a fixed axis** (e.g. `AX_106` pairs with `LY`, `AX_109` with
+  `BR`, `AX_111` with `YZ` — NOT the common-pack `AX|BR / LY|MU / OR|YZ` scheme), so it has to come from the
+  data, not be assumed. This is what makes **"force 3 uniques in 3 different factions" actually solvable**:
+  to draw a unique of faction X, pick any family listing X as one of its two options, then draw a serial from
+  X's own windows for that family (uniform over its `count`, resolved to a window via the **same seeded PRNG**
+  as the rest of the pool) and compose `<family>_U_<serial>`. EOLE alone is ~1500 CSV rows / ~20KB raw — small
+  enough to bundle as JSON straight from the CSV (`{ family_id: { faction: [[start,end], ...] } }` per set),
+  no extra compaction needed. Card rendering still resolves live per-ref via the existing `fetchUnique(ref)`.
+  **Verified live** against `cards.alteredcore.org`: `ALT_EOLE_B_AX_111_U_100` (serial in `AX_111`'s YZ
+  window) resolves to faction YZ, `ALT_EOLE_B_AX_111_U_400` (in its AX window) resolves to AX — confirms
+  `ref = ALT_<SET>_B_<family>_U_<serial>` and that the CSV's `uid` IS the ref's serial.
+- **Tournament server = one locked config (not started):** the tournament instance should offer **ONLY set 6
+  SEALED, 7 boosters** — no other mode / pool / set / setting selectable. Re:Union login required, uniques
+  off (the normal "add random uniques" toggle, not the deterministic ones above), seeded non-relaunchable
+  pool. (7 boosters is already the sealed default in `BOOSTERS_PER_PLAYER`.) This is the remaining
+  frontend piece — the backend below doesn't yet have a UI wired to it.
+
+**✅ Built (Jul 2026) — the deterministic backend engine + both endpoints:**
+- `src/lib/prng.js` — `mulberry32`/`hashSeed`/`seededRng`.
+- `src/lib/data/factionRanges/<SET>.json` — the CSVs converted (family → faction → windows), one file per
+  real `set` value (CORE and COREKS were bundled in one CSV but are separate namespaces — same family_id
+  reused independently in each — so they're split into their own files). Validated: every family's windows
+  tile `1..N` with no gaps (a handful of CYCLONE families are single-faction, handled gracefully). The raw
+  CSVs are still sitting at repo root — now superseded by the JSON, kept until the user decides to remove them.
+- `src/lib/uniqueFactionRanges.js` — `pickDeterministicUniques(setCode, rng, {uniqueCount, evenFactions})`,
+  weighted by real per-window serial counts. Determinism + faction-targeting verified.
+- `src/lib/sealedEvents.js` + `src/lib/data/sealedEvents.json` (currently `{}`, no real event yet) —
+  `findActiveEvent(now)`.
+- `src/lib/packGenerator.js` — the 4 `Math.random()` sites now take an injectable `rng` (default
+  `Math.random`, so every existing caller is unaffected); new `generateTournamentSealedPool(cards, rng,
+  {boosters, uniqueRefs, includeHeroes})`. Verified deterministic end-to-end (same seed → identical 7×13
+  pool) via an esbuild bundle (same bundler family Vite/Vercel use), including against real live EOLE data.
+- `api/_lib/auth.js` — `verifySub(req)`: verifies the Bearer token against Keycloak's userinfo endpoint
+  (same call `reunion.js`'s `fetchProfile` makes) rather than decoding the JWT ourselves.
+- `api/sealed-seed.js` + `api/validate-deck.js` as specified above. Validation logic (pool-subset + quantity
+  + ≥30/≤3-factions/≤1-hero) smoke-tested against real EOLE data: a legit 30-card/3-faction deck passes, an
+  out-of-pool card and an over-claimed quantity are both correctly rejected.
+
+**Still outstanding:** the tournament-locked frontend (item above), populating `sealedEvents.json` with the
+real event once BGA times are fixed, provisioning `SEALED_ATTESTATION_SECRET` in Vercel, and the
+hosting/DNS + BGA setup below.
 
 **Honest limit (tell the TO):** the game is actually played on **BGA**, so the endpoint is a **referee /
 receipt**, NOT in-band enforcement — it only works if BGA or the TO **requires the signed attestation** at

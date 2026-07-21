@@ -1,17 +1,21 @@
 import { FACTIONS } from './cardData.js'
 
-function shuffle(arr) {
+// Every draw in this module takes an injectable `rng` (`() => float in [0,1)`),
+// defaulting to Math.random for normal/casual use. Tournament mode passes a seeded
+// PRNG (see prng.js) instead, so the exact same draws — in the exact same order —
+// reproduce identically for both pool generation and later deck validation.
+function shuffle(arr, rng = Math.random) {
   const a = [...arr]
   for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
+    const j = Math.floor(rng() * (i + 1))
     ;[a[i], a[j]] = [a[j], a[i]]
   }
   return a
 }
 
-function pickRandom(pool) {
+function pickRandom(pool, rng = Math.random) {
   if (!pool.length) return null
-  return pool[Math.floor(Math.random() * pool.length)]
+  return pool[Math.floor(rng() * pool.length)]
 }
 
 /**
@@ -44,13 +48,13 @@ function splitPools(allCards, includeHeroes) {
 }
 
 export function generateAllPacks(allCards, playerCount, packsPerPlayer = 4, options = {}) {
-  const { includeHeroes = true, cubeMode = false, uniquePool = [], randomUniqueRate = 0 } = options
+  const { includeHeroes = true, cubeMode = false, uniquePool = [], randomUniqueRate = 0, rng = Math.random } = options
   const { heroes, commons, rares, uniques } = splitPools(allCards, includeHeroes)
 
   const totalPacks = playerCount * packsPerPlayer
 
   if (cubeMode) {
-    return generateCubePacks(heroes, commons, rares, uniques, totalPacks, includeHeroes)
+    return generateCubePacks(heroes, commons, rares, uniques, totalPacks, includeHeroes, rng)
   }
 
   // "Add random uniques" mode draws the unique slot from an injected real-unique pool
@@ -58,7 +62,7 @@ export function generateAllPacks(allCards, playerCount, packsPerPlayer = 4, opti
   const useUniques = randomUniqueRate > 0 && uniquePool.length ? uniquePool : uniques
   const packs = []
   for (let i = 0; i < totalPacks; i++) {
-    packs.push(generateOnePack(heroes, commons, rares, useUniques, i, randomUniqueRate))
+    packs.push(generateOnePack(heroes, commons, rares, useUniques, i, randomUniqueRate, rng))
   }
   return packs
 }
@@ -72,7 +76,7 @@ export function generateAllPacks(allCards, playerCount, packsPerPlayer = 4, opti
  * @returns {string[][]} flat, shuffled array of packs
  */
 export function generateChaosPacks(cardsBySet, packMix, options = {}) {
-  const { includeHeroes = true, uniquesBySet = {}, randomUniqueRate = 0 } = options
+  const { includeHeroes = true, uniquesBySet = {}, randomUniqueRate = 0, rng = Math.random } = options
   const allPacks = []
   for (const [setCode, count] of Object.entries(packMix)) {
     if (!count || count < 1) continue
@@ -81,10 +85,10 @@ export function generateChaosPacks(cardsBySet, packMix, options = {}) {
     const { heroes, commons, rares, uniques } = splitPools(cards, includeHeroes)
     const useUniques = randomUniqueRate > 0 && uniquesBySet[setCode]?.length ? uniquesBySet[setCode] : uniques
     for (let i = 0; i < count; i++) {
-      allPacks.push(generateOnePack(heroes, commons, rares, useUniques, i, randomUniqueRate))
+      allPacks.push(generateOnePack(heroes, commons, rares, useUniques, i, randomUniqueRate, rng))
     }
   }
-  return shuffle(allPacks)
+  return shuffle(allPacks, rng)
 }
 
 /**
@@ -101,7 +105,7 @@ export function generateChaosPacks(cardsBySet, packMix, options = {}) {
  * @param {number} playerCount
  */
 export function generateStructuredPacks(cardsBySet, perPlayerMix, playerCount, options = {}) {
-  const { includeHeroes = true, uniquesBySet = {}, randomUniqueRate = 0 } = options
+  const { includeHeroes = true, uniquesBySet = {}, randomUniqueRate = 0, rng = Math.random } = options
   // Expand the per-player counts into one set per round: {CORE:2, BISE:2} → [CORE,CORE,BISE,BISE]
   const rounds = []
   for (const [setCode, count] of Object.entries(perPlayerMix)) {
@@ -115,7 +119,7 @@ export function generateStructuredPacks(cardsBySet, perPlayerMix, playerCount, o
     const { heroes, commons, rares, uniques } = poolsBySet[setCode]
     const useUniques = randomUniqueRate > 0 && uniquesBySet[setCode]?.length ? uniquesBySet[setCode] : uniques
     for (let s = 0; s < playerCount; s++) {
-      packs.push(generateOnePack(heroes, commons, rares, useUniques, packIndex++, randomUniqueRate))
+      packs.push(generateOnePack(heroes, commons, rares, useUniques, packIndex++, randomUniqueRate, rng))
     }
   }
   return packs
@@ -236,15 +240,15 @@ export function dealHeroSlots(packs, heroRefs) {
  * then fill each pack with an equal number of body cards (commons/rares/uniques
  * shuffled together). Leftover cards are simply not used this draft.
  */
-function generateCubePacks(heroes, commons, rares, uniques, totalPacks, includeHeroes) {
+function generateCubePacks(heroes, commons, rares, uniques, totalPacks, includeHeroes, rng = Math.random) {
   if (totalPacks < 1) return []
-  const heroPool = shuffle(includeHeroes ? heroes : [])
+  const heroPool = shuffle(includeHeroes ? heroes : [], rng)
   // Only dedicate a hero slot if there's one for every pack (keeps packs equal).
   const dedicatedHeroes = heroPool.length >= totalPacks
   const body = shuffle([
     ...(dedicatedHeroes ? [] : heroPool), // not enough heroes to slot → draft them as body
     ...commons, ...rares, ...uniques,
-  ])
+  ], rng)
 
   const heroPerPack = dedicatedHeroes ? 1 : 0
   // Cap pack size at 13 for huge cubes; otherwise split the body evenly.
@@ -261,12 +265,12 @@ function generateCubePacks(heroes, commons, rares, uniques, totalPacks, includeH
   return packs
 }
 
-function generateOnePack(heroes, commons, rares, uniques, packIndex, randomUniqueRate = 0) {
+function generateOnePack(heroes, commons, rares, uniques, packIndex, randomUniqueRate = 0, rng = Math.random) {
   const pack = []
 
   // 1 hero (only if heroes pool is non-empty)
   if (heroes.length) {
-    const hero = pickRandom(heroes)
+    const hero = pickRandom(heroes, rng)
     if (hero) pack.push(hero.reference)
   }
 
@@ -281,7 +285,7 @@ function generateOnePack(heroes, commons, rares, uniques, packIndex, randomUniqu
   // 9 commons: 1 per faction (6) + 3 paired draws (3) = 9
   for (const f of FACTIONS) {
     const pool = commonsByFaction[f].filter(c => !usedRefs.has(c.reference))
-    const card = pickRandom(pool.length ? pool : commonsByFaction[f])
+    const card = pickRandom(pool.length ? pool : commonsByFaction[f], rng)
     if (card) {
       pack.push(card.reference)
       usedRefs.add(card.reference)
@@ -291,9 +295,9 @@ function generateOnePack(heroes, commons, rares, uniques, packIndex, randomUniqu
   // 3 paired common draws
   const pairs = [['AX', 'BR'], ['LY', 'MU'], ['OR', 'YZ']]
   for (const [f1, f2] of pairs) {
-    const faction = Math.random() < 0.5 ? f1 : f2
+    const faction = rng() < 0.5 ? f1 : f2
     const pool = commonsByFaction[faction].filter(c => !usedRefs.has(c.reference))
-    const card = pickRandom(pool.length ? pool : commonsByFaction[faction])
+    const card = pickRandom(pool.length ? pool : commonsByFaction[faction], rng)
     if (card) {
       pack.push(card.reference)
       usedRefs.add(card.reference)
@@ -307,16 +311,16 @@ function generateOnePack(heroes, commons, rares, uniques, packIndex, randomUniqu
   // a slot (e.g. an all-commons cube has none), backfill it with another unused common
   // so every booster stays full size (9 + 3 = 12 body cards).
   const uniquePack = randomUniqueRate > 0
-    ? (uniques.length > 0 && Math.random() < randomUniqueRate)
+    ? (uniques.length > 0 && rng() < randomUniqueRate)
     : (packIndex % 8 === 7)
-  const shuffledRares = shuffle(rares)
-  const fillerCommons = shuffle(commons)
+  const shuffledRares = shuffle(rares, rng)
+  const fillerCommons = shuffle(commons, rng)
   let rareIdx = 0
   let fillerIdx = 0
 
   for (let slot = 0; slot < 3; slot++) {
     if (slot === 2 && uniquePack && uniques.length) {
-      const uni = pickRandom(uniques.filter(c => !usedRefs.has(c.reference)))
+      const uni = pickRandom(uniques.filter(c => !usedRefs.has(c.reference)), rng)
       if (uni) {
         pack.push(uni.reference)
         usedRefs.add(uni.reference)
@@ -344,6 +348,43 @@ function generateOnePack(heroes, commons, rares, uniques, packIndex, randomUniqu
   }
 
   return pack
+}
+
+/**
+ * Tournament-safe SEALED pool: `boosters` single-set packs (normal composition — 1
+ * hero + 9 commons + 3 rares, no unique slot of their own) generated with a SEEDED
+ * `rng`, then exactly `uniqueRefs.length` pre-picked unique refs (see
+ * uniqueFactionRanges.js's pickDeterministicUniques — kept as a separate concern:
+ * this function only handles slot mechanics, not which uniques to draw) are swapped
+ * into deterministically-chosen rare slots across the whole pool. Both pool
+ * generation (`/api/sealed-seed`) and deck validation (`/api/validate-deck`) call this
+ * with the SAME rng + the SAME uniqueRefs to reproduce an identical pool.
+ * @param {object[]} cards - normalized cards for ONE set (fetchSet output)
+ * @param {() => number} rng - seeded PRNG (see prng.js)
+ * @param {{boosters?: number, uniqueRefs?: string[], includeHeroes?: boolean}} options
+ */
+export function generateTournamentSealedPool(cards, rng, options = {}) {
+  const { boosters = 7, uniqueRefs = [], includeHeroes = true } = options
+  const { heroes, commons, rares } = splitPools(cards, includeHeroes)
+  const packs = []
+  for (let i = 0; i < boosters; i++) {
+    packs.push(generateOnePack(heroes, commons, rares, [], i, 0, rng))
+  }
+  if (!uniqueRefs.length) return packs
+
+  // Every booster is 1 hero (if any) + 9 commons + 3 rares — rare slots are the last
+  // 3 indices. Shuffle all (booster, rareSlot) positions with the SAME rng and take
+  // as many as we have uniques, so which packs/slots get one is itself deterministic.
+  const rareStart = (heroes.length ? 1 : 0) + 9
+  const slotPositions = []
+  for (let p = 0; p < boosters; p++) {
+    for (let s = 0; s < 3; s++) slotPositions.push([p, rareStart + s])
+  }
+  const chosen = shuffle(slotPositions, rng).slice(0, uniqueRefs.length)
+  chosen.forEach(([packIdx, slotIdx], i) => {
+    packs[packIdx][slotIdx] = uniqueRefs[i]
+  })
+  return packs
 }
 
 /**
