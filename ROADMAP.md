@@ -102,6 +102,31 @@ server-side, so we keep control):**
   **Verified live** against `cards.alteredcore.org`: `ALT_EOLE_B_AX_111_U_100` (serial in `AX_111`'s YZ
   window) resolves to faction YZ, `ALT_EOLE_B_AX_111_U_400` (in its AX window) resolves to AX — confirms
   `ref = ALT_<SET>_B_<family>_U_<serial>` and that the CSV's `uid` IS the ref's serial.
+- `GET /api/sealed-pool` (auth) → `{ pool: { ref: count }, event: {...} }` — same auth/event-lookup as the
+  two endpoints above, but returns the actual regenerated pool instead of a bare seed or a validated deck.
+  Added for **`altered-core-decks-api`** (the Re:Union decks service — separate repo), which needed a way to
+  check "is this card in the player's pool" for its own new `sealed` deck format. Two designs were
+  considered: call `/api/validate-deck` with the whole candidate deck on every save, or fetch+cache the pool
+  once. **The decks-api went with caching** — `AlteredDraftSealedPoolClient` there calls this endpoint once
+  per player (forwarding their own bearer token — same Keycloak realm, so it can only ever fetch its own
+  caller's pool) and caches the result **by Keycloak `sub`** until `event.ends_at`, avoiding a live call on
+  every deck save. `SealedFormatValidator` (decks-api, renamed from `Set6SealedFormatValidator`/`set6_sealed`
+  once it became clear nothing in it was actually Set-6-specific): exactly 1 hero, ≤3 factions, ≥29 non-hero
+  cards, every card (hero included) ⊆ this pool — **no hardcoded set restriction at all**, since pool
+  membership alone already makes any other set's cards impossible to include; this makes the one format
+  reusable for whichever set altered-draft is currently running a sealed tournament for (see next bullet for
+  the hero carve-out removal).
+- **`heroesInPool` event config knob — either heroes are drafted like any other card, or they ALL get added
+  to the pool afterward.** First cut had the hero exempt from pool-membership entirely (any Set 6 hero was
+  legal, whether or not the player actually opened it) — rejected as bad design: a hero should be "just
+  another pool ref" like everything else, not a special case the consumer (decks-api) has to know about.
+  Correct model: `event.heroesInPool` (default `true`) — `true` = heroes are drafted into the boosters as
+  usual (`generateTournamentSealedPool`'s existing `includeHeroes` option), so only whichever ones got drawn
+  are legal. `false` = heroes are excluded from the random pool entirely, and instead **every hero of the
+  set is appended to the pool afterward** — not as a possible drafted card, just guaranteed present (see
+  `regeneratePoolCounts` in `api/_lib/tournamentPool.js`). Set 6 sealed uses `false`: this way any hero is
+  legal without a consumer needing to special-case "any set-N hero" — the hero just always shows up in the
+  pool response, so the generic pool-membership check covers it for free.
 - **Tournament server = one locked config (not started):** the tournament instance should offer **ONLY set 6
   SEALED, 7 boosters** — no other mode / pool / set / setting selectable. Re:Union login required, uniques
   off (the normal "add random uniques" toggle, not the deterministic ones above), seeded non-relaunchable

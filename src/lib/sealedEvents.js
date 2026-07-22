@@ -13,10 +13,20 @@ import events from './data/sealedEvents.json'
 //       "ends_at":   "2026-08-01T17:00:00Z",
 //       "setCode": "EOLE",
 //       "uniqueCount": 3,
-//       "evenFactions": true
+//       "evenFactions": true,
+//       "heroesInPool": false
 //     }
 //   }
 // Adding/adjusting an event = edit this file + git push (Vercel redeploy).
+//
+// `heroesInPool` — either heroes are drafted into the pool like any other card
+// (true, the default when omitted), or they're excluded from the random pool
+// entirely and EVERY hero of the set is instead added to the pool afterward, not as
+// a possible drafted card but just guaranteed present (see
+// api/_lib/tournamentPool.js's regeneratePoolCounts). Set 6 sealed uses `false`: any
+// hero should be legal without needing a special "any set-N hero" exemption on the
+// consuming side (e.g. altered-core-decks-api's format validators) — a hero is just
+// another pool ref like everything else.
 
 /**
  * Returns the event active at `date` (server time — never trust a client-supplied
@@ -25,7 +35,7 @@ import events from './data/sealedEvents.json'
  * during a BGA game — always inside the padded interval — it re-finds the SAME event
  * and recomputes the SAME seed, with nothing to pass between the two calls.
  * @param {Date} [date]
- * @returns {{eventKey: string, name: string, starts_at: string, ends_at: string, setCode: string, uniqueCount: number, evenFactions: boolean} | null}
+ * @returns {{eventKey: string, name: string, starts_at: string, ends_at: string, setCode: string, uniqueCount: number, evenFactions: boolean, heroesInPool?: boolean} | null}
  */
 export function findActiveEvent(date = new Date()) {
   const t = date.getTime()

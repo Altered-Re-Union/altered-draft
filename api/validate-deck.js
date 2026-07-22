@@ -11,9 +11,7 @@
 import crypto from 'node:crypto'
 import { verifySub } from './_lib/auth.js'
 import { findActiveEvent } from '../src/lib/sealedEvents.js'
-import { hashSeed, mulberry32 } from '../src/lib/prng.js'
-import { generateTournamentSealedPool } from '../src/lib/packGenerator.js'
-import { pickDeterministicUniques } from '../src/lib/uniqueFactionRanges.js'
+import { regeneratePoolCounts } from './_lib/tournamentPool.js'
 import { fetchSet } from '../src/lib/cardData.js'
 
 export default async function handler(req, res) {
@@ -34,16 +32,10 @@ export default async function handler(req, res) {
   const deckCards = Array.isArray(body.deckCards) ? body.deckCards : null
   if (!deckCards || !deckCards.length) return res.status(400).json({ error: 'invalid_request' })
 
-  const seedStr = `${sub}|${event.starts_at}|${event.ends_at}`
-  const uniqueRefs = pickDeterministicUniques(event.setCode, mulberry32(hashSeed(`${seedStr}#uniques`)), {
-    uniqueCount: event.uniqueCount ?? 0,
-    evenFactions: !!event.evenFactions,
-  })
-  const cards = await fetchSet(event.setCode)
-  const pool = generateTournamentSealedPool(cards, mulberry32(hashSeed(seedStr)), { uniqueRefs })
-
-  const poolCounts = {}
-  for (const ref of pool.flat()) poolCounts[ref] = (poolCounts[ref] ?? 0) + 1
+  const [poolCounts, cards] = await Promise.all([
+    regeneratePoolCounts(sub, event),
+    fetchSet(event.setCode),
+  ])
   const cardByRef = {}
   for (const c of cards) cardByRef[c.reference] = c
 
