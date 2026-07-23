@@ -27,57 +27,89 @@ nice-to-have, not a goal). Backlog ideas (draft log/replay, cube analytics) are 
 Immediate work: **QA the recent batch** (`TESTING.md` checklist — the alternate formats, the lobby wizard,
 mode-driven pool size, random uniques, Winston, hover zoom), then continue UX/visual polish.
 
-### 1. Set 6 preview: tournament-safe sealed + `limited.altered.re` hosting (NEW — Jul 2026, Re:Union proposal)
+### 1. Set 6 preview: tournament-safe sealed + `limited.altered.re` hosting (Jul 2026, Re:Union proposal)
 Re:Union proposed running **online set 6 preview / prerelease SEALED events** on the tool, hosted at a
 subdomain like **`limited.altered.re`** (they provide DNS; we keep deploy control), and asked for
-**anti-cheat** so the events are trustworthy. Design validated with the user (Jul 2026); the **user handles
-the Discord thread**. **Backend engine + endpoints built (Jul 2026)** — see "✅ Built" below; the
-tournament-locked frontend, the real event entry, and the BGA/hosting side are still outstanding.
+**anti-cheat** so the events are trustworthy. First design pass (Jul 2026) built a time-window-based backend
+— see "✅ Built, but partly superseded" below. **A Re:Union team member (not the original dev) then found a
+hole in that design and proposed a better one**, below, which replaces the time-window mechanism. Not
+implemented yet — this is the current, agreed design to build next.
 
-**The two cheating vectors + the design (the user's idea, validated):**
-- **Re-rolling** the sealed until you get a bomb pool → killed by a **deterministic seed**, tied to a
-  verified identity and a server-controlled time window — never something the client can pick or reproduce
-  by relaunching.
+**The two cheating vectors (unchanged) + how they're killed (design evolved):**
+- **Re-rolling** the sealed until you get a bomb pool → killed by a **one-shot commitment**: once a pool is
+  generated it's locked (can't mint a new one) until it gets bound to a real tournament.
 - **Adding cards outside your pool** → killed by a **server-side validation endpoint** that regenerates the
-  pool from the same seed and checks `deck ⊆ pool` + legality.
+  pool from the same inputs and checks `deck ⊆ pool` + legality (unchanged from the first pass).
 
-**Time windows in a committed JSON config, no tournament ID:** Re:Union won't have a tournament-ID system
-available, and there's no external calendar API to lean on either. Simplest fix: a **hardcoded JSON file
-committed to the repo**, `{ eventKey: { name, starts_at, ends_at } }` (ISO timestamps). Each interval spans
-the **real BGA tournament with 1h padding on both sides**: `starts_at` = 1h before the BGA tournament's
-actual start (that 1h is the deck-building window), `ends_at` = 1h after the BGA tournament's actual end
-(so every in-tournament `validate-deck` call — one per BGA game — lands safely inside the interval, never
-at its edge). Adding/adjusting an event = **edit the JSON + git push** (Vercel redeploy) — fine given how
-infrequent preview events are.
+**Why the time-window design got replaced:** the seed formula `hash(sub + starts_at + ends_at)` needed
+either a fixed calendar window (requires knowing BGA tournament times in advance — brittle, and doesn't
+support running several tournaments in parallel or a tournament with no fixed end) or, the tempting
+"simplification", `hash(sub + tournamentSeed + format)` using BGA's own tournament seed directly — which
+**doesn't work**: BGA's tournament seed is only obtainable from **inside a game, after the tournament has
+already started**, but deck-building takes 30min–1h and has to happen **before** that. So the pool can't be
+a pure function of the tournament seed alone — something has to let a player commit to a pool *before* the
+seed exists, then durably remember which pool that was once the seed shows up.
 
-**Both endpoints derive the seed from server time, not a client-supplied event id:**
-- `GET /api/sealed-seed` (auth) → `{ seed }` (or a random one, see below). Checks **`now()` against the
-  config's intervals**. Inside one → deterministic seed = `hash(verified sub + starts_at + ends_at)` of that
-  interval. Outside all of them → plain random seed (normal casual sealed) — which also kills early pool
-  access for free: before `starts_at` no interval matches yet, so a player only ever gets a throwaway random
-  pool, never the real one.
-- `POST /api/validate-deck` (auth) → `{ valid, sub, reasons[], attestation }`. **Request body:**
-  `{ deckCards: [{ cardReference: "ALT_…", quantity: N }] }` — the deck format is the **exact shape of the
-  Re:Union decks API** (`deckCards`), which our tool already emits (`toDeckCards` in `decks.js`) → zero
-  remapping. Hero = a `quantity:1` entry; refs uppercase `^ALT_[A-Z0-9_]+$`. No event id in the body at
-  all: the server re-runs the **same `now()` lookup** as `/sealed-seed`, and since every real validate call
-  happens *during* a BGA game (always inside the padded interval), it re-finds the same interval and
-  recomputes the same seed — nothing to smuggle or fake client-side. **Identity is derived from the token's
-  verified `sub`, NEVER from the body** — a caller can only ever validate their OWN pool. Server regenerates
-  the pool from `sub` + the matched interval, checks `deckCards ⊆ pool` (respecting quantities) + the app's
-  own deckbuild legality — ≥30 total cards (Sealed.jsx counts the hero in that total), ≤3 factions, ≤1 hero;
-  **no separate copy-limit rule**, since the app doesn't enforce one today either and the validator has to
-  match what players actually see. Returns a **signed attestation** (HMAC,
-  secret in Vercel env; `{sub, event, deckHash, valid, iat}`) so BGA / the TO can require a **verifiable
-  receipt**. `401` on missing/invalid token; if somehow no interval is active at validation time (misconfig),
-  reject — shouldn't happen given the 1h padding on both sides.
-- **Why it holds despite no trusted backend today:** the seed is bound to server clock + verified identity,
-  and validation regenerates the pool server-side — editing the local pool in DevTools buys nothing, only
-  the validated deck counts.
+**The new model — a "current competitive format" + a nonce + lazy binding, no time window at all:**
+- **Current competitive format** — one active config record (not a dated list): `{ type: 'sealed'|'draft',
+  setCode, uniqueCount, evenFactions, heroesInPool }`. No start/end window — it's just whatever's active
+  right now, swapped by editing config + redeploy when the TO moves to a new set/format. (Sealed only for
+  now — draft is deferred, see below.)
+- **Preparing a pool, any time, before any tournament exists:** the player's pool = `hash(sub +
+  formatConfigId + nonce)`, where `nonce` is a fresh random value minted **once** and persisted the first
+  time they generate (no need to store the card list itself — just the nonce, the pool is always
+  recomputable from it). **While a nonce is pending (not yet bound to a tournament), no new one can be
+  minted** — this is what stops infinite re-rolling; there's no time-based unlock, only binding unlocks it.
+- **Binding, lazily, on first real use:** the first time a BGA table's deck-list call arrives with a
+  `tournamentSeed` never seen before for that player, the player's currently-pending nonce is **permanently
+  bound** to that seed (one-time write) — and a new nonce immediately becomes mintable for their *next*
+  tournament. Once bound, revalidation for that seed always resolves against that exact `(formatConfigId,
+  nonce)` snapshot, even if "the current format" has since moved on — supports overlapping/parallel and
+  long-running tournaments for free, with no fixed end date anywhere.
+- **Why a player can't game the seed:** confirmed with Re:Union — a player could spam-create BGA tables
+  freely, but since the seed of a tournament is only revealed once it has *already started* (from inside a
+  game), there's no way to preview or choose a favorable seed in advance. Nothing to exploit there.
+- **State ownership:** Re:Union can host altered-draft on their own infra with a real database if needed —
+  removes the earlier "Vercel serverless has no DB" constraint. **altered-draft owns all of this new state**
+  (current format config + pending/bound nonce records); **decks-api stays a thin relay** — it only needs to
+  extract `tournamentSeed` from BGA's payload and forward it to the same `/api/sealed-pool` /
+  `/api/validate-deck` endpoints it already calls, no new persistence of its own.
+- **Draft is explicitly deferred.** A draft can't be reduced to a single deterministic seed — it's an
+  inherently live, interactive process (pack-passing, picks depend on other players), which is exactly why
+  the existing draft feature already needs Supabase's `draft_rooms` for real-time state. Tournament-binding
+  for draft is a narrower, different problem for later: associating an *already-completed* draft's final
+  picks with a tournament seed, not redesigning how draft pools are generated.
+
+**BGA payload contract (not yet built — Re:Union owns both the game code and decks-api, so this is
+whatever we define):** Re:Union's game code controls what string it passes into BGA's own (closed,
+un-editable) deck-listing platform function's `format` parameter — the only customization surface
+available, hence "bending" a single string field into an envelope:
+```json
+{ "v": 1, "kind": "deckFormat", "format": "sealed", "tableId": 123456, "tournamentSeed": "a1b2c3..." }
+```
+base64-encoded in the `format` string. `tournamentSeed` absent = not a tournament game (no separate
+boolean needed). `tableId` isn't just for logging — it's the actual mechanism for the **separate
+casual-mode pool rotation** below: every distinct `tableId` seen for a player, in NON-tournament games,
+counts as one game played against their current casual pool. `kind` is a **general discriminant, always
+present** — Re:Union expects to reuse this same "stuff JSON into the format string" trick for other,
+unrelated purposes later, so decks-api needs a tag to know which schema it's looking at before touching the
+rest of the payload. `v` is a schema version for the `deckFormat` kind specifically, cheap insurance against
+needing to redeploy every consumer in lockstep if the shape changes. **Backward compatible by
+construction:** decks-api tries base64+JSON-decode first; if that fails, or `kind` isn't `deckFormat`, it
+falls straight back to treating the raw string as a plain format code — today's behavior, unaffected for
+every non-tournament deck.
+
+**Casual (non-tournament) pool rotation — separate system, same `tableId` mechanism, deferred until the
+tournament side is built:** a player may regenerate their pool once they've completed a game with the
+current one, and it expires outright after 7 games played with it (tracked via distinct `tableId`s seen for
+that player in non-tournament calls). Deliberately kept as its own, separate rule set from the tournament
+flow above — no shared locking/binding logic between the two.
 
 **Build (all in our Vercel project — reuses the Re:Union token infra + runs the existing JS generator
-server-side, so we keep control):**
-- `/api/sealed-seed` and `/api/validate-deck` as above.
+server-side, so we keep control). The pool-composition engine below is reusable as-is regardless of which
+seed model feeds it — only the seed layer (`/api/sealed-seed`, `/api/validate-deck`, `/api/sealed-pool`)
+needs reworking from "hash(sub + starts_at + ends_at)" to "hash(sub + formatConfigId + nonce[+
+tournamentSeed once bound])" plus the new format-config/nonce/binding store described above:**
 - **Determinism refactor:** replace `Math.random()` in `packGenerator.js` (4 sites) with a **seeded PRNG**
   (mulberry32) drawing in a **fixed order**; both endpoints import the same generator to reproduce the pool.
 - **Unique count + faction spread are config knobs, not hardcoded** — the tournament sealed recipe takes
@@ -102,15 +134,18 @@ server-side, so we keep control):**
   **Verified live** against `cards.alteredcore.org`: `ALT_EOLE_B_AX_111_U_100` (serial in `AX_111`'s YZ
   window) resolves to faction YZ, `ALT_EOLE_B_AX_111_U_400` (in its AX window) resolves to AX — confirms
   `ref = ALT_<SET>_B_<family>_U_<serial>` and that the CSV's `uid` IS the ref's serial.
-- `GET /api/sealed-pool` (auth) → `{ pool: { ref: count }, event: {...} }` — same auth/event-lookup as the
-  two endpoints above, but returns the actual regenerated pool instead of a bare seed or a validated deck.
-  Added for **`altered-core-decks-api`** (the Re:Union decks service — separate repo), which needed a way to
-  check "is this card in the player's pool" for its own new `sealed` deck format. Two designs were
-  considered: call `/api/validate-deck` with the whole candidate deck on every save, or fetch+cache the pool
-  once. **The decks-api went with caching** — `AlteredDraftSealedPoolClient` there calls this endpoint once
-  per player (forwarding their own bearer token — same Keycloak realm, so it can only ever fetch its own
-  caller's pool) and caches the result **by Keycloak `sub`** until `event.ends_at`, avoiding a live call on
-  every deck save. `SealedFormatValidator` (decks-api, renamed from `Set6SealedFormatValidator`/`set6_sealed`
+- `GET /api/sealed-pool` (auth) → `{ pool: { ref: count }, event: {...} }` — returns the actual regenerated
+  pool instead of a bare seed or a validated deck. **Its "cache until `event.ends_at`" behavior is now
+  obsolete**: under the nonce/binding model there's no end date at all, and once bound a `(sub,
+  tournamentSeed)` pool is permanently immutable — so `AlteredDraftSealedPoolClient` (decks-api) can just
+  cache it forever once bound, no TTL math needed; this needs revisiting once the endpoint itself is
+  reworked to accept `tournamentSeed`. Added for **`altered-core-decks-api`** (the Re:Union decks service —
+  separate repo), which needed a way to check "is this card in the player's pool" for its own new `sealed`
+  deck format. Two designs were considered: call `/api/validate-deck` with the whole candidate deck on every
+  save, or fetch+cache the pool once. **The decks-api went with caching** — `AlteredDraftSealedPoolClient`
+  there calls this endpoint once per player (forwarding their own bearer token — same Keycloak realm, so it
+  can only ever fetch its own caller's pool) and caches the result **by Keycloak `sub`**, avoiding a live
+  call on every deck save. `SealedFormatValidator` (decks-api, renamed from `Set6SealedFormatValidator`/`set6_sealed`
   once it became clear nothing in it was actually Set-6-specific): exactly 1 hero, ≤3 factions, ≥29 non-hero
   cards, every card (hero included) ⊆ this pool — **no hardcoded set restriction at all**, since pool
   membership alone already makes any other set's cards impossible to include; this makes the one format
@@ -127,13 +162,16 @@ server-side, so we keep control):**
   `regeneratePoolCounts` in `api/_lib/tournamentPool.js`). Set 6 sealed uses `false`: this way any hero is
   legal without a consumer needing to special-case "any set-N hero" — the hero just always shows up in the
   pool response, so the generic pool-membership check covers it for free.
-- **Tournament server = one locked config (not started):** the tournament instance should offer **ONLY set 6
-  SEALED, 7 boosters** — no other mode / pool / set / setting selectable. Re:Union login required, uniques
-  off (the normal "add random uniques" toggle, not the deterministic ones above), seeded non-relaunchable
-  pool. (7 boosters is already the sealed default in `BOOSTERS_PER_PLAYER`.) This is the remaining
-  frontend piece — the backend below doesn't yet have a UI wired to it.
+- **Tournament server = one locked config (not started):** the tournament instance should offer **ONLY
+  the current competitive format's SEALED, 7 boosters** (today: set 6) — no other mode / pool / set /
+  setting selectable. Re:Union login required, uniques off (the normal "add random uniques" toggle, not the
+  deterministic ones above), seeded non-relaunchable pool. (7 boosters is already the sealed default in
+  `BOOSTERS_PER_PLAYER`.) This is the remaining frontend piece — the backend below doesn't yet have a UI
+  wired to it.
 
-**✅ Built (Jul 2026) — the deterministic backend engine + both endpoints:**
+**✅ Built (Jul 2026) — the deterministic pool-composition engine; reusable as-is under the new design.
+The seed/event-lookup layer specifically (marked below) is superseded by the nonce/binding model above and
+needs reworking, not the composition logic underneath it:**
 - `src/lib/prng.js` — `mulberry32`/`hashSeed`/`seededRng`.
 - `src/lib/data/factionRanges/<SET>.json` — the CSVs converted (family → faction → windows), one file per
   real `set` value (CORE and COREKS were bundled in one CSV but are separate namespaces — same family_id
@@ -142,20 +180,27 @@ server-side, so we keep control):**
   CSVs are still sitting at repo root — now superseded by the JSON, kept until the user decides to remove them.
 - `src/lib/uniqueFactionRanges.js` — `pickDeterministicUniques(setCode, rng, {uniqueCount, evenFactions})`,
   weighted by real per-window serial counts. Determinism + faction-targeting verified.
-- `src/lib/sealedEvents.js` + `src/lib/data/sealedEvents.json` (currently `{}`, no real event yet) —
-  `findActiveEvent(now)`.
+- ⚠️ **Superseded, needs replacing:** `src/lib/sealedEvents.js` + `src/lib/data/sealedEvents.json`
+  (`findActiveEvent(now)`) — the whole "dated list of time-windowed events" concept goes away, replaced by
+  the single current-format-config + nonce/binding store above.
 - `src/lib/packGenerator.js` — the 4 `Math.random()` sites now take an injectable `rng` (default
   `Math.random`, so every existing caller is unaffected); new `generateTournamentSealedPool(cards, rng,
   {boosters, uniqueRefs, includeHeroes})`. Verified deterministic end-to-end (same seed → identical 7×13
   pool) via an esbuild bundle (same bundler family Vite/Vercel use), including against real live EOLE data.
+  **Still fully reusable** — it only cares about the final numeric seed, not what produced it.
 - `api/_lib/auth.js` — `verifySub(req)`: verifies the Bearer token against Keycloak's userinfo endpoint
-  (same call `reunion.js`'s `fetchProfile` makes) rather than decoding the JWT ourselves.
-- `api/sealed-seed.js` + `api/validate-deck.js` as specified above. Validation logic (pool-subset + quantity
-  + ≥30/≤3-factions/≤1-hero) smoke-tested against real EOLE data: a legit 30-card/3-faction deck passes, an
-  out-of-pool card and an over-claimed quantity are both correctly rejected.
+  (same call `reunion.js`'s `fetchProfile` makes) rather than decoding the JWT ourselves. Unaffected by the
+  redesign.
+- ⚠️ **Superseded, needs reworking:** `api/sealed-seed.js` + `api/validate-deck.js` (+ `api/sealed-pool.js`,
+  `api/_lib/tournamentPool.js`) — all currently derive their seed from `findActiveEvent()`'s time window;
+  need to switch to the format-config + nonce (+ bound `tournamentSeed`) inputs instead. Validation logic
+  itself (pool-subset + quantity + ≥30/≤3-factions/≤1-hero) was smoke-tested against real EOLE data and
+  stays correct — only the seed-sourcing changes.
 
-**Still outstanding:** the tournament-locked frontend (item above), populating `sealedEvents.json` with the
-real event once BGA times are fixed, provisioning `SEALED_ATTESTATION_SECRET` in Vercel, and the
+**Still outstanding:** building the new format-config + nonce/binding persistent store (needs a real
+database — Re:Union can host altered-draft with one), reworking the seed-sourcing layer to use it, the BGA
+envelope parsing on the decks-api side, the casual-mode pool rotation (separate system, deferred further),
+the tournament-locked frontend (item above), provisioning `SEALED_ATTESTATION_SECRET` in Vercel, and the
 hosting/DNS + BGA setup below.
 
 **Honest limit (tell the TO):** the game is actually played on **BGA**, so the endpoint is a **referee /
@@ -166,7 +211,9 @@ play time. A player can still see their own pool, but that gives no edge since o
 deploying anytime. Needs `https://limited.altered.re/auth/callback` added to the **Keycloak redirect URIs**.
 **Security (unchanged rule):** `KEYCLOAK_CLIENT_SECRET` + the new attestation **HMAC secret** stay in **Vercel
 env vars only** (never git/bundle); the user stays **owner of the Vercel project** so secrets aren't ceded —
-Re:Union provides DNS only. Still no homegrown accounts/DB: identity stays Re:Union's (Keycloak).
+Re:Union provides DNS only. Still no homegrown accounts/auth: identity stays Re:Union's (Keycloak) — the new
+database above (wherever it ends up hosted) only stores pool-generation state (format config, nonces,
+tournament bindings), never credentials or its own notion of a user account.
 
 **Depends on Re:Union:** set 6 **card data** for the validator's legal-card universe; agreement on the
 **receipt-required** workflow in BGA; the DNS CNAME.
