@@ -33,7 +33,7 @@ function route(handler) {
       await handler(req, res)
     } catch (err) {
       console.error(err)
-      if (!res.headersSent) res.status(500).json({ error: 'internal_error' })
+      if (!res.headersSent) res.status(500).json({ error: 'internal_error', message: err.message })
     }
   }
 }

@@ -13,7 +13,7 @@ async function authHeaders() {
 async function handle(res) {
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
-    const err = new Error(data.error || `Request failed (HTTP ${res.status}).`)
+    const err = new Error(data.message || data.error || `Request failed (HTTP ${res.status}).`)
     err.status = res.status
     err.data = data
     throw err
