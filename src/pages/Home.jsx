@@ -8,7 +8,7 @@ import TopNav from '../components/TopNav.jsx'
 
 export default function Home() {
   const navigate = useNavigate()
-  const { user } = useAuth()
+  const { user, login } = useAuth()
   const params = new URLSearchParams(window.location.search)
   const prefillCode = params.get('join') ?? ''
 
@@ -131,30 +131,28 @@ export default function Home() {
           </p>
         </div>
 
-        {user && (
-          <div className="space-y-2 mb-6">
-            <button onClick={() => navigate('/tournament/normal')}
+        <div className="space-y-2 mb-6">
+          <button onClick={() => user ? navigate('/tournament/normal') : login('/tournament/normal')}
+            className="w-full bg-surface2 hover:bg-surface3 text-ink font-semibold py-3 rounded-lg transition-colors text-left px-4">
+            Jouer sur BGA en scellé (mode normal)
+          </button>
+          <button onClick={() => user ? navigate('/tournament/prep') : login('/tournament/prep')}
+            className="w-full bg-surface2 hover:bg-surface3 text-ink font-semibold py-3 rounded-lg transition-colors text-left px-4">
+            Préparer mon prochain tournoi en scellé sur BGA
+          </button>
+          {user && hasBoundTournaments && (
+            <button onClick={() => navigate('/tournament/pools')}
               className="w-full bg-surface2 hover:bg-surface3 text-ink font-semibold py-3 rounded-lg transition-colors text-left px-4">
-              Jouer sur BGA en scellé (mode normal)
+              Modifier mes decks sur les tournois en cours
             </button>
-            <button onClick={() => navigate('/tournament/prep')}
-              className="w-full bg-surface2 hover:bg-surface3 text-ink font-semibold py-3 rounded-lg transition-colors text-left px-4">
-              Préparer mon prochain tournoi en scellé sur BGA
-            </button>
-            {hasBoundTournaments && (
-              <button onClick={() => navigate('/tournament/pools')}
-                className="w-full bg-surface2 hover:bg-surface3 text-ink font-semibold py-3 rounded-lg transition-colors text-left px-4">
-                Modifier mes decks sur les tournois en cours
-              </button>
-            )}
-            <div className="border-t border-line my-4" />
-          </div>
-        )}
-        {!user && (
-          <p className="text-xs text-faint text-center mb-6">
-            Connectez-vous avec Re:Union pour accéder aux scellés BGA (normal et tournoi).
-          </p>
-        )}
+          )}
+          {!user && (
+            <p className="text-xs text-faint text-center pt-1">
+              Connexion Re:Union requise pour accéder aux scellés BGA.
+            </p>
+          )}
+          <div className="border-t border-line my-4" />
+        </div>
 
         {!mode && (
           <div className="flex gap-4">
