@@ -1,11 +1,14 @@
 import { FACTIONS } from './cardData.js'
-import CORE from './data/factionRanges/CORE.json'
-import COREKS from './data/factionRanges/COREKS.json'
-import ALIZE from './data/factionRanges/ALIZE.json'
-import BISE from './data/factionRanges/BISE.json'
-import CYCLONE from './data/factionRanges/CYCLONE.json'
-import DUSTER from './data/factionRanges/DUSTER.json'
-import EOLE from './data/factionRanges/EOLE.json'
+// `with { type: 'json' }`: required by plain Node's ESM loader (the AlteredOps Docker
+// deployment runs `node server/index.js` directly, unlike Vercel/Vite which bundle and
+// don't enforce this) — also understood by Vite/esbuild, so this works everywhere.
+import CORE from './data/factionRanges/CORE.json' with { type: 'json' }
+import COREKS from './data/factionRanges/COREKS.json' with { type: 'json' }
+import ALIZE from './data/factionRanges/ALIZE.json' with { type: 'json' }
+import BISE from './data/factionRanges/BISE.json' with { type: 'json' }
+import CYCLONE from './data/factionRanges/CYCLONE.json' with { type: 'json' }
+import DUSTER from './data/factionRanges/DUSTER.json' with { type: 'json' }
+import EOLE from './data/factionRanges/EOLE.json' with { type: 'json' }
 
 // Per-set data extracted from `faction_ranges_<SET>.csv` (real production data): for
 // each `family_id` (a specific rare card slot), the serial range 1..N crafted total is

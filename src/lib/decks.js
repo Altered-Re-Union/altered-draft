@@ -58,6 +58,26 @@ export async function createDeck({ name, deckCards, isDraft = false, format = 's
   return data
 }
 
+// Update one of the user's decks (name/deckCards/etc). Returns the API payload.
+export async function updateDeck(id, { name, deckCards, isDraft, format }) {
+  const body = {}
+  if (name !== undefined) body.name = String(name ?? '').slice(0, 150)
+  if (deckCards !== undefined) body.deckCards = deckCards
+  if (isDraft !== undefined) body.isDraft = isDraft
+  if (format !== undefined) body.format = format
+
+  const res = await fetch(`/api/decks/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { ...(await authHeaders()), 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    throw new Error(authError(res.status) || data.message || data.detail || data.error || `Update failed (HTTP ${res.status}).`)
+  }
+  return data
+}
+
 // Group a ref array → [{ cardReference, quantity }] (the deckCards shape). Only keeps
 // valid ALT_ references and clamps quantity to the API's 1–99 range.
 export function toDeckCards(refs) {

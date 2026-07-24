@@ -27,10 +27,11 @@ nice-to-have, not a goal). Backlog ideas (draft log/replay, cube analytics) are 
 Immediate work: **QA the recent batch** (`TESTING.md` checklist — the alternate formats, the lobby wizard,
 mode-driven pool size, random uniques, Winston, hover zoom), then continue UX/visual polish.
 
-### 1. Set 6 preview: tournament-safe sealed + `limited.altered.re` hosting (Jul 2026, Re:Union proposal)
+### 1. Set 6 preview: tournament-safe sealed + `altered-draft.altered.re` hosting (Jul 2026, Re:Union proposal)
 Re:Union proposed running **online set 6 preview / prerelease SEALED events** on the tool, hosted at a
-subdomain like **`limited.altered.re`** (they provide DNS; we keep deploy control), and asked for
-**anti-cheat** so the events are trustworthy. First design pass (Jul 2026) built a time-window-based backend
+subdomain — originally discussed as DNS-only (`limited.altered.re`, dev keeps deploying on Vercel), revised
+to Re:Union hosting the app themselves at `altered-draft.altered.re` — see "Hosting" below for why — and
+asked for **anti-cheat** so the events are trustworthy. First design pass (Jul 2026) built a time-window-based backend
 — see "✅ Built, but partly superseded" below. **A Re:Union team member (not the original dev) then found a
 hole in that design and proposed a better one**, below, which replaces the time-window mechanism. Not
 implemented yet — this is the current, agreed design to build next.
@@ -203,20 +204,83 @@ envelope parsing on the decks-api side, the casual-mode pool rotation (separate 
 the tournament-locked frontend (item above), provisioning `SEALED_ATTESTATION_SECRET` in Vercel, and the
 hosting/DNS + BGA setup below.
 
+**Cross-repo wiring, now confirmed against the real code of all three services (Jul 2026) — the LIST and
+CONTENT calls are handled by two entirely different services, not the same one:**
+- **Deck LIST (`kind: "decklist"`, `GET /api/bga/decks`) → handled by `altered-bga-api` directly, decks-api
+  is never called at all for this one.** Today this gateway always rewrites-and-forwards to
+  `decks.alteredcore.org`; it needs a new branch, parallel to its existing `gameStats` short-circuit (which
+  already "never forwards, answers directly" — same precedent, new case): when the decoded `decklist`
+  envelope's `format` is `sealed`, call a new altered-draft endpoint directly with `(sub or player id,
+  tournamentSeed)` and return **altered-draft's response verbatim** to BGA — it must already be shaped as
+  the exact `hydra:member`/`hydra:totalItems`/`hydra:view` single-item collection `BgaDeckController::collection()`
+  normally returns, since altered-bga-api won't reshape it. This means altered-draft's new nonce/binding
+  store must keep enough of each pool's associated deck **summary** (name, hero ref, faction, card count) —
+  populated whenever the frontend's throttled sync below pushes an update — to answer this locally, with no
+  round-trip back to decks-api needed at request time. `altered-bga-api` currently has zero outbound HTTP
+  client code of its own (only the YARP forwarder) and zero auth handling — both are new plumbing here,
+  mirroring how `GameStatsHandler` already persists+answers locally instead of forwarding.
+- **Deck CONTENT / validation (`kind: "deckContent"`, `GET /api/bga/decks/{id}`) → still always goes through
+  `altered-core-decks-api`,** unchanged from the previous plan:
+  - Add `'SEALED' => 'sealed'` to `BgaDeckController`'s `eventFormat` mapping + `BGA_VALID_FORMATS` (missing
+    today).
+  - `item()` currently does **zero identity/legality checking** — just `find($id)`. For `sealed` (+
+    `tournamentSeed`, already forwarded in the query by altered-bga-api's existing `DeckContentHandler`),
+    add a validation step via `AlteredDraftSealedPoolClient`/`SealedFormatValidator` before returning
+    content. **On invalid → reject the call outright** (confirmed with the user — no "flag but let it
+    through" option; this is the actual enforcement moment).
+  - `AlteredDraftSealedPoolClient::getPoolCounts()` needs a new nullable `tournamentSeed` parameter,
+    forwarded to altered-draft's validation endpoint, replacing its reliance on altered-draft's now-obsolete
+    internal `findActiveEvent()` time lookup.
+- **altered-draft** ends up needing two different new consumers of its state: a fast, locally-answerable
+  "give me the deck summary for (sub, tournamentSeed)" for altered-bga-api's list call, and the existing
+  pool-membership validation for decks-api's content call. Both read from the same nonce/binding store,
+  which must track **the `deckId` (+ cached name/hero/faction/cardQuantity summary) associated with each
+  pool** (normal-mode, preparation, or tournament-bound), kept in sync by the frontend flow below.
+
+**New altered-draft frontend flow (not started):** three large buttons on the Home page (create/join
+screen), all requiring Re:Union login:
+- **"Jouer sur BGA en scellé (mode normal)"** — lands directly on the **full pool view** (not
+  booster-by-booster). Exactly one normal-mode pool exists at a time. A **reset button** regenerates it, then
+  goes on a **30-minute cooldown** before it can be used again. As soon as the player adds their first card
+  to a deck, altered-draft creates a deck in the background via the decks API (if none exists yet for this
+  pool) and keeps it **synced on every add/remove, throttled to one call per 2s** to avoid hammering the
+  decks API; the resulting `deckId` is stored against the pool.
+- **"Préparer mon prochain tournoi en scellé sur BGA"** — identical flow (full pool view, same throttled
+  background deck sync + stored `deckId`), **except there is no reset button at all** — matches the
+  one-shot-commitment rule (nonce locked until bound to a real tournament).
+- **"Modifier mes decks sur les tournois en cours"** — shown only if the player has at least one bound
+  tournament pool. A list of every bound tournament pool, **most recent first** — there's no signal for when
+  a tournament actually *ends*, so this list only ever grows, accepted as-is for now. Clicking one opens the
+  **same full-pool view** as the other two buttons, scoped to that tournament's pool — the player can freely
+  edit their deck **between games** (nothing about a tournament binding locks the deck itself, only the
+  pool composition; every BGA content-fetch re-validates against the current pool anyway, via the
+  reject-on-invalid check above, so mid-tournament edits are safe by construction, not a special case to
+  build).
+
 **Honest limit (tell the TO):** the game is actually played on **BGA**, so the endpoint is a **referee /
 receipt**, NOT in-band enforcement — it only works if BGA or the TO **requires the signed attestation** at
 play time. A player can still see their own pool, but that gives no edge since only the validated deck counts.
 
-**Hosting `limited.altered.re`:** a **Vercel custom domain** — they point a CNAME at our app, the user keeps
-deploying anytime. Needs `https://limited.altered.re/auth/callback` added to the **Keycloak redirect URIs**.
-**Security (unchanged rule):** `KEYCLOAK_CLIENT_SECRET` + the new attestation **HMAC secret** stay in **Vercel
-env vars only** (never git/bundle); the user stays **owner of the Vercel project** so secrets aren't ceded —
-Re:Union provides DNS only. Still no homegrown accounts/auth: identity stays Re:Union's (Keycloak) — the new
-database above (wherever it ends up hosted) only stores pool-generation state (format config, nonces,
-tournament bindings), never credentials or its own notion of a user account.
+**Hosting — revised from the original DNS-only plan (Jul 2026):** the original agreement (see the Discord
+transcript with Sparky/FUG) was DNS-only — Re:Union points a CNAME at the dev's own Vercel project, who
+keeps deploy control. That's superseded: given the original dev is unreachable (on vacation) with an Aug 10
+deadline, Re:Union now **builds and hosts this app on their own infra** (AlteredOps — Docker on
+Contabo/Scaleway, `preprod-1` then `prod-2`, see "✅ Built" below for the Dockerfile/server/compose/Pulumi
+work). The dev's control is preserved differently: he's added as **admin on the Re:Union fork**, so he can
+still push any change himself — it just auto-deploys via AlteredOps' pull-based reconcile (~5min) instead of
+Vercel. Domain: `altered-draft-preprod.altered.re` / `altered-draft.altered.re` (not `limited.altered.re` as
+first discussed — Re:Union opted for consistency with their other services' `<service>-<env>.altered.re`
+naming). Needs `https://altered-draft-<env>.altered.re/auth/callback` added to the **existing** `altered-draft`
+Keycloak client's redirect URIs (reused, not a new client — see Pulumi `Program.cs`'s altered-draft block).
+**Security (unchanged rule):** `KEYCLOAK_CLIENT_SECRET` + `SEALED_ATTESTATION_SECRET` live in Scaleway Secret
+Manager (per-env Project, fetched at deploy time — see AlteredOps' `secrets.list`), never in git/bundle.
+Still no homegrown accounts/auth: identity stays Re:Union's (Keycloak) — the new Postgres only stores
+pool-generation state (format config, nonces, tournament bindings), never credentials or its own notion of
+a user account.
 
 **Depends on Re:Union:** set 6 **card data** for the validator's legal-card universe; agreement on the
-**receipt-required** workflow in BGA; the DNS CNAME.
+**receipt-required** workflow in BGA; provisioning the `altered-draft` Scaleway Project (`pulumi up`) and
+adding it to the `preprod-1`/`prod-2` host manifests (manual infra step, not done by Claude — see "✅ Built").
 
 ### 2. Re:Union (Altered Reunion) account integration — core SHIPPED; site-plugin thread POSTPONED
 Connect the app to the **official Re:Union identity** so logged-in users can push their

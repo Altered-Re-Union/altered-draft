@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
 import { generateRoomCode } from '../lib/roomCode.js'
 import { useAuth } from '../auth/AuthProvider.jsx'
+import { fetchBoundPools } from '../lib/tournamentApi.js'
 import TopNav from '../components/TopNav.jsx'
 
 export default function Home() {
@@ -17,6 +18,14 @@ export default function Home() {
   const [mode, setMode] = useState(prefillCode ? 'join' : null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [hasBoundTournaments, setHasBoundTournaments] = useState(false)
+
+  // Button 3 ("modifier mes decks sur les tournois en cours") only shows up once the
+  // player actually has at least one bound tournament pool.
+  useEffect(() => {
+    if (!user) { setHasBoundTournaments(false); return }
+    fetchBoundPools().then(data => setHasBoundTournaments((data.pools ?? []).length > 0)).catch(() => {})
+  }, [user])
 
   // Logged in to Re:Union → prefill the display name with your pseudo (without
   // overwriting anything you've already typed).
@@ -121,6 +130,31 @@ export default function Home() {
             Open a room, share the code, draft together in real time.
           </p>
         </div>
+
+        {user && (
+          <div className="space-y-2 mb-6">
+            <button onClick={() => navigate('/tournament/normal')}
+              className="w-full bg-surface2 hover:bg-surface3 text-ink font-semibold py-3 rounded-lg transition-colors text-left px-4">
+              Jouer sur BGA en scellé (mode normal)
+            </button>
+            <button onClick={() => navigate('/tournament/prep')}
+              className="w-full bg-surface2 hover:bg-surface3 text-ink font-semibold py-3 rounded-lg transition-colors text-left px-4">
+              Préparer mon prochain tournoi en scellé sur BGA
+            </button>
+            {hasBoundTournaments && (
+              <button onClick={() => navigate('/tournament/pools')}
+                className="w-full bg-surface2 hover:bg-surface3 text-ink font-semibold py-3 rounded-lg transition-colors text-left px-4">
+                Modifier mes decks sur les tournois en cours
+              </button>
+            )}
+            <div className="border-t border-line my-4" />
+          </div>
+        )}
+        {!user && (
+          <p className="text-xs text-faint text-center mb-6">
+            Connectez-vous avec Re:Union pour accéder aux scellés BGA (normal et tournoi).
+          </p>
+        )}
 
         {!mode && (
           <div className="flex gap-4">
