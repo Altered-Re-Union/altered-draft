@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { supabase } from '../lib/supabase.js'
+import { getRoom, insertRoom, updateRoom } from '../lib/roomStore.js'
 import { generateRoomCode } from '../lib/roomCode.js'
 import { useAuth } from '../auth/AuthProvider.jsx'
 import { fetchBoundPools } from '../lib/tournamentApi.js'
@@ -56,9 +56,7 @@ export default function Home() {
       version: 0,
     }
 
-    const { error: dbErr } = await supabase
-      .from('draft_rooms')
-      .insert({ id: code, state: initialState })
+    const { error: dbErr } = await insertRoom(code, initialState)
 
     if (dbErr) {
       setError('Could not create room. Please try again.')
@@ -78,11 +76,7 @@ export default function Home() {
     setLoading(true)
     setError('')
 
-    const { data, error: dbErr } = await supabase
-      .from('draft_rooms')
-      .select('state')
-      .eq('id', code)
-      .single()
+    const { data, error: dbErr } = await getRoom(code)
 
     if (dbErr || !data) {
       setError('Room not found. Check the code and try again.')
@@ -101,10 +95,7 @@ export default function Home() {
     const updatedPlayers = [...data.state.players, newPlayer]
     const newState = { ...data.state, players: updatedPlayers }
 
-    const { error: updateErr } = await supabase
-      .from('draft_rooms')
-      .update({ state: newState })
-      .eq('id', code)
+    const { error: updateErr } = await updateRoom(code, newState)
 
     if (updateErr) {
       setError('Could not join room. Please try again.')

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { supabase } from '../lib/supabase.js'
+import { getRoom, updateRoomIfVersion, subscribeToRoom } from '../lib/roomStore.js'
 import { fetchSet, apiSetCode, fetchUniques, isUniqueRef, needsCardApi, uniqueRefsIn } from '../lib/cardData.js'
 import { applyPick, applyHeroPick } from '../lib/draftLogic.js'
 import { applyRochesterPick } from '../lib/rochesterLogic.js'
@@ -69,7 +69,7 @@ export default function Draft() {
 
   useEffect(() => {
     if (needsRejoin && !me) return
-    supabase.from('draft_rooms').select('state').eq('id', code).single()
+    getRoom(code)
       .then(async ({ data, error }) => {
         if (error || !data) { navigate('/'); return }
         const state = data.state
@@ -108,22 +108,15 @@ export default function Draft() {
   }, [code, navigate, me, needsRejoin])
 
   useEffect(() => {
-    const channel = supabase
-      .channel(`draft-${code}`)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'draft_rooms', filter: `id=eq.${code}` },
-        payload => {
-          const state = payload.new.state
-          setRoomState(state)
-          setPicking(false)
-          if (state.phase === 'done') navigate(`/room/${code}/results`)
-          if (state.phase === 'sealed') navigate(`/room/${code}/sealed`)
-        })
-      .on('system', {}, ev => {
-        if (ev.event === 'CHANNEL_ERROR' || ev.event === 'CLOSED') setReconnecting(true)
-        if (ev.event === 'SUBSCRIBED') setReconnecting(false)
-      })
-      .subscribe()
-    return () => supabase.removeChannel(channel)
+    return subscribeToRoom(code, state => {
+      setRoomState(state)
+      setPicking(false)
+      if (state.phase === 'done') navigate(`/room/${code}/results`)
+      if (state.phase === 'sealed') navigate(`/room/${code}/sealed`)
+    }, status => {
+      if (status === 'error') setReconnecting(true)
+      if (status === 'subscribed') setReconnecting(false)
+    })
   }, [code, navigate])
 
   useEffect(() => {
@@ -194,15 +187,10 @@ export default function Draft() {
           : applyPick(state, idx, ref)
         newState.version = expectedVersion + 1
 
-        const { data, error } = await supabase
-          .from('draft_rooms')
-          .update({ state: newState })
-          .eq('id', code)
-          .eq('state->>version', expectedVersion)
-          .select('id')
+        const { data, error } = await updateRoomIfVersion(code, newState, expectedVersion)
 
         if (error) { // transient/network — drop this attempt, let the user retry
-          const { data: fresh } = await supabase.from('draft_rooms').select('state').eq('id', code).single()
+          const { data: fresh } = await getRoom(code)
           if (fresh) setRoomState(fresh.state)
           setPicking(false)
           return
@@ -210,7 +198,7 @@ export default function Draft() {
         if (data && data.length > 0) return // committed; realtime will broadcast + clear `picking`
 
         // Version conflict: someone wrote first. Re-sync to the latest state and retry.
-        const { data: fresh } = await supabase.from('draft_rooms').select('state').eq('id', code).single()
+        const { data: fresh } = await getRoom(code)
         if (!fresh) { setPicking(false); return }
         state = fresh.state
         setRoomState(fresh.state)
@@ -243,18 +231,16 @@ export default function Draft() {
         if (newState === state) { setPicking(false); return } // illegal / no-op
         newState.version = expectedVersion + 1
 
-        const { data, error } = await supabase
-          .from('draft_rooms').update({ state: newState })
-          .eq('id', code).eq('state->>version', expectedVersion).select('id')
+        const { data, error } = await updateRoomIfVersion(code, newState, expectedVersion)
 
         if (error) {
-          const { data: fresh } = await supabase.from('draft_rooms').select('state').eq('id', code).single()
+          const { data: fresh } = await getRoom(code)
           if (fresh) setRoomState(fresh.state)
           setPicking(false); return
         }
         if (data && data.length > 0) return
 
-        const { data: fresh } = await supabase.from('draft_rooms').select('state').eq('id', code).single()
+        const { data: fresh } = await getRoom(code)
         if (!fresh) { setPicking(false); return }
         state = fresh.state
         setRoomState(fresh.state)
@@ -277,7 +263,7 @@ export default function Draft() {
     e.preventDefault()
     const name = rejoinName.trim()
     if (!name) { setRejoinError('Enter your display name'); return }
-    const { data } = await supabase.from('draft_rooms').select('state').eq('id', code).single()
+    const { data } = await getRoom(code)
     if (!data) { setRejoinError('Room not found'); return }
     const player = data.state.players.find(p => p.name.toLowerCase() === name.toLowerCase())
     if (!player) { setRejoinError('No player with that name in this room'); return }

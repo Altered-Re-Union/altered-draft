@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { supabase } from '../lib/supabase.js'
+import { getRoom } from '../lib/roomStore.js'
 import { fetchSet, apiSetCode, fetchUniques, isUniqueRef, needsCardApi, uniqueRefsIn } from '../lib/cardData.js'
 import { buildDecklist } from '../lib/exportFormat.js'
 import { FACTIONS, FACTION_NAMES, FACTION_COLORS } from '../lib/cardData.js'
@@ -31,7 +31,7 @@ export default function Results() {
   }, [code, navigate])
 
   useEffect(() => {
-    supabase.from('draft_rooms').select('state').eq('id', code).single()
+    getRoom(code)
       .then(async ({ data }) => {
         if (!data) { navigate('/'); return }
         setRoomState(data.state)

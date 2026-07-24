@@ -18,6 +18,9 @@ import tournamentBoundPoolsHandler from '../api/tournament-bound-pools.js'
 import tournamentPoolHandler from '../api/tournament-pool.js'
 import tournamentBgaDecklistHandler from '../api/tournament-bga-decklist.js'
 import tournamentPoolCountsHandler from '../api/tournament-pool-counts.js'
+import roomsIndexHandler from '../api/rooms/index.js'
+import roomsItemHandler from '../api/rooms/[id].js'
+import realtimeConfigHandler from '../api/realtime-config.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const distDir = path.join(__dirname, '../dist')
@@ -40,11 +43,13 @@ function route(handler) {
 
 // Vercel puts a dynamic route segment straight into req.query; Express keeps it in
 // req.params instead — bridge it so the handler (written for Vercel) sees it the same
-// way. req.query is a getter-only property in Express 5, so mutate it in place rather
-// than reassigning.
+// way. Express 5's req.query is a live getter that recomputes from req.url on every
+// access, NOT a stored property — Object.assign(req.query, {...}) mutates a throwaway
+// object and is silently lost on the handler's next read. Overriding the property
+// itself (Object.defineProperty) is what actually sticks.
 function routeWithParam(handler, param) {
   return route((req, res) => {
-    Object.assign(req.query, { [param]: req.params[param] })
+    Object.defineProperty(req, 'query', { value: { ...req.query, [param]: req.params[param] }, writable: true, configurable: true })
     return handler(req, res)
   })
 }
@@ -58,6 +63,9 @@ app.all('/api/tournament-bound-pools', route(tournamentBoundPoolsHandler))
 app.all('/api/tournament-pool', route(tournamentPoolHandler))
 app.all('/api/tournament-bga-decklist', route(tournamentBgaDecklistHandler))
 app.all('/api/tournament-pool-counts', route(tournamentPoolCountsHandler))
+app.all('/api/rooms', route(roomsIndexHandler))
+app.all('/api/rooms/:id', routeWithParam(roomsItemHandler, 'id'))
+app.all('/api/realtime-config', route(realtimeConfigHandler))
 
 app.use(express.static(distDir))
 // SPA fallback for every non-API route (mirrors vercel.json's rewrite).

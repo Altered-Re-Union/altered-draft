@@ -11,10 +11,17 @@
 # "Set 6 preview"), plus the same env vars the Vercel deploy uses
 # (KEYCLOAK_CLIENT_SECRET, SEALED_ATTESTATION_SECRET).
 #
-# `migrations` is a one-shot container that applies sealed-pools-schema.sql (idempotent
-# — every statement is IF NOT EXISTS, plus a guarded one-time seed of current_format) and
-# exits. Connection string comes from DATABASE_URL at runtime:
+# `migrations` is a one-shot container that applies every *.sql file in this dir, in
+# order (01-sealed-pools, 02-draft-rooms, 03-realtime — all idempotent, every statement
+# is IF NOT EXISTS/guarded) and exits. Connection string comes from DATABASE_URL at
+# runtime:
 #   docker run --rm -e DATABASE_URL=postgres://... altered-draft-migrations
+#
+# 03-realtime.sql bootstraps the self-hosted supabase/realtime sidecar (postgres_changes
+# CDC support against a vanilla postgres image — see realtime-schema.sql's own header
+# and ROADMAP.md "Realtime"). Requires wal_level=logical + the wal2json plugin, both set
+# on the postgres service itself (AlteredOps' postgres/Dockerfile + docker-compose.yml
+# command — not something this migrations image controls).
 
 FROM node:22-alpine AS build
 WORKDIR /app
@@ -38,5 +45,7 @@ CMD ["node", "server/index.js"]
 
 FROM postgres:17-alpine AS migrations
 WORKDIR /migrations
-COPY sealed-pools-schema.sql ./schema.sql
-CMD ["sh", "-c", "psql \"$DATABASE_URL\" -v ON_ERROR_STOP=1 -f schema.sql"]
+COPY sealed-pools-schema.sql ./01-sealed-pools.sql
+COPY draft-rooms-schema.sql ./02-draft-rooms.sql
+COPY realtime-schema.sql ./03-realtime.sql
+CMD ["sh", "-c", "set -e; for f in *.sql; do psql \"$DATABASE_URL\" -v ON_ERROR_STOP=1 -f \"$f\"; done"]

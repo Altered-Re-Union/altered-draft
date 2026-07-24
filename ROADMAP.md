@@ -278,6 +278,83 @@ Still no homegrown accounts/auth: identity stays Re:Union's (Keycloak) — the n
 pool-generation state (format config, nonces, tournament bindings), never credentials or its own notion of
 a user account.
 
+**✅ Built (Jul 2026) — self-hosting the app itself (Docker image, Express server, Pulumi provisioning):**
+`build/Dockerfile` (`app` target: Vite build served by `server/index.js`, an Express server routing `/api/*`
+to the SAME Vercel-style handler modules the Vercel deployment uses — no handler code changes needed to move
+serverless→container; `migrations` target: one-shot, applies every `*.sql` in the repo root in order and
+exits). `pulumi/Program.cs`'s `altered-draft` `BackupProject` block (Postgres password + app secrets in
+Scaleway Secret Manager, per-env Project + backup bucket). `sync-with-servers/services/altered-draft/` in
+AlteredOps (docker-compose.yml, env defaults, secrets.list, backup/restore scripts) — GitOps pull-based
+deploy, ~5min after push to main. Domain: `altered-draft-preprod.altered.re` / `altered-draft.altered.re`.
+
+**✅ Built (Jul 2026) — making `draft_rooms` (the original draft/sealed feature) work without an external
+Supabase project.** The gap: self-hosted Docker has no Supabase URL, but the whole multiplayer layer
+(Home/Lobby/Draft/Sealed/Results) called `supabase.from('draft_rooms')` directly from the browser — both for
+CRUD *and* for the live-update subscription. Chosen fix (discussed and confirmed with the user — the
+alternative was self-hosting the full Supabase stack, or keeping a hard Supabase-cloud dependency): **unify
+CRUD through our own API, self-host only the open-source `supabase/realtime` component for the live-update
+side** (same client/protocol either way, so the frontend subscribe code needs no branching — only which
+URL/key it's pointed at).
+- **CRUD:** `draft-rooms-schema.sql` (the `draft_rooms` table) + `api/rooms/index.js` (POST create, 409 on
+  duplicate) + `api/rooms/[id].js` (GET, PATCH — unconditional or, when `expectedVersion` is given,
+  conditional on `state->>version` matching, mirroring the old `.eq('state->>version', v).select('id')`
+  optimistic-concurrency pattern) + `src/lib/roomStore.js` (thin client returning the same `{data, error}`
+  shapes the old supabase-js calls did, so call sites barely changed). **All 5 pages converted**
+  (Home/Lobby/Draft/Sealed/Results) off `supabase.from('draft_rooms')` entirely — verified end-to-end against
+  a real Postgres (create/get/patch/conditional-patch/409-duplicate all exercised via curl).
+- **Realtime — self-hosted `supabase/realtime`, verified fully end-to-end** (a throwaway local
+  Postgres+realtime+proxy Docker stack, subscribing over real `@supabase/supabase-js` and confirming a live
+  row UPDATE arrives) **before writing any of it into AlteredOps**, since none of this is documented in one
+  place by Supabase (their Docker image assumes it's paired with their own custom Postgres image, which
+  silently pre-creates everything below — vanilla `postgres` does not). What it actually took:
+  - `wal_level=logical` (server flag) + the **wal2json** logical-decoding plugin (`postgresql-17-wal2json`,
+    installed via a small custom layer — AlteredOps' `services/altered-draft/postgres/Dockerfile` — since
+    plain `postgres:17` doesn't ship it; without it the CDC connection fails at startup with "could not
+    access file wal2json").
+  - `realtime-schema.sql` (new, applied by the migrations image alongside the other two): creates the
+    `_realtime` (control-plane) and `realtime` (target/CDC) schemas — Realtime auto-migrates the *tables*
+    inside `realtime` itself (72 migrations as of v2.102.3) but never creates the schema; creates the
+    standard `anon`/`authenticated`/`service_role` Postgres roles Supabase's own image would otherwise
+    pre-create (nothing ever logs in as them — no GoTrue/PostgREST here — the client JWT's `role` claim just
+    picks which one Realtime checks grants against); creates the `supabase_realtime` publication on
+    `draft_rooms`; grants it `SELECT` to those roles (without this, every subscribe fails with "invalid
+    column for filter id" — indistinguishable from a filter typo).
+  - The `realtime` container (`supabase/realtime:v2.102.3`, pinned to the exact version verified) is seeded
+    via `SEED_SELF_HOST=true` + `SELF_HOST_TENANT_NAME=altered-draft`; its tenant `jwt_secret` **is**
+    `REALTIME_API_JWT_SECRET` (AES-encrypted at rest by `DB_ENC_KEY`, which **must be exactly 16 bytes** — an
+    AES-128 key; any other length fails at container startup with "Bad key size", not caught until runtime).
+  - The client "anon key" is just an HS256 JWT `{role:"anon"}` signed with that same
+    `REALTIME_API_JWT_SECRET` — there's no separate provisioning step for it. `api/realtime-config.js`
+    (server-side, works on both Vercel and the Docker server) computes it **on every request** rather than
+    storing it, since the frontend is a static SPA bundle built **once** and shared across preprod/prod (no
+    `VITE_*`-at-build-time env vars — see `build/Dockerfile`), so anything that differs per environment has
+    to be resolved at runtime and handed to the browser, not baked in. On Vercel it instead passes through
+    the real `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY` unchanged.
+  - Traefik routes `/realtime/v1/*` on the app's own domain to the `realtime` container, with two label-only
+    middlewares: a `replacepathregex` rewriting `/realtime/v1/(.*)` → `/socket/$1` (supabase-js hardcodes the
+    `/realtime/v1` path segment — a Kong-proxied convention on Supabase-cloud; this container only serves
+    `/socket` directly), and a `customrequestheaders` override forcing the `Host` header to `altered-draft`
+    (Realtime resolves its multi-tenant identity from the request's Host header, not from the JWT or path —
+    without this override the real public Host reaches the container and every connection fails with
+    `TenantNotFound`).
+  - `src/lib/supabase.js` (lazy `getSupabaseClient()`, fetches `/api/realtime-config` once and caches the
+    client) + `src/lib/realtime.js` (`subscribeToRoomRealtime`, awaits that client, returns a sync
+    unsubscribe safe to call before it resolves) replace the old always-on `createClient()` at module scope.
+  - **Two real bugs found and fixed along the way** (both pre-existing, not introduced by this work): (1)
+    `server/index.js` never actually wired `api/rooms/*` into any Express route — the whole CRUD conversion
+    would have 404'd in the Docker deployment; (2) Express 5's `req.query` is a **live getter** that
+    recomputes from `req.url` on every access, not a stored property — `Object.assign(req.query, {...})`
+    (the previously-documented fix for bridging Vercel's `[id].js` route-param convention into Express) was
+    silently a no-op, so **every** `:id`-style route (`/api/decks/:id` included, not just the new rooms
+    route) was reading `id` as `undefined` under Express — masked on `/api/decks/:id` because a missing-auth
+    401 always fired first. Fixed by `Object.defineProperty(req, 'query', {value: {...}, ...})` instead,
+    which actually overrides the getter; verified against a real Postgres that both routes now receive the
+    param correctly.
+  - **Not yet wired into the live AlteredOps deployment** (needs a `pulumi up` for the 3 new secrets +
+    `docker compose up -d` to build the new `postgres` image and start the `realtime` service) — the compose
+    file, Dockerfile, schema, and Pulumi block are all written and verified locally, same "manual infra step,
+    not done by Claude" boundary as the rest of this section.
+
 **Depends on Re:Union:** set 6 **card data** for the validator's legal-card universe; agreement on the
 **receipt-required** workflow in BGA; provisioning the `altered-draft` Scaleway Project (`pulumi up`) and
 adding it to the `preprod-1`/`prod-2` host manifests (manual infra step, not done by Claude — see "✅ Built").

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { supabase } from '../lib/supabase.js'
+import { getRoom } from '../lib/roomStore.js'
 import { fetchSet, apiSetCode, SET_ABBREV, SET_FULL_NAMES, fetchUniques, isUniqueRef, needsCardApi, uniqueRefsIn } from '../lib/cardData.js'
 import { COMMUNITY_CUBES } from '../lib/cubes.js'
 import { SET_ICONS, setCodeFromRef } from '../lib/assets.js'
@@ -32,7 +32,7 @@ export default function Sealed() {
   }, [code, navigate])
 
   useEffect(() => {
-    supabase.from('draft_rooms').select('state').eq('id', code).single()
+    getRoom(code)
       .then(async ({ data }) => {
         if (!data) { navigate('/'); return }
         setRoomState(data.state)

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { supabase } from '../lib/supabase.js'
+import { getRoom, updateRoom, subscribeToRoom } from '../lib/roomStore.js'
 import { fetchSet, SETS, apiSetCode, fetchUniques, fetchRandomUniques, isUniqueRef, needsCardApi } from '../lib/cardData.js'
 import { SET_ASSETS } from '../lib/assets.js'
 import { COMMUNITY_CUBES, setsForCube, SPOTLIGHT } from '../lib/cubes.js'
@@ -162,7 +162,7 @@ export default function Lobby() {
   }, [code, navigate])
 
   useEffect(() => {
-    supabase.from('draft_rooms').select('state').eq('id', code).single()
+    getRoom(code)
       .then(({ data, error }) => {
         if (error || !data) { navigate('/'); return }
         setRoomState(data.state)
@@ -173,17 +173,11 @@ export default function Lobby() {
   }, [code, navigate])
 
   useEffect(() => {
-    const channel = supabase
-      .channel(`room-${code}`)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'draft_rooms', filter: `id=eq.${code}` },
-        payload => {
-          const state = payload.new.state
-          setRoomState(state)
-          if (['drafting', 'heroDraft', 'rochester', 'rotisserie', 'winston'].includes(state.phase)) navigate(`/room/${code}/draft`)
-          else if (state.phase === 'sealed') navigate(`/room/${code}/sealed`)
-        })
-      .subscribe()
-    return () => supabase.removeChannel(channel)
+    return subscribeToRoom(code, state => {
+      setRoomState(state)
+      if (['drafting', 'heroDraft', 'rochester', 'rotisserie', 'winston'].includes(state.phase)) navigate(`/room/${code}/draft`)
+      else if (state.phase === 'sealed') navigate(`/room/${code}/sealed`)
+    })
   }, [code, navigate])
 
   async function copyLink() {
@@ -386,7 +380,7 @@ export default function Lobby() {
             config: { sets: apiCodes, playerCount, lang, freeHero, includeHeroes, freeHeroPool, mode: 'sealed', customCube: { name: customCube.name, cards: customCube.cards, heroes: customCube.heroes } },
             players: shuffledPlayers, phase: 'sealed', sealedPacks, version: 0,
           }
-          const { error: upErr } = await supabase.from('draft_rooms').update({ state }).eq('id', code)
+          const { error: upErr } = await updateRoom(code, state)
           if (upErr) { setStartError('Could not start: ' + upErr.message); setLoading(false); return }
           return
         }
@@ -426,7 +420,7 @@ export default function Lobby() {
             players: shuffledPlayers, phase: 'sealed', sealedPacks, version: 0,
           }
           {
-            const { error: upErr } = await supabase.from('draft_rooms').update({ state }).eq('id', code)
+            const { error: upErr } = await updateRoom(code, state)
             if (upErr) { setStartError('Could not start: ' + upErr.message); setLoading(false); return }
           }
           return
@@ -454,7 +448,7 @@ export default function Lobby() {
           players: shuffledPlayers, phase: 'sealed', sealedPacks, version: 0,
         }
         {
-          const { error: upErr } = await supabase.from('draft_rooms').update({ state }).eq('id', code)
+          const { error: upErr } = await updateRoom(code, state)
           if (upErr) { setStartError('Could not start: ' + upErr.message); setLoading(false); return }
         }
         return
@@ -493,7 +487,7 @@ export default function Lobby() {
           { sets: apiCodes, playerCount, lang, freeHero, includeHeroes: false, freeHeroPool, heroMode, heroCount, draftFormat, timerEnabled, timerSeconds, customCube: { name: customCube.name, cards: customCube.cards, heroes: customCube.heroes } },
           shuffledPlayers, packs, heroPool
         )
-        const { error: upErr } = await supabase.from('draft_rooms').update({ state }).eq('id', code)
+        const { error: upErr } = await updateRoom(code, state)
         if (upErr) { setStartError('Could not start: ' + upErr.message); setLoading(false); return }
         return
       }
@@ -557,7 +551,7 @@ export default function Lobby() {
           shuffledPlayers, packs, heroPool
         )
         {
-          const { error: upErr } = await supabase.from('draft_rooms').update({ state }).eq('id', code)
+          const { error: upErr } = await updateRoom(code, state)
           if (upErr) { setStartError('Could not start: ' + upErr.message); setLoading(false); return }
         }
         return
@@ -582,7 +576,7 @@ export default function Lobby() {
           shuffledPlayers, packs, heroPool
         )
         {
-          const { error: upErr } = await supabase.from('draft_rooms').update({ state }).eq('id', code)
+          const { error: upErr } = await updateRoom(code, state)
           if (upErr) { setStartError('Could not start: ' + upErr.message); setLoading(false); return }
         }
         return
@@ -619,7 +613,7 @@ export default function Lobby() {
           shuffledPlayers, packs, heroPool
         )
         {
-          const { error: upErr } = await supabase.from('draft_rooms').update({ state }).eq('id', code)
+          const { error: upErr } = await updateRoom(code, state)
           if (upErr) { setStartError('Could not start: ' + upErr.message); setLoading(false); return }
         }
         return
@@ -645,7 +639,7 @@ export default function Lobby() {
         { sets: setCodes, playerCount, lang, freeHero, includeHeroes, freeHeroPool, addUniques, heroMode, heroCount, draftFormat, timerEnabled, timerSeconds },
         shuffledPlayers, packs, heroPool
       )
-      const { error: upErr } = await supabase.from('draft_rooms').update({ state }).eq('id', code)
+      const { error: upErr } = await updateRoom(code, state)
       if (upErr) { setStartError('Could not start: ' + upErr.message); setLoading(false); return }
     } catch (err) {
       setStartError('Error starting draft: ' + err.message)
