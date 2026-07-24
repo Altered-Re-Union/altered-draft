@@ -17,7 +17,7 @@ import tournamentPrepPoolHandler from '../api/tournament-prep-pool.js'
 import tournamentBoundPoolsHandler from '../api/tournament-bound-pools.js'
 import tournamentPoolHandler from '../api/tournament-pool.js'
 import tournamentBgaDecklistHandler from '../api/tournament-bga-decklist.js'
-import tournamentValidateDeckHandler from '../api/tournament-validate-deck.js'
+import tournamentPoolCountsHandler from '../api/tournament-pool-counts.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const distDir = path.join(__dirname, '../dist')
@@ -57,7 +57,7 @@ app.all('/api/tournament-prep-pool', route(tournamentPrepPoolHandler))
 app.all('/api/tournament-bound-pools', route(tournamentBoundPoolsHandler))
 app.all('/api/tournament-pool', route(tournamentPoolHandler))
 app.all('/api/tournament-bga-decklist', route(tournamentBgaDecklistHandler))
-app.all('/api/tournament-validate-deck', route(tournamentValidateDeckHandler))
+app.all('/api/tournament-pool-counts', route(tournamentPoolCountsHandler))
 
 app.use(express.static(distDir))
 // SPA fallback for every non-API route (mirrors vercel.json's rewrite).
