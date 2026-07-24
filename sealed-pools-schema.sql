@@ -83,3 +83,14 @@ create index if not exists sealed_pools_bound_tournaments
 -- tournament identity), so many different players legitimately bind to the same seed.
 create unique index if not exists sealed_pools_one_binding_per_sub_per_seed
   on sealed_pools (sub, tournament_seed) where tournament_seed is not null;
+
+-- Seeds the initial active competitive format (set 6 / EOLE sealed, 3 uniques capped at
+-- 1 per faction, no heroes drafted — every EOLE hero gets appended to the pool instead,
+-- see api/_lib/tournamentPool.js) so the tournament endpoints have something to serve out
+-- of the box. Guarded by "table is completely empty" rather than ON CONFLICT: current_format
+-- is append-only by design (see its table comment above) — a later, deliberate format change
+-- is a new INSERT the app never expects this migration to touch, so this only ever fires
+-- once, on a fresh table, and is a no-op on every subsequent (idempotent) migrations run.
+insert into current_format (type, set_code, unique_count, even_factions, heroes_in_pool)
+select 'sealed', 'EOLE', 3, true, false
+where not exists (select 1 from current_format);

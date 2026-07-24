@@ -12,8 +12,8 @@
 # (KEYCLOAK_CLIENT_SECRET, SEALED_ATTESTATION_SECRET).
 #
 # `migrations` is a one-shot container that applies sealed-pools-schema.sql (idempotent
-# — every statement is IF NOT EXISTS) and exits. Connection string comes from
-# DATABASE_URL at runtime:
+# — every statement is IF NOT EXISTS, plus a guarded one-time seed of current_format) and
+# exits. Connection string comes from DATABASE_URL at runtime:
 #   docker run --rm -e DATABASE_URL=postgres://... altered-draft-migrations
 
 FROM node:22-alpine AS build
