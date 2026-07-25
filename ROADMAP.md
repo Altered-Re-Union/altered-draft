@@ -163,6 +163,32 @@ tournamentSeed once bound])" plus the new format-config/nonce/binding store desc
   `regeneratePoolCounts` in `api/_lib/tournamentPool.js`). Set 6 sealed uses `false`: this way any hero is
   legal without a consumer needing to special-case "any set-N hero" — the hero just always shows up in the
   pool response, so the generic pool-membership check covers it for free.
+- **decks-api validation simplified to a deck-id lookup (2026-07-25)** — decks-api doesn't only validate
+  sealed decks on the BGA deck-content call: a third-party deckbuilder can edit the same deck through
+  decks-api's own generic `POST`/`PATCH /api/decks`, which never carries a `tournamentSeed` at all. The
+  first design threaded `tournamentSeed` (when present) through to decks-api and had it remember a resolved
+  `poolId` on its own `Deck` row for calls that lack one — workable, but it meant decks-api owning a second
+  copy of binding state. **Simpler realization: decks-api's own deck id is already a stable key it always
+  has, on every call site, with no threading needed.** `sealed_pools.deck_id` (stamped by
+  `updateDeckSummary()` as `TournamentPoolView.jsx`'s throttled sync creates/updates the deck — see `src/lib/decks.js`)
+  already links a pool to its deck essentially immediately, well before any real validation happens (a BGA
+  game load, or a non-draft save) — and binding a `tournamentSeed` in the first place already happens
+  independently of decks-api, via `api/tournament-bga-decklist.js` on the BGA deck-LIST call. So decks-api
+  never needs to see or forward `tournamentSeed` for its OWN validation purposes at all: a new endpoint,
+  `GET /api/tournament-pool-by-deck?deckId=...` (`getPoolByDeckId(sub, deckId)` in `poolStore.js` — scoped to
+  the caller's own `sub`, same trust model as `getPoolById`), lets `AlteredDraftSealedPoolClient` always ask
+  "the pool for MY deck" regardless of caller. `api/tournament-pool-counts.js` (the older `tournamentSeed`-based
+  endpoint) is left in place but is no longer called by decks-api.
+  **Resetting a normal pool now deletes its linked deck** (`resetNormalPool()` returns the just-cleared
+  `previousDeckId`; `api/tournament-normal-pool.js`'s POST handler forwards the caller's own bearer token to
+  `DELETE https://decks.alteredcore.org/api/decks/{id}`, best-effort — a failed delete just leaves an orphan,
+  it doesn't fail the reset) — this normalizes the normal-pool and tournament-pool cases: a deck-id-to-pool
+  link is now either permanent (tournament, never resets) or dies with its deck (normal, deleted on reset),
+  never silently stale. That means decks-api's `AlteredDraftSealedPoolClient` can cache
+  `GET /api/tournament-pool-by-deck` responses uniformly for every kind, with one flat TTL — no need to
+  special-case "don't cache the normal pool." Capped at **1 hour** rather than cached forever: nothing
+  invalidates a tournament-pool cache entry early since deck ids are never reused, so an unbounded TTL would
+  just accumulate one cache entry per sealed deck ever validated, for no benefit over a much shorter one.
 - **Tournament server = one locked config (not started):** the tournament instance should offer **ONLY
   the current competitive format's SEALED, 7 boosters** (today: set 6) — no other mode / pool / set /
   setting selectable. Re:Union login required, uniques off (the normal "add random uniques" toggle, not the

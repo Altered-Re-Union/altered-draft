@@ -74,7 +74,12 @@ export async function getOrCreateNormalPool(sub) {
 /**
  * Resets the player's normal-mode pool to a fresh nonce (re-snapshotting the current
  * active format), unless the 30-minute cooldown since the last reset hasn't elapsed.
- * @returns {Promise<{pool: object} | {cooldownRemainingMs: number}>}
+ * Also returns the deck that WAS linked to it (if any), so the caller can delete it:
+ * once its pool is gone, that deck can never be validated against anything again — no
+ * point leaving it around as an orphan, and deleting it is what lets decks-api treat
+ * "the pool linked to my deck id" as a stable, cacheable fact for as long as the deck
+ * exists, instead of having to guess how long a normal-pool link stays valid.
+ * @returns {Promise<{pool: object, previousDeckId: string|null} | {cooldownRemainingMs: number}>}
  */
 export async function resetNormalPool(sub) {
   const pool = await getOrCreateNormalPool(sub)
@@ -98,7 +103,7 @@ export async function resetNormalPool(sub) {
      RETURNING *`,
     [pool.id, newNonce(), format.set_code, format.unique_count, format.even_factions, format.heroes_in_pool],
   )
-  return { pool: rows[0] }
+  return { pool: rows[0], previousDeckId: pool.deck_id ?? null }
 }
 
 /** The player's single pending (not yet bound) tournament pool, creating it if absent. */
@@ -167,6 +172,25 @@ export async function listBoundTournamentPools(sub) {
 /** A single pool by id, scoped to its owner (never resolve a pool by id alone). */
 export async function getPoolById(sub, id) {
   const { rows } = await query('SELECT * FROM sealed_pools WHERE id = $1 AND sub = $2', [id, sub])
+  return rows[0] ?? null
+}
+
+/**
+ * The pool currently linked to a given decks-api deck id, scoped to its owner. Used by
+ * altered-core-decks-api's SealedFormatValidator to check pool membership for a deck
+ * outside the BGA request flow (e.g. a third-party deckbuilder editing the deck through
+ * decks-api's own generic save endpoint, which never carries a `tournamentSeed`) — the
+ * deck id is something decks-api always has, regardless of caller, so this is a simpler
+ * and more robust lookup key than threading `tournamentSeed` through every call site.
+ * `deck_id` is stamped here by updateDeckSummary() as the frontend syncs the deck (see
+ * TournamentPoolView.jsx), essentially immediately after the deck is first created —
+ * well before any real validation (a BGA game load, or a non-draft save) can occur.
+ */
+export async function getPoolByDeckId(sub, deckId) {
+  const { rows } = await query(
+    'SELECT * FROM sealed_pools WHERE sub = $1 AND deck_id = $2 ORDER BY bound_at DESC NULLS LAST, created_at DESC LIMIT 1',
+    [sub, deckId],
+  )
   return rows[0] ?? null
 }
 

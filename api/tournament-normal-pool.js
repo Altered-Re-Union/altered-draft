@@ -5,6 +5,19 @@ import { verifySub } from './_lib/auth.js'
 import { getOrCreateNormalPool, resetNormalPool } from '../src/lib/poolStore.js'
 import { regeneratePoolCounts, poolResponse } from './_lib/tournamentPool.js'
 
+const DECKS_API = 'https://decks.alteredcore.org/api/decks'
+
+// Best-effort: a reset pool can never validate its old deck again anyway (deck_id is
+// already cleared), so a failed delete here just leaves an orphaned deck behind rather
+// than breaking the reset itself.
+async function deleteDeck(deckId, auth) {
+  try {
+    await fetch(`${DECKS_API}/${encodeURIComponent(deckId)}`, { method: 'DELETE', headers: { Authorization: auth } })
+  } catch {
+    // ignored — see comment above
+  }
+}
+
 export default async function handler(req, res) {
   const sub = await verifySub(req)
   if (!sub) return res.status(401).json({ error: 'unauthorized' })
@@ -19,6 +32,9 @@ export default async function handler(req, res) {
     const result = await resetNormalPool(sub)
     if ('cooldownRemainingMs' in result) {
       return res.status(429).json({ error: 'cooldown', remainingMs: result.cooldownRemainingMs })
+    }
+    if (result.previousDeckId) {
+      await deleteDeck(result.previousDeckId, req.headers.authorization)
     }
     const cards = await regeneratePoolCounts(sub, result.pool)
     return res.status(200).json(poolResponse(result.pool, cards))
