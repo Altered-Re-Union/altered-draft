@@ -640,6 +640,15 @@ current cube experience is validated. Also still blocked on the author's full ca
 
 ## Planned
 
+### Ban-list toggle — include or exclude banned cards (default: EXCLUDED)
+An option to **include or exclude the competitive ban list** from generated pools/packs, **excluded by
+default** (banned/suspended cards do NOT appear unless the host opts in). Keeps casual/preview play aligned
+with the current banned+suspended list out of the box, while still allowing the full card space when wanted.
+Applies to pack, cube, and sealed generation (`packGenerator.js` + cube paths, incl. the tournament sealed
+recipe). Mechanism: cards expose `isBanned`/`isSuspended` on `cards.alteredcore.org` (confirm whether the
+PolluxTroy0 set JSON carries it too; if not, thread it through `normalizeCard` or keep a small ban-list of
+refs) and generation filters those refs unless the toggle is on. Not started.
+
 ### From Dev-Discord feedback (Jun 2026) — SHIPPED
 First reactions to the alternate-formats build, from the Re:Union dev channel:
 - **✅ Sealed "4 packs" → "7 packs" helper bug** (Haalford [ALTR]). The Presets-tab helper text hard-coded
