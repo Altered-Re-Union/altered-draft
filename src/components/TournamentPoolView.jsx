@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { fetchSet, fetchUniques, isUniqueRef } from '../lib/cardData.js'
 import { createDeck, updateDeck, toDeckCards } from '../lib/decks.js'
 import { syncPoolDeck } from '../lib/tournamentApi.js'
-import PoolGrid, { SimpleCardGrid } from './PoolGrid.jsx'
+import PoolGrid from './PoolGrid.jsx'
 import PackReveal from './PackReveal.jsx'
 import TopNav from './TopNav.jsx'
 
@@ -43,8 +43,6 @@ export default function TournamentPoolView({ title, load, reset }) {
   const [error, setError] = useState('')
   const [cooldownMs, setCooldownMs] = useState(0)
   const [syncing, setSyncing] = useState(false)
-  const [view, setView] = useState('boosters') // 'boosters' (pack-by-pack) | 'pool' (full pool)
-  const [packIndex, setPackIndex] = useState(0)
   const [showReveal, setShowReveal] = useState(false) // first-open pack-by-pack overlay
 
   const poolRef = useRef(null) // avoids clobbering deck state on a resolved-late reload
@@ -61,7 +59,6 @@ export default function TournamentPoolView({ title, load, reset }) {
       poolRef.current = data
       setPool(data)
       setCooldownMs(cooldownFromResetAt(data.resetAt)) // show the cooldown from the start, not just after a rejected click
-      setPackIndex(0) // start on the first booster (e.g. after a reset regenerates the pool)
 
       const refs = Object.keys(data.cards)
       const map = {}
@@ -199,12 +196,10 @@ export default function TournamentPoolView({ title, load, reset }) {
   const deckHeroCount = deckRefs.filter(r => cardMap[r]?.cardType === 'HERO').length
   const isValid = deckTotal >= 30 && deckFactions.size <= 3 && deckHeroCount <= 1
 
-  // Booster-by-booster view (from the API's `boosters`). Heroes aren't in boosters (they're
-  // appended to the full pool), so the "Full pool" tab is where the hero lives.
+  // Boosters (from the API's `boosters`) feed the first-open reveal only; deckbuilding
+  // always uses the full pool. Heroes aren't in boosters — they're in the full pool.
   const boosters = pool?.boosters ?? []
   const hasBoosters = boosters.length > 0
-  const showBoosters = view === 'boosters' && hasBoosters
-  const currentPack = boosters[Math.min(packIndex, boosters.length - 1)] ?? []
 
   // The guaranteed unique(s) live in the pool but in no real booster (see tournamentPool.js);
   // surface them as the reveal's final "8th booster".
@@ -244,54 +239,18 @@ export default function TournamentPoolView({ title, load, reset }) {
         </div>
         {error && <p className="text-red-400 text-sm mb-2">{error}</p>}
 
-        {/* Booster / full-pool toggle + pack navigation (only when the API sent boosters) */}
-        {hasBoosters && (
-          <div className="flex items-center gap-2 mb-2 flex-wrap">
-            <div className="flex rounded-lg border border-line overflow-hidden text-sm">
-              {[['boosters', 'Boosters'], ['pool', 'Full pool']].map(([v, label]) => (
-                <button key={v} onClick={() => setView(v)}
-                  className={`px-3 py-1.5 transition-colors ${view === v
-                    ? 'bg-accent text-on-accent font-bold'
-                    : 'bg-surface2 hover:bg-surface3 text-ink2'}`}>
-                  {label}
-                </button>
-              ))}
-            </div>
-            {showBoosters && (
-              <div className="flex items-center gap-2 ml-auto text-sm">
-                <span className="text-faint hidden sm:inline">Heroes are in the full pool</span>
-                <button onClick={() => setPackIndex(i => Math.max(0, i - 1))} disabled={packIndex <= 0}
-                  className="w-8 h-8 rounded bg-surface2 hover:bg-surface3 disabled:opacity-30 flex items-center justify-center">←</button>
-                <span className="text-ink2 tabular-nums w-24 text-center">Booster {Math.min(packIndex, boosters.length - 1) + 1} / {boosters.length}</span>
-                <button onClick={() => setPackIndex(i => Math.min(boosters.length - 1, i + 1))} disabled={packIndex >= boosters.length - 1}
-                  className="w-8 h-8 rounded bg-surface2 hover:bg-surface3 disabled:opacity-30 flex items-center justify-center">→</button>
-              </div>
-            )}
-          </div>
-        )}
-
+        {/* Deckbuilding is always the full pool — the pack-by-pack experience is the
+            first-open reveal overlay, not a persistent tab (avoids a "which tab?" step). */}
         <div className="flex-1 bg-surface rounded-xl border border-line overflow-hidden">
-          {showBoosters ? (
-            <SimpleCardGrid
-              refs={currentPack}
-              cardMap={cardMap}
-              deck={deck}
-              poolCounts={pool?.cards}
-              onAdd={addCard}
-              onRemove={removeCard}
-              loading={loading}
-            />
-          ) : (
-            <PoolGrid
-              refs={Object.entries(pool?.cards ?? {}).flatMap(([ref, qty]) => Array(qty).fill(ref))}
-              cardMap={cardMap}
-              deck={deck}
-              poolCounts={pool?.cards}
-              onAdd={addCard}
-              onRemove={removeCard}
-              loading={loading}
-            />
-          )}
+          <PoolGrid
+            refs={Object.entries(pool?.cards ?? {}).flatMap(([ref, qty]) => Array(qty).fill(ref))}
+            cardMap={cardMap}
+            deck={deck}
+            poolCounts={pool?.cards}
+            onAdd={addCard}
+            onRemove={removeCard}
+            loading={loading}
+          />
         </div>
       </div>
     </div>
