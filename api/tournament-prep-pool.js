@@ -3,7 +3,7 @@
 // until it gets bound to a real tournament (via api/tournament-bga-decklist.js).
 import { verifySub } from './_lib/auth.js'
 import { getOrCreatePreparationPool } from '../src/lib/poolStore.js'
-import { regeneratePoolCounts, poolResponse } from './_lib/tournamentPool.js'
+import { regeneratePool, poolResponse } from './_lib/tournamentPool.js'
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -15,6 +15,6 @@ export default async function handler(req, res) {
   if (!sub) return res.status(401).json({ error: 'unauthorized' })
 
   const pool = await getOrCreatePreparationPool(sub)
-  const cards = await regeneratePoolCounts(sub, pool)
-  return res.status(200).json(poolResponse(pool, cards))
+  const { counts, boosters } = await regeneratePool(sub, pool)
+  return res.status(200).json(poolResponse(pool, counts, boosters))
 }

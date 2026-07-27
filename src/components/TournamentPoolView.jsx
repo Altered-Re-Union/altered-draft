@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { fetchSet, fetchUniques, isUniqueRef } from '../lib/cardData.js'
 import { createDeck, updateDeck, toDeckCards } from '../lib/decks.js'
 import { syncPoolDeck } from '../lib/tournamentApi.js'
-import PoolGrid from './PoolGrid.jsx'
+import PoolGrid, { SimpleCardGrid } from './PoolGrid.jsx'
 import TopNav from './TopNav.jsx'
 
 const SYNC_THROTTLE_MS = 2000
@@ -23,6 +23,8 @@ export default function TournamentPoolView({ title, load, reset }) {
   const [error, setError] = useState('')
   const [cooldownMs, setCooldownMs] = useState(0)
   const [syncing, setSyncing] = useState(false)
+  const [view, setView] = useState('boosters') // 'boosters' (pack-by-pack) | 'pool' (full pool)
+  const [packIndex, setPackIndex] = useState(0)
 
   const poolRef = useRef(null) // avoids clobbering deck state on a resolved-late reload
   const lastSyncAtRef = useRef(0)
@@ -37,6 +39,7 @@ export default function TournamentPoolView({ title, load, reset }) {
       const data = await load()
       poolRef.current = data
       setPool(data)
+      setPackIndex(0) // start on the first booster (e.g. after a reset regenerates the pool)
 
       const refs = Object.keys(data.cards)
       const map = {}
@@ -156,6 +159,13 @@ export default function TournamentPoolView({ title, load, reset }) {
   const deckHeroCount = deckRefs.filter(r => cardMap[r]?.cardType === 'HERO').length
   const isValid = deckTotal >= 30 && deckFactions.size <= 3 && deckHeroCount <= 1
 
+  // Booster-by-booster view (from the API's `boosters`). Heroes aren't in boosters (they're
+  // appended to the full pool), so the "Full pool" tab is where the hero lives.
+  const boosters = pool?.boosters ?? []
+  const hasBoosters = boosters.length > 0
+  const showBoosters = view === 'boosters' && hasBoosters
+  const currentPack = boosters[Math.min(packIndex, boosters.length - 1)] ?? []
+
   return (
     <div className="min-h-screen flex flex-col">
       <TopNav />
@@ -175,16 +185,55 @@ export default function TournamentPoolView({ title, load, reset }) {
           )}
         </div>
         {error && <p className="text-red-400 text-sm mb-2">{error}</p>}
+
+        {/* Booster / full-pool toggle + pack navigation (only when the API sent boosters) */}
+        {hasBoosters && (
+          <div className="flex items-center gap-2 mb-2 flex-wrap">
+            <div className="flex rounded-lg border border-line overflow-hidden text-sm">
+              {[['boosters', 'Boosters'], ['pool', 'Full pool']].map(([v, label]) => (
+                <button key={v} onClick={() => setView(v)}
+                  className={`px-3 py-1.5 transition-colors ${view === v
+                    ? 'bg-accent text-on-accent font-bold'
+                    : 'bg-surface2 hover:bg-surface3 text-ink2'}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            {showBoosters && (
+              <div className="flex items-center gap-2 ml-auto text-sm">
+                <span className="text-faint hidden sm:inline">Heroes are in the full pool</span>
+                <button onClick={() => setPackIndex(i => Math.max(0, i - 1))} disabled={packIndex <= 0}
+                  className="w-8 h-8 rounded bg-surface2 hover:bg-surface3 disabled:opacity-30 flex items-center justify-center">←</button>
+                <span className="text-ink2 tabular-nums w-24 text-center">Booster {Math.min(packIndex, boosters.length - 1) + 1} / {boosters.length}</span>
+                <button onClick={() => setPackIndex(i => Math.min(boosters.length - 1, i + 1))} disabled={packIndex >= boosters.length - 1}
+                  className="w-8 h-8 rounded bg-surface2 hover:bg-surface3 disabled:opacity-30 flex items-center justify-center">→</button>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="flex-1 bg-surface rounded-xl border border-line overflow-hidden">
-          <PoolGrid
-            refs={Object.entries(pool?.cards ?? {}).flatMap(([ref, qty]) => Array(qty).fill(ref))}
-            cardMap={cardMap}
-            deck={deck}
-            poolCounts={pool?.cards}
-            onAdd={addCard}
-            onRemove={removeCard}
-            loading={loading}
-          />
+          {showBoosters ? (
+            <SimpleCardGrid
+              refs={currentPack}
+              cardMap={cardMap}
+              deck={deck}
+              poolCounts={pool?.cards}
+              onAdd={addCard}
+              onRemove={removeCard}
+              loading={loading}
+            />
+          ) : (
+            <PoolGrid
+              refs={Object.entries(pool?.cards ?? {}).flatMap(([ref, qty]) => Array(qty).fill(ref))}
+              cardMap={cardMap}
+              deck={deck}
+              poolCounts={pool?.cards}
+              onAdd={addCard}
+              onRemove={removeCard}
+              loading={loading}
+            />
+          )}
         </div>
       </div>
     </div>
