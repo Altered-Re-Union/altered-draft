@@ -7,9 +7,9 @@
 --
 -- Card pools are never stored: a pool's contents are always the deterministic output of
 -- generateTournamentSealedPool() fed by the columns below (set_code, unique_count,
--- even_factions, heroes_in_pool, nonce, and tournament_seed once bound) — see
--- src/lib/poolStore.js's getPoolSeedInputs(). Only enough state to reproduce and to
--- lazily bind a pool is kept here.
+-- even_factions, heroes_in_pool, guaranteed_uniques, nonce, and tournament_seed once
+-- bound) — see src/lib/poolStore.js's buildPoolSeedString(). Only enough state to
+-- reproduce and to lazily bind a pool is kept here.
 
 -- Append-only: the currently active competitive format is simply the most recent row.
 -- Changing format = INSERT a new row, never UPDATE — old pools keep referencing whatever
@@ -19,11 +19,14 @@ create table if not exists current_format (
   id bigint generated always as identity primary key,
   type text not null check (type in ('sealed', 'draft')),
   set_code text not null,
-  unique_count int not null default 0,
+  unique_count int not null default 0,        -- uniques INSIDE boosters (each replaces a rare slot)
   even_factions boolean not null default false,
   heroes_in_pool boolean not null default true,
+  guaranteed_uniques int not null default 0,  -- extra uniques appended OUTSIDE the boosters (like heroes)
   created_at timestamptz not null default now()
 );
+-- Existing databases (created before guaranteed_uniques existed): add the column in place.
+alter table current_format add column if not exists guaranteed_uniques int not null default 0;
 
 create table if not exists sealed_pools (
   id uuid primary key default gen_random_uuid(),
@@ -37,6 +40,7 @@ create table if not exists sealed_pools (
   unique_count int not null default 0,
   even_factions boolean not null default false,
   heroes_in_pool boolean not null default true,
+  guaranteed_uniques int not null default 0,
   nonce text not null,
 
   -- 'tournament' rows start with tournament_seed = null (pending / in preparation) and
@@ -58,6 +62,8 @@ create table if not exists sealed_pools (
 
   created_at timestamptz not null default now()
 );
+-- Existing databases: add the column in place (snapshotted per pool at creation time).
+alter table sealed_pools add column if not exists guaranteed_uniques int not null default 0;
 
 -- At most one 'normal' pool per player at a time (reset updates it in place, it's never
 -- replaced by a new row).
@@ -84,13 +90,21 @@ create index if not exists sealed_pools_bound_tournaments
 create unique index if not exists sealed_pools_one_binding_per_sub_per_seed
   on sealed_pools (sub, tournament_seed) where tournament_seed is not null;
 
--- Seeds the initial active competitive format (set 6 / EOLE sealed, 3 uniques capped at
--- 1 per faction, no heroes drafted — every EOLE hero gets appended to the pool instead,
--- see api/_lib/tournamentPool.js) so the tournament endpoints have something to serve out
--- of the box. Guarded by "table is completely empty" rather than ON CONFLICT: current_format
+-- Seeds the initial active competitive format (set 6 / EOLE sealed): 1 unique INSIDE the
+-- boosters (replacing a rare) + 1 guaranteed unique appended OUTSIDE them, factions left
+-- random, no heroes drafted — every EOLE hero gets appended to the pool instead, see
+-- api/_lib/tournamentPool.js) so the tournament endpoints have something to serve out of
+-- the box. Guarded by "table is completely empty" rather than ON CONFLICT: current_format
 -- is append-only by design (see its table comment above) — a later, deliberate format change
 -- is a new INSERT the app never expects this migration to touch, so this only ever fires
 -- once, on a fresh table, and is a no-op on every subsequent (idempotent) migrations run.
-insert into current_format (type, set_code, unique_count, even_factions, heroes_in_pool)
-select 'sealed', 'EOLE', 3, true, false
+insert into current_format (type, set_code, unique_count, even_factions, heroes_in_pool, guaranteed_uniques)
+select 'sealed', 'EOLE', 1, false, false, 1
 where not exists (select 1 from current_format);
+
+-- Activating this format on an ALREADY-SEEDED database (which still has the old
+-- 3-uniques/even-factions row): the migration above is a no-op there, so switch formats
+-- the append-only way — INSERT a fresh row (it becomes "most recent" = active). Run once,
+-- deliberately, when rolling the new format out:
+--   insert into current_format (type, set_code, unique_count, even_factions, heroes_in_pool, guaranteed_uniques)
+--   values ('sealed', 'EOLE', 1, false, false, 1);
