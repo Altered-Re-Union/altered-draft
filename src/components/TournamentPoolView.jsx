@@ -3,6 +3,7 @@ import { fetchSet, fetchUniques, isUniqueRef } from '../lib/cardData.js'
 import { createDeck, updateDeck, toDeckCards } from '../lib/decks.js'
 import { syncPoolDeck } from '../lib/tournamentApi.js'
 import PoolGrid, { SimpleCardGrid } from './PoolGrid.jsx'
+import PackReveal from './PackReveal.jsx'
 import TopNav from './TopNav.jsx'
 
 const SYNC_THROTTLE_MS = 2000
@@ -18,6 +19,12 @@ function cooldownFromResetAt(resetAt) {
 function formatCooldown(ms) {
   const total = Math.ceil(ms / 1000)
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`
+}
+
+// localStorage key that gates the first-open reveal. Includes resetAt so a fresh pool (after
+// a reset) replays the opening, while re-visiting the same pool does not.
+function revealKey(pool) {
+  return `pool_reveal_seen:${pool.id}:${pool.resetAt ?? ''}`
 }
 
 /**
@@ -38,6 +45,7 @@ export default function TournamentPoolView({ title, load, reset }) {
   const [syncing, setSyncing] = useState(false)
   const [view, setView] = useState('boosters') // 'boosters' (pack-by-pack) | 'pool' (full pool)
   const [packIndex, setPackIndex] = useState(0)
+  const [showReveal, setShowReveal] = useState(false) // first-open pack-by-pack overlay
 
   const poolRef = useRef(null) // avoids clobbering deck state on a resolved-late reload
   const lastSyncAtRef = useRef(0)
@@ -85,6 +93,17 @@ export default function TournamentPoolView({ title, load, reset }) {
     const t = setInterval(() => setCooldownMs(ms => Math.max(0, ms - 1000)), 1000)
     return () => clearInterval(t)
   }, [cooldownMs > 0])
+
+  // Show the first-open pack reveal once per pool (skips if already seen, or no boosters).
+  useEffect(() => {
+    if (!pool?.id || !pool.boosters?.length) return
+    try { if (!localStorage.getItem(revealKey(pool))) setShowReveal(true) } catch { /* ignore */ }
+  }, [pool?.id, pool?.resetAt])
+
+  function dismissReveal() {
+    try { if (pool?.id) localStorage.setItem(revealKey(pool), '1') } catch { /* ignore */ }
+    setShowReveal(false)
+  }
 
   async function handleReset() {
     if (!reset) return
@@ -187,9 +206,27 @@ export default function TournamentPoolView({ title, load, reset }) {
   const showBoosters = view === 'boosters' && hasBoosters
   const currentPack = boosters[Math.min(packIndex, boosters.length - 1)] ?? []
 
+  // The guaranteed unique(s) live in the pool but in no real booster (see tournamentPool.js);
+  // surface them as the reveal's final "8th booster".
+  const boosterFlat = boosters.flat()
+  const bonusUniques = Object.keys(pool?.cards ?? {}).filter(r => isUniqueRef(r) && !boosterFlat.includes(r))
+  const revealPacks = bonusUniques.length ? [...boosters, bonusUniques] : boosters
+
   return (
     <div className="min-h-screen flex flex-col">
       <TopNav />
+      {showReveal && hasBoosters && (
+        <PackReveal
+          packs={revealPacks}
+          hasBonus={bonusUniques.length > 0}
+          cardMap={cardMap}
+          deck={deck}
+          poolCounts={pool?.cards}
+          onAdd={addCard}
+          onRemove={removeCard}
+          onClose={dismissReveal}
+        />
+      )}
       <div className="w-full px-4 py-4 flex-1 flex flex-col">
         <div className="flex items-center gap-3 mb-3 flex-wrap">
           <h1 className="text-xl font-display">{title}</h1>
