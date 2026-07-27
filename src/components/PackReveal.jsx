@@ -35,12 +35,12 @@ export default function PackReveal({ packs, hasBonus = false, cardMap, deck, poo
 
   return (
     <div className="fixed inset-0 z-50 bg-base flex flex-col">
-      {/* Top bar: title + always-available Skip */}
+      {/* Top bar: title + always-available Skip (prominent, not a faint corner link) */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-line">
         <h2 className="text-lg font-display">Opening your pool</h2>
         <button onClick={onClose}
-          className="ml-auto text-sm px-3 py-1.5 rounded bg-surface2 hover:bg-surface3 text-ink2 transition-colors">
-          Skip ▸
+          className="ml-auto text-sm font-semibold px-4 py-2 rounded-lg border border-accent text-accent hover:bg-accent hover:text-on-accent transition-colors">
+          Skip to full pool ▸
         </button>
       </div>
 
