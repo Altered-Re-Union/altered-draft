@@ -10,6 +10,7 @@ export default function SettingsFields({
   heroCount = 3, setHeroCount, maxHeroes = 1, heroPoolSize = 0,
   timerEnabled, setTimerEnabled, timerSeconds, setTimerSeconds,
   addUniques, setAddUniques, showUniques = false,
+  excludeBanlist, setExcludeBanlist, showBanlist = false,
 }) {
   const isDraft = mode === 'draft'
   const isWinston = isDraft && draftFormat === 'winston'
@@ -117,6 +118,21 @@ export default function SettingsFields({
               Heads up: uniques are pulled live, so generating packs can take up to a minute (longer when more packs are needed).
             </p>
           )}
+        </div>
+      )}
+
+      {/* Ban list — sealed only. Opt-in; off keeps the full pool (current behavior). */}
+      {showBanlist && (
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-3">
+            <input type="checkbox" id="exclude-banlist" checked={!!excludeBanlist}
+              onChange={e => setExcludeBanlist(e.target.checked)}
+              className="accent-accent w-4 h-4" />
+            <label htmlFor="exclude-banlist" className="text-sm text-ink2 cursor-pointer">Exclude suspended cards (ban list)</label>
+          </div>
+          <p className="text-xs text-faint pl-7 leading-relaxed">
+            Removes the Equinox competitive ban list from the pool, so suspended cards never appear in your boosters. Off by default.
+          </p>
         </div>
       )}
 
