@@ -6,6 +6,19 @@ import PoolGrid, { SimpleCardGrid } from './PoolGrid.jsx'
 import TopNav from './TopNav.jsx'
 
 const SYNC_THROTTLE_MS = 2000
+const RESET_COOLDOWN_MS = 30 * 60 * 1000 // mirrors poolStore.js RESET_COOLDOWN_MS
+
+// Remaining reset cooldown from the pool's last reset time (null/absent → 0, resettable now).
+function cooldownFromResetAt(resetAt) {
+  if (!resetAt) return 0
+  return Math.max(0, new Date(resetAt).getTime() + RESET_COOLDOWN_MS - Date.now())
+}
+
+// mm:ss for the live cooldown display.
+function formatCooldown(ms) {
+  const total = Math.ceil(ms / 1000)
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`
+}
 
 /**
  * Shared full-pool view + deck editor for all three tournament sealed flows (normal,
@@ -39,6 +52,7 @@ export default function TournamentPoolView({ title, load, reset }) {
       const data = await load()
       poolRef.current = data
       setPool(data)
+      setCooldownMs(cooldownFromResetAt(data.resetAt)) // show the cooldown from the start, not just after a rejected click
       setPackIndex(0) // start on the first booster (e.g. after a reset regenerates the pool)
 
       const refs = Object.keys(data.cards)
@@ -64,6 +78,13 @@ export default function TournamentPoolView({ title, load, reset }) {
   }, [load])
 
   useEffect(() => { loadPool() }, [loadPool])
+
+  // Tick the reset cooldown down every second while it's active (self-corrects on a 429).
+  useEffect(() => {
+    if (cooldownMs <= 0) return
+    const t = setInterval(() => setCooldownMs(ms => Math.max(0, ms - 1000)), 1000)
+    return () => clearInterval(t)
+  }, [cooldownMs > 0])
 
   async function handleReset() {
     if (!reset) return
@@ -169,7 +190,7 @@ export default function TournamentPoolView({ title, load, reset }) {
   return (
     <div className="min-h-screen flex flex-col">
       <TopNav />
-      <div className="max-w-6xl w-full mx-auto px-4 py-4 flex-1 flex flex-col">
+      <div className="w-full px-4 py-4 flex-1 flex flex-col">
         <div className="flex items-center gap-3 mb-3 flex-wrap">
           <h1 className="text-xl font-display">{title}</h1>
           <span className="text-xs text-faint">
@@ -180,7 +201,7 @@ export default function TournamentPoolView({ title, load, reset }) {
           {reset && (
             <button onClick={handleReset} disabled={cooldownMs > 0}
               className="ml-auto text-xs px-3 py-1.5 rounded bg-surface2 hover:bg-surface3 disabled:opacity-40 transition-colors">
-              {cooldownMs > 0 ? `Reset available in ${Math.ceil(cooldownMs / 60000)}min` : 'Reset pool'}
+              {cooldownMs > 0 ? `Reset available in ${formatCooldown(cooldownMs)}` : 'Reset pool'}
             </button>
           )}
         </div>

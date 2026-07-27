@@ -91,6 +91,54 @@ export function canonicalCardRef(ref) {
 const LOCALE = { EN: 'en-us', FR: 'fr-fr', ES: 'es-es', DE: 'de-de', IT: 'it-it' }
 const uniqueCache = {}
 
+// Render a UNIQUE's TRUE face to an image via the <altered-card> web component (the Altered Card
+// Renderer, loaded in index.html) — it draws the correct art + the unique's OWN stats onto a
+// canvas. We snapshot that canvas to a JPEG data URL and use it as the card image. This exists
+// because the real unique faces no longer live on any host (Altered's S3 is locked) and the
+// community CDN only has the base rare (…_R1) — so without this, uniques render as their rare.
+// Returns null if the renderer isn't loaded / times out / the canvas is tainted; the caller then
+// keeps the _R1 fallback (no worse than before). Renders once per ref+locale (cached promise).
+const uniqueFaceCache = {}
+function renderUniqueFace(reference, lang = 'EN') {
+  const loc = (LOCALE[lang] ?? 'en-us').slice(0, 2)
+  const key = `${reference}_${loc}`
+  if (uniqueFaceCache[key]) return uniqueFaceCache[key]
+  const job = (async () => {
+    if (typeof document === 'undefined' || typeof window === 'undefined' || !window.customElements) return null
+    const CE = window.customElements
+    if (!CE.get('altered-card')) {
+      try { await Promise.race([CE.whenDefined('altered-card'), new Promise((_, rej) => setTimeout(rej, 6000))]) }
+      catch { return null }
+    }
+    const host = document.createElement('div')
+    host.setAttribute('aria-hidden', 'true')
+    host.style.cssText = 'position:fixed;left:-10000px;top:0;width:744px;height:1039px;opacity:0;pointer-events:none;z-index:-1'
+    const el = document.createElement('altered-card')
+    el.setAttribute('ref', reference)
+    el.setAttribute('locale', loc)
+    host.appendChild(el)
+    document.body.appendChild(host)
+    try {
+      const start = Date.now()
+      let prev = ''
+      while (Date.now() - start < 10000) {
+        await new Promise(r => setTimeout(r, 250))
+        const canvas = el.querySelector('canvas')
+        if (!canvas || !canvas.width) continue
+        let url
+        try { url = canvas.toDataURL('image/jpeg', 0.85) } catch { return null } // CORS-tainted → give up
+        if (url && url.length > 8000 && url === prev) return url // two identical reads → fully drawn
+        prev = url
+      }
+      return (prev && prev.length > 8000) ? prev : null
+    } finally {
+      try { document.body.removeChild(host) } catch { /* already detached */ }
+    }
+  })()
+  uniqueFaceCache[key] = job
+  return job
+}
+
 // Unique cards (…_U_<serial>) don't exist in the community set files. The 24 cube
 // uniques are bundled locally (data in uniquesData.js, images in /public/uniques) so
 // the cube works offline / instantly in EN. Everything else (any other unique, or a
@@ -99,28 +147,38 @@ const uniqueCache = {}
 // API. Falls back to the bundled EN snapshot if the request fails.
 export async function fetchUnique(reference, lang = 'EN') {
   const key = `${reference}_${lang}`
-  if (uniqueCache[key]) return uniqueCache[key]
   const snapshot = UNIQUES_EN[reference]
-  // EN: prefer the bundled snapshot (no network — future-proof).
+  // EN bundled: real local face (public/uniques/<ref>.jpg) — no network, no render needed.
   if (snapshot && lang === 'EN') {
     uniqueCache[key] = snapshot
     return snapshot
   }
-  const loc = (LOCALE[lang] ?? 'en-us').slice(0, 2) // 'en','fr',… for the per-locale fields
-  try {
-    // Filter by reference (the /api/cards/<id> path expects a numeric id, not a ref).
-    const res = await fetch(`https://cards.alteredcore.org/api/cards?reference=${encodeURIComponent(reference)}`, { headers: { Accept: 'application/json' } })
-    if (!res.ok) throw new Error(`Failed to fetch unique ${reference}: ${res.status}`)
-    const raw = (await res.json()).member?.[0]
-    if (!raw) throw new Error(`Unique ${reference} not found`)
-    const card = normalizeAlteredCore(raw, loc, lang)
-    uniqueCache[key] = card
-    return card
-  } catch (err) {
-    // API down / not found → fall back to the bundled EN snapshot if we have one.
-    if (snapshot) { uniqueCache[key] = snapshot; return snapshot }
-    throw err
+
+  let card = uniqueCache[key]
+  if (!card) {
+    const loc = (LOCALE[lang] ?? 'en-us').slice(0, 2) // 'en','fr',… for the per-locale fields
+    try {
+      // Filter by reference (the /api/cards/<id> path expects a numeric id, not a ref).
+      const res = await fetch(`https://cards.alteredcore.org/api/cards?reference=${encodeURIComponent(reference)}`, { headers: { Accept: 'application/json' } })
+      if (!res.ok) throw new Error(`Failed to fetch unique ${reference}: ${res.status}`)
+      const raw = (await res.json()).member?.[0]
+      if (!raw) throw new Error(`Unique ${reference} not found`)
+      card = normalizeAlteredCore(raw, loc, lang)
+      uniqueCache[key] = card
+    } catch (err) {
+      // API down / not found → fall back to the bundled EN snapshot if we have one.
+      if (snapshot) { uniqueCache[key] = snapshot; return snapshot }
+      throw err
+    }
   }
+
+  // Upgrade the image from the _R1 rare fallback to the true unique face (rendered once, cached).
+  // Any failure leaves the _R1 imagePath in place — no worse than before.
+  if (card && isUniqueRef(reference) && !card._uniqueFace) {
+    try { const face = await renderUniqueFace(reference, lang); if (face) { card.imagePath = face; card._uniqueFace = true } }
+    catch { /* keep the _R1 fallback */ }
+  }
+  return card
 }
 
 // Fetch many uniques; failures are skipped (the card simply won't appear).
