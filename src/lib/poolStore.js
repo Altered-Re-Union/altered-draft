@@ -32,6 +32,7 @@ export function buildPoolSeedString(sub, pool) {
     String(pool.unique_count),
     String(pool.even_factions),
     String(pool.heroes_in_pool),
+    String(pool.guaranteed_uniques ?? 0),
     pool.nonce,
   ]
   if (pool.tournament_seed) parts.push(pool.tournament_seed)
@@ -44,11 +45,11 @@ async function insertPool(sub, kind, format) {
     ? "ON CONFLICT (sub) WHERE kind = 'normal' DO NOTHING"
     : "ON CONFLICT (sub) WHERE kind = 'tournament' AND tournament_seed IS NULL DO NOTHING"
   const { rows } = await query(
-    `INSERT INTO sealed_pools (sub, kind, set_code, unique_count, even_factions, heroes_in_pool, nonce)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `INSERT INTO sealed_pools (sub, kind, set_code, unique_count, even_factions, heroes_in_pool, guaranteed_uniques, nonce)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      ${conflictClause}
      RETURNING *`,
-    [sub, kind, format.set_code, format.unique_count, format.even_factions, format.heroes_in_pool, nonce],
+    [sub, kind, format.set_code, format.unique_count, format.even_factions, format.heroes_in_pool, format.guaranteed_uniques ?? 0, nonce],
   )
   return rows[0] ?? null
 }
@@ -97,11 +98,12 @@ export async function resetNormalPool(sub) {
   const { rows } = await query(
     `UPDATE sealed_pools
      SET nonce = $2, set_code = $3, unique_count = $4, even_factions = $5, heroes_in_pool = $6,
+         guaranteed_uniques = $7,
          reset_at = now(), deck_id = NULL, deck_name = NULL, deck_hero_ref = NULL,
          deck_faction = NULL, deck_card_quantity = NULL
      WHERE id = $1
      RETURNING *`,
-    [pool.id, newNonce(), format.set_code, format.unique_count, format.even_factions, format.heroes_in_pool],
+    [pool.id, newNonce(), format.set_code, format.unique_count, format.even_factions, format.heroes_in_pool, format.guaranteed_uniques ?? 0],
   )
   return { pool: rows[0], previousDeckId: pool.deck_id ?? null }
 }
