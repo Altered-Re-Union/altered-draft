@@ -120,7 +120,7 @@ export default function Lobby() {
   const [deckSearch, setDeckSearch] = useState('')   // name filter for the deck picker
   const [deckFormat, setDeckFormat] = useState('all') // format filter ('all' | standard | sandbox | …)
   const [selectedDeckIds, setSelectedDeckIds] = useState([]) // decks ticked to merge into one cube
-  const [selectedSets, setSelectedSets] = useState({ CORE: 1 })
+  const [selectedSets, setSelectedSets] = useState({}) // sealed Multi-Set: start empty (host picks)
   const [multiSetMix, setMultiSetMix] = useState({ CORE: 4 }) // per-player pack counts (sum = 4) for the Multi-Set draft tab
   const [equalPacks, setEqualPacks] = useState(true) // ON = same single-set boosters for all; OFF = random bag
   // Winston pools all packs into one shared deck, so "same packs for everyone" is meaningless —
