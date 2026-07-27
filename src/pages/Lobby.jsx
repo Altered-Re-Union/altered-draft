@@ -9,6 +9,7 @@ import { generateAllPacks, generatePacksFromPool, generateChaosPacks, generateCu
 import { buildDraftState } from '../lib/draftLogic.js'
 import { parseDecklist } from '../lib/cubeParser.js'
 import { resolveCubeRefs } from '../lib/cubeResolve.js'
+import { filterBanned } from '../lib/banlist.js'
 import { listDecks, getDeck, deckCardsToRefs } from '../lib/decks.js'
 import { useAuth } from '../auth/AuthProvider.jsx'
 import SetSelector from '../components/SetSelector.jsx'
@@ -138,6 +139,7 @@ export default function Lobby() {
   const [showCustomPool, setShowCustomPool] = useState(false)
   const [customPoolText, setCustomPoolText] = useState('')
   const [addUniques, setAddUniques] = useState(false)
+  const [excludeBanlist, setExcludeBanlist] = useState(false) // sealed only: drop Equinox-suspended cards from the pool
   const [heroCount, setHeroCount] = useState(3)   // heroes per player when Heroes = Draft
   const [heroPoolSize, setHeroPoolSize] = useState(0) // # of distinct heroes available (for the max)
 
@@ -370,14 +372,15 @@ export default function Lobby() {
           const byRef = new Map(results.flat().map(c => [c.reference, c]))
           const uniqueCards = await fetchUniques(dataRefs.filter(isUniqueRef), lang)
           for (const c of uniqueCards) byRef.set(c.reference, c)
-          const pool = poolRefs.map(r => byRef.get(r)).filter(Boolean)
+          let pool = poolRefs.map(r => byRef.get(r)).filter(Boolean)
+          if (excludeBanlist) pool = filterBanned(pool)
           if (pool.length < SEALED_PACKS) {
             setStartError(`This cube is too small for sealed (need at least ${SEALED_PACKS} cards).`); setLoading(false); return
           }
           const sealedPacks = {}
           for (let i = 0; i < playerCount; i++) sealedPacks[String(i)] = generateCubeDraftPacks(pool, SEALED_PACKS)
           const state = {
-            config: { sets: apiCodes, playerCount, lang, freeHero, includeHeroes, freeHeroPool, mode: 'sealed', customCube: { name: customCube.name, cards: customCube.cards, heroes: customCube.heroes } },
+            config: { sets: apiCodes, playerCount, lang, freeHero, includeHeroes, freeHeroPool, excludeBanlist, mode: 'sealed', customCube: { name: customCube.name, cards: customCube.cards, heroes: customCube.heroes } },
             players: shuffledPlayers, phase: 'sealed', sealedPacks, version: 0,
           }
           const { error: upErr } = await updateRoom(code, state)
@@ -399,7 +402,8 @@ export default function Lobby() {
           // included so promo heroes resolve for the free-hero pool.
           const extraCards = await fetchUniques([...cube.refs, ...(cube.heroes ?? [])].filter(needsCardApi), lang)
           for (const c of extraCards) byRef.set(c.reference, c)
-          const allCards = cube.refs.map(r => byRef.get(r)).filter(Boolean)
+          let allCards = cube.refs.map(r => byRef.get(r)).filter(Boolean)
+          if (excludeBanlist) allCards = filterBanned(allCards)
           if (!allCards.length) { setStartError('Could not load cube card data.'); setLoading(false); return }
           // Hero-draft cubes keep heroes in a separate pool (not in refs). Sealed has no
           // hero-draft phase, so deal one hero into each booster's first slot instead —
@@ -416,7 +420,7 @@ export default function Lobby() {
               heroRefs)
           }
           const state = {
-            config: { sets: apiCodes, playerCount, lang, freeHero, includeHeroes, freeHeroPool, cubeId: cube.id, mode: 'sealed' },
+            config: { sets: apiCodes, playerCount, lang, freeHero, includeHeroes, freeHeroPool, excludeBanlist, cubeId: cube.id, mode: 'sealed' },
             players: shuffledPlayers, phase: 'sealed', sealedPacks, version: 0,
           }
           {
@@ -434,17 +438,22 @@ export default function Lobby() {
         const setCodes = Object.keys(mix)
         if (!setCodes.length) { setStartError('Select a set.'); setLoading(false); return }
         const fetched = await Promise.all(setCodes.map(async s => [s, await fetchSet(s, lang).catch(() => [])]))
-        const cardsBySet = Object.fromEntries(fetched)
+        const cardsBySet = Object.fromEntries(
+          excludeBanlist ? fetched.map(([s, c]) => [s, filterBanned(c)]) : fetched
+        )
         if (!Object.values(cardsBySet).some(c => c.length)) { setStartError('No cards loaded.'); setLoading(false); return }
         const apiCodes = [...new Set(setCodes.map(apiSetCode))]
         const freeHeroPool = freeHero ? uniqueHeroRefs(Object.values(cardsBySet).flat()) : []
-        const uniquesBySet = addUniques ? await getUniquePools(setCodes) : {}
+        const rawUniquesBySet = addUniques ? await getUniquePools(setCodes) : {}
+        const uniquesBySet = excludeBanlist
+          ? Object.fromEntries(Object.entries(rawUniquesBySet).map(([s, c]) => [s, filterBanned(c)]))
+          : rawUniquesBySet
         const sealedPacks = {}
         for (let i = 0; i < playerCount; i++) {
           sealedPacks[String(i)] = generateChaosPacks(cardsBySet, mix, { includeHeroes: packHeroes, uniquesBySet, randomUniqueRate: addUniques ? UNIQUE_RATE : 0 })
         }
         const state = {
-          config: { sets: apiCodes, playerCount, lang, freeHero, includeHeroes, freeHeroPool, addUniques, mode: 'sealed', packMix: mix },
+          config: { sets: apiCodes, playerCount, lang, freeHero, includeHeroes, freeHeroPool, addUniques, excludeBanlist, mode: 'sealed', packMix: mix },
           players: shuffledPlayers, phase: 'sealed', sealedPacks, version: 0,
         }
         {
@@ -1153,6 +1162,8 @@ export default function Lobby() {
                   timerSeconds={timerSeconds} setTimerSeconds={setTimerSeconds}
                   addUniques={addUniques} setAddUniques={setAddUniques}
                   showUniques={configTab !== 'cubes'}
+                  excludeBanlist={excludeBanlist} setExcludeBanlist={setExcludeBanlist}
+                  showBanlist={isSealed}
                 />
               )}
 
