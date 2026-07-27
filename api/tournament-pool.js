@@ -4,7 +4,7 @@
 // ROADMAP.md "Set 6 preview".
 import { verifySub } from './_lib/auth.js'
 import { getPoolById, updateDeckSummary } from '../src/lib/poolStore.js'
-import { regeneratePoolCounts, poolResponse } from './_lib/tournamentPool.js'
+import { regeneratePool, poolResponse } from './_lib/tournamentPool.js'
 
 export default async function handler(req, res) {
   const sub = await verifySub(req)
@@ -17,8 +17,8 @@ export default async function handler(req, res) {
   if (!pool) return res.status(404).json({ error: 'not_found' })
 
   if (req.method === 'GET') {
-    const cards = await regeneratePoolCounts(sub, pool)
-    return res.status(200).json(poolResponse(pool, cards))
+    const { counts, boosters } = await regeneratePool(sub, pool)
+    return res.status(200).json(poolResponse(pool, counts, boosters))
   }
 
   if (req.method === 'POST') {
@@ -30,8 +30,9 @@ export default async function handler(req, res) {
       faction: body.faction,
       cardQuantity: body.cardQuantity,
     })
-    const cards = await regeneratePoolCounts(sub, updated)
-    return res.status(200).json(poolResponse(updated, cards))
+    // Include boosters so the frontend's `pool` state keeps its pack view after a deck sync.
+    const { counts, boosters } = await regeneratePool(sub, updated)
+    return res.status(200).json(poolResponse(updated, counts, boosters))
   }
 
   res.setHeader('Allow', 'GET, POST')

@@ -3,7 +3,7 @@
 // cooldown between resets, enforced in poolStore.js).
 import { verifySub } from './_lib/auth.js'
 import { getOrCreateNormalPool, resetNormalPool } from '../src/lib/poolStore.js'
-import { regeneratePoolCounts, poolResponse } from './_lib/tournamentPool.js'
+import { regeneratePool, poolResponse } from './_lib/tournamentPool.js'
 
 const DECKS_API = 'https://decks.alteredcore.org/api/decks'
 
@@ -24,8 +24,8 @@ export default async function handler(req, res) {
 
   if (req.method === 'GET') {
     const pool = await getOrCreateNormalPool(sub)
-    const cards = await regeneratePoolCounts(sub, pool)
-    return res.status(200).json(poolResponse(pool, cards))
+    const { counts, boosters } = await regeneratePool(sub, pool)
+    return res.status(200).json(poolResponse(pool, counts, boosters))
   }
 
   if (req.method === 'POST') {
@@ -36,8 +36,8 @@ export default async function handler(req, res) {
     if (result.previousDeckId) {
       await deleteDeck(result.previousDeckId, req.headers.authorization)
     }
-    const cards = await regeneratePoolCounts(sub, result.pool)
-    return res.status(200).json(poolResponse(result.pool, cards))
+    const { counts, boosters } = await regeneratePool(sub, result.pool)
+    return res.status(200).json(poolResponse(result.pool, counts, boosters))
   }
 
   res.setHeader('Allow', 'GET, POST')
