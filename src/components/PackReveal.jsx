@@ -107,7 +107,7 @@ export default function PackReveal({ packs, hasBonus = false, cardMap, deck, poo
       {/* Nav: Previous · [Skip and see full pool] · Next — skip is the big, central action */}
       <div className="grid grid-cols-3 items-center gap-3 px-4 py-3 border-t border-line">
         <button onClick={() => setIndex(i => Math.max(0, i - 1))} disabled={index <= 0}
-          className="justify-self-start text-sm px-3 py-1.5 rounded bg-surface2 hover:bg-surface3 disabled:opacity-30 text-ink2 transition-colors">
+          className="justify-self-start text-sm font-semibold px-4 py-2 rounded-lg border border-accent text-accent hover:bg-accent hover:text-on-accent disabled:opacity-30 transition-colors">
           ← Previous
         </button>
         <button onClick={onClose}
@@ -116,7 +116,7 @@ export default function PackReveal({ packs, hasBonus = false, cardMap, deck, poo
         </button>
         {isLast ? <span /> : (
           <button onClick={() => setIndex(i => Math.min(total - 1, i + 1))}
-            className="justify-self-end text-sm px-4 py-1.5 rounded bg-surface2 hover:bg-surface3 text-ink2 transition-colors">
+            className="justify-self-end text-sm font-semibold px-4 py-2 rounded-lg border border-accent text-accent hover:bg-accent hover:text-on-accent transition-colors">
             Next booster →
           </button>
         )}
