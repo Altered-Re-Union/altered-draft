@@ -65,7 +65,10 @@ export default function ExportMenu({ poolRefs, deckRefs, poolDecklist, deckDeckl
     setSaved(s => ({ ...s, [kind]: undefined, [`${kind}Err`]: undefined }))
     try {
       const deckName = `${name} · ${format} ${kind} · ${ddmm()}`
-      const { id } = await createDeck({ name: deckName, deckCards: toDeckCards(refs), isDraft: kind === 'pool', format: 'sandbox' })
+      // Pools open in deckbuilder.alteredcore.org, which 401s on a PRIVATE deck when the
+      // viewer isn't logged in there → save pools PUBLIC so the "Open ↗" link just works
+      // (and is shareable). Decks stay private: they open on altered.re, which handles login.
+      const { id } = await createDeck({ name: deckName, deckCards: toDeckCards(refs), isDraft: kind === 'pool', format: 'sandbox', isPublic: kind === 'pool' })
       setSaved(s => ({ ...s, [kind]: id }))
     } catch (e) {
       setSaved(s => ({ ...s, [`${kind}Err`]: e.message }))
