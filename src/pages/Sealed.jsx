@@ -10,7 +10,6 @@ import ReunionButton from '../components/ReunionButton.jsx'
 import ThemeToggle from '../components/ThemeToggle.jsx'
 import DraftStats from '../components/DraftStats.jsx'
 import PoolGrid, { SimpleCardGrid } from '../components/PoolGrid.jsx'
-import DeckList from '../components/DeckList.jsx'
 
 export default function Sealed() {
   const { code } = useParams()
@@ -228,7 +227,7 @@ export default function Sealed() {
           </div>
           {deckTotal === 0
             ? <div className="flex-1 flex items-center justify-center text-faint text-sm">No cards in deck yet. Use + on cards to add them.</div>
-            : <div className="flex-1 overflow-y-auto" style={{ scrollbarGutter: 'stable' }}><DeckList deck={deck} cardMap={cardMap} onRemove={removeFromDeck} onAdd={addToDeck} poolCounts={poolCounts} /></div>}
+            : <div className="flex-1 overflow-hidden"><PoolGrid refs={deckRefs} cardMap={cardMap} deck={deck} poolCounts={poolCounts} onAdd={addToDeck} onRemove={removeFromDeck} loading={loading} /></div>}
         </div>
       )}
 
