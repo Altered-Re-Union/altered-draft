@@ -62,18 +62,22 @@ export async function regeneratePoolCounts(sub, poolRow) {
 /**
  * Shapes a pool row + its regenerated cards into the response the frontend consumes.
  * Pass `boosters` (from regeneratePool) to expose the pack-by-pack structure; omit it for
- * callers that only need the flat pool (deck validation / summary updates).
+ * callers that only need the flat pool (deck validation / summary updates). Pass
+ * `gamesPlayed` (from poolStore.js's countGamesPlayed) when the caller has already fetched
+ * it; omitted callers just don't get the field, no extra query forced on every response.
  */
-export function poolResponse(poolRow, cardCounts, boosters = null) {
+export function poolResponse(poolRow, cardCounts, boosters = null, gamesPlayed = null) {
   return {
     id: poolRow.id,
     kind: poolRow.kind,
     setCode: poolRow.set_code,
-    tournamentSeed: poolRow.tournament_seed,
+    tournamentId: poolRow.tournament_id,
+    tournamentName: poolRow.tournament_name,
     boundAt: poolRow.bound_at,
     resetAt: poolRow.reset_at,
     cards: cardCounts,
     ...(boosters ? { boosters } : {}),
+    ...(gamesPlayed !== null ? { gamesPlayed } : {}),
     deck: poolRow.deck_id
       ? {
           id: poolRow.deck_id,

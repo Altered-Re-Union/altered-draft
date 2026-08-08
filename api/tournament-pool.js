@@ -3,7 +3,7 @@
 // cached deck summary as the frontend's throttled decks-api sync progresses. See
 // ROADMAP.md "Set 6 preview".
 import { verifySub } from './_lib/auth.js'
-import { getPoolById, updateDeckSummary } from '../src/lib/poolStore.js'
+import { getPoolById, updateDeckSummary, countGamesPlayed } from '../src/lib/poolStore.js'
 import { regeneratePool, poolResponse } from './_lib/tournamentPool.js'
 
 export default async function handler(req, res) {
@@ -18,7 +18,8 @@ export default async function handler(req, res) {
 
   if (req.method === 'GET') {
     const { counts, boosters } = await regeneratePool(sub, pool)
-    return res.status(200).json(poolResponse(pool, counts, boosters))
+    const gamesPlayed = await countGamesPlayed(pool.id)
+    return res.status(200).json(poolResponse(pool, counts, boosters, gamesPlayed))
   }
 
   if (req.method === 'POST') {
@@ -32,7 +33,8 @@ export default async function handler(req, res) {
     })
     // Include boosters so the frontend's `pool` state keeps its pack view after a deck sync.
     const { counts, boosters } = await regeneratePool(sub, updated)
-    return res.status(200).json(poolResponse(updated, counts, boosters))
+    const gamesPlayed = await countGamesPlayed(updated.id)
+    return res.status(200).json(poolResponse(updated, counts, boosters, gamesPlayed))
   }
 
   res.setHeader('Allow', 'GET, POST')

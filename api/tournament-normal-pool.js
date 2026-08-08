@@ -2,7 +2,7 @@
 // See ROADMAP.md "Set 6 preview". GET gets-or-creates it; POST resets it (30-minute
 // cooldown between resets, enforced in poolStore.js).
 import { verifySub } from './_lib/auth.js'
-import { getOrCreateNormalPool, resetNormalPool } from '../src/lib/poolStore.js'
+import { getOrCreateNormalPool, resetNormalPool, countGamesPlayed } from '../src/lib/poolStore.js'
 import { regeneratePool, poolResponse } from './_lib/tournamentPool.js'
 
 const DECKS_API = 'https://decks.alteredcore.org/api/decks'
@@ -25,7 +25,8 @@ export default async function handler(req, res) {
   if (req.method === 'GET') {
     const pool = await getOrCreateNormalPool(sub)
     const { counts, boosters } = await regeneratePool(sub, pool)
-    return res.status(200).json(poolResponse(pool, counts, boosters))
+    const gamesPlayed = await countGamesPlayed(pool.id)
+    return res.status(200).json(poolResponse(pool, counts, boosters, gamesPlayed))
   }
 
   if (req.method === 'POST') {
@@ -37,7 +38,8 @@ export default async function handler(req, res) {
       await deleteDeck(result.previousDeckId, req.headers.authorization)
     }
     const { counts, boosters } = await regeneratePool(sub, result.pool)
-    return res.status(200).json(poolResponse(result.pool, counts, boosters))
+    const gamesPlayed = await countGamesPlayed(result.pool.id)
+    return res.status(200).json(poolResponse(result.pool, counts, boosters, gamesPlayed))
   }
 
   res.setHeader('Allow', 'GET, POST')
