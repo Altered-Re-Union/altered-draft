@@ -88,6 +88,15 @@ available, hence "bending" a single string field into an envelope:
 ```json
 { "v": 1, "kind": "deckFormat", "format": "sealed", "tableId": 123456, "tournamentSeed": "a1b2c3..." }
 ```
+**Superseded (Aug 2026):** what altered-bga-api actually has available from BGA turned out to be a
+**tournament id**, never obtainable as a "seed" in time for deck-building (see the `tournamentSeed`
+paragraph below, which already predicted this). The shipped envelope (no `kind` discriminant; see
+altered-bga-api's `README.md` "Context" and `Decklist/SealedDecklistHandler.cs`) carries `tournamentId`
++ `tournamentName` (informative) + `gameId` (feeds a games-played counter) instead of `tournamentSeed`.
+`sealed_pools.tournament_seed` was renamed to `tournament_id` accordingly (`sealed-pools-schema.sql`);
+every other reference to `tournamentSeed` below is the original (superseded) design record, kept as-is
+for history rather than rewritten throughout.
+
 base64-encoded in the `format` string. `tournamentSeed` absent = not a tournament game (no separate
 boolean needed). `tableId` isn't just for logging — it's the actual mechanism for the **separate
 casual-mode pool rotation** below: every distinct `tableId` seen for a player, in NON-tournament games,

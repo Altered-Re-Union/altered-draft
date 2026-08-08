@@ -7,7 +7,7 @@
 --
 -- Card pools are never stored: a pool's contents are always the deterministic output of
 -- generateTournamentSealedPool() fed by the columns below (set_code, unique_count,
--- even_factions, heroes_in_pool, guaranteed_uniques, nonce, and tournament_seed once
+-- even_factions, heroes_in_pool, guaranteed_uniques, nonce, and tournament_id once
 -- bound) — see src/lib/poolStore.js's buildPoolSeedString(). Only enough state to
 -- reproduce and to lazily bind a pool is kept here.
 
@@ -34,7 +34,7 @@ create table if not exists sealed_pools (
   kind text not null check (kind in ('normal', 'tournament')),
 
   -- Snapshotted from current_format at creation time (see comment above) — these, plus
-  -- nonce (and tournament_seed once bound), are the only inputs the pool-composition
+  -- nonce (and tournament_id once bound), are the only inputs the pool-composition
   -- engine needs; the actual card list is never persisted.
   set_code text not null,
   unique_count int not null default 0,
@@ -43,9 +43,12 @@ create table if not exists sealed_pools (
   guaranteed_uniques int not null default 0,
   nonce text not null,
 
-  -- 'tournament' rows start with tournament_seed = null (pending / in preparation) and
-  -- get it set exactly once, on first bind — never updated again after that.
-  tournament_seed text,
+  -- 'tournament' rows start with tournament_id = null (pending / in preparation) and get
+  -- it set exactly once, on first bind — never updated again after that. tournament_name
+  -- is purely informative (shown on "modifier mes decks sur les tournois en cours") and
+  -- can be refreshed on every bind call, unlike tournament_id.
+  tournament_id text,
+  tournament_name text,
   bound_at timestamptz,
 
   -- 'normal' rows only: last time the reset button was used, for the 30-minute cooldown.
@@ -65,6 +68,24 @@ create table if not exists sealed_pools (
 -- Existing databases: add the column in place (snapshotted per pool at creation time).
 alter table sealed_pools add column if not exists guaranteed_uniques int not null default 0;
 
+-- Existing databases (created before this rename): tournament_seed -> tournament_id, since
+-- what altered-bga-api actually has available from BGA is a tournament id, never the "seed"
+-- the original design assumed (see ROADMAP.md "Set 6 preview"). Postgres has no `RENAME
+-- COLUMN IF EXISTS`, so this is guarded explicitly; a no-op on fresh databases (created
+-- directly with tournament_id above) and on databases already migrated.
+do $$
+begin
+  if exists (select 1 from information_schema.columns
+             where table_name = 'sealed_pools' and column_name = 'tournament_seed')
+     and not exists (select 1 from information_schema.columns
+                      where table_name = 'sealed_pools' and column_name = 'tournament_id')
+  then
+    alter table sealed_pools rename column tournament_seed to tournament_id;
+  end if;
+end $$;
+-- Existing databases: add the column in place (informative only, see table comment above).
+alter table sealed_pools add column if not exists tournament_name text;
+
 -- At most one 'normal' pool per player at a time (reset updates it in place, it's never
 -- replaced by a new row).
 create unique index if not exists sealed_pools_one_normal_per_sub
@@ -73,22 +94,44 @@ create unique index if not exists sealed_pools_one_normal_per_sub
 -- At most one PENDING (not yet bound) 'tournament' pool per player at a time — this is
 -- the actual one-shot-commitment lock: a new preparation pool can't be inserted while one
 -- is still pending, and becomes insertable again the moment the pending one is bound
--- (tournament_seed set), since it then falls outside this partial index.
-create unique index if not exists sealed_pools_one_pending_tournament_per_sub
-  on sealed_pools (sub) where kind = 'tournament' and tournament_seed is null;
+-- (tournament_id set), since it then falls outside this partial index.
+--
+-- Dropped and recreated unconditionally (rather than `if not exists` alone) because the
+-- rename above changes which column the two indexes below are defined over -- on a
+-- database migrating from tournament_seed, `if not exists` would otherwise silently keep
+-- the old (now-dangling) column reference forever. Cheap and correct on every run either
+-- way, migrated or fresh.
+drop index if exists sealed_pools_one_pending_tournament_per_sub;
+create unique index sealed_pools_one_pending_tournament_per_sub
+  on sealed_pools (sub) where kind = 'tournament' and tournament_id is null;
 
 -- Every bound tournament pool for a player, most recent first — used by "modifier mes
 -- decks sur les tournois en cours" (button 3) and by binding lookups.
-create index if not exists sealed_pools_bound_tournaments
-  on sealed_pools (sub, bound_at desc) where kind = 'tournament' and tournament_seed is not null;
+drop index if exists sealed_pools_bound_tournaments;
+create index sealed_pools_bound_tournaments
+  on sealed_pools (sub, bound_at desc) where kind = 'tournament' and tournament_id is not null;
 
--- Binding lookup: is THIS PLAYER already bound to a given tournament_seed? Note this is
--- (sub, tournament_seed), NOT tournament_seed alone -- the same tournament_seed is
--- shared by every player in that tournament (that's the whole point: hash(sub +
--- tournament_seed + ...) gives each player a different pool while all sharing one
--- tournament identity), so many different players legitimately bind to the same seed.
-create unique index if not exists sealed_pools_one_binding_per_sub_per_seed
-  on sealed_pools (sub, tournament_seed) where tournament_seed is not null;
+-- Binding lookup: is THIS PLAYER already bound to a given tournament_id? Note this is
+-- (sub, tournament_id), NOT tournament_id alone -- the same tournament_id is shared by
+-- every player in that tournament (that's the whole point: hash(sub + tournament_id + ...)
+-- gives each player a different pool while all sharing one tournament identity), so many
+-- different players legitimately bind to the same tournament_id. Renamed from
+-- sealed_pools_one_binding_per_sub_per_seed.
+drop index if exists sealed_pools_one_binding_per_sub_per_seed;
+create unique index if not exists sealed_pools_one_binding_per_sub_per_tournament
+  on sealed_pools (sub, tournament_id) where tournament_id is not null;
+
+-- Distinct BGA games played against a pool (any kind, normal or tournament) -- lets
+-- altered-bga-api's `gameId` on the sealed decklist call feed a "games played with this
+-- deck" counter without recording a play more than once for the same game (a BGA table
+-- reloading the deck-list screen re-triggers the same call repeatedly). The composite
+-- primary key is the dedup: see recordGamePlayed()/countGamesPlayed() in poolStore.js.
+create table if not exists sealed_pool_games (
+  pool_id uuid not null references sealed_pools(id) on delete cascade,
+  game_id text not null,
+  created_at timestamptz not null default now(),
+  primary key (pool_id, game_id)
+);
 
 -- Seeds the initial active competitive format (set 6 / EOLE sealed): 1 unique INSIDE the
 -- boosters (replacing a rare) + 1 guaranteed unique appended OUTSIDE them, factions left

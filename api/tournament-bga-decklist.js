@@ -4,15 +4,22 @@
 // shape altered-core-decks-api's BgaDeckController::collection() normally returns, so
 // altered-bga-api can relay it to BGA verbatim.
 //
-// `tournamentSeed` absent -> normal (casual) mode: the player's single normal pool.
-// `tournamentSeed` present -> lazily binds it to the player's pending preparation pool
-// (idempotent — every game inside the same tournament re-triggers this and gets the
-// same binding back) and returns THAT pool's deck.
+// `tournamentId` absent -> normal (casual) mode: the player's single normal pool.
+// `tournamentId` present -> lazily binds it (+ `tournamentName`, informative only) to the
+// player's pending preparation pool (idempotent — every game inside the same tournament
+// re-triggers this and gets the same binding back) and returns THAT pool's deck.
+// `gameId`, when present, records one play of this pool for the "games played with this
+// deck" counter (see poolStore.js's recordGamePlayed/countGamesPlayed) -- a side effect
+// only, it never changes this response's shape.
 //
 // Auth: altered-bga-api forwards whatever Authorization header BGA itself sent, same
 // bearer-token verification as every other endpoint here.
 import { verifySub } from './_lib/auth.js'
-import { getOrCreateNormalPool, bindTournamentSeed } from '../src/lib/poolStore.js'
+import { getOrCreateNormalPool, bindTournamentId, recordGamePlayed } from '../src/lib/poolStore.js'
+
+function queryParam(req, name) {
+  return (req.query?.[name] ?? new URL(req.url, 'http://x').searchParams.get(name) ?? '').trim()
+}
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -23,11 +30,17 @@ export default async function handler(req, res) {
   const sub = await verifySub(req)
   if (!sub) return res.status(401).json({ error: 'unauthorized' })
 
-  const tournamentSeed = (req.query?.tournamentSeed ?? new URL(req.url, 'http://x').searchParams.get('tournamentSeed') ?? '').trim()
+  const tournamentId = queryParam(req, 'tournamentId')
+  const tournamentName = queryParam(req, 'tournamentName')
+  const gameId = queryParam(req, 'gameId')
 
-  const pool = tournamentSeed
-    ? await bindTournamentSeed(sub, tournamentSeed)
+  const pool = tournamentId
+    ? await bindTournamentId(sub, tournamentId, tournamentName || null)
     : await getOrCreateNormalPool(sub)
+
+  if (gameId) {
+    await recordGamePlayed(pool.id, gameId)
+  }
 
   const member = pool.deck_id
     ? [{
