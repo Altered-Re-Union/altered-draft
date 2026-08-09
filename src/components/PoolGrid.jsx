@@ -4,6 +4,7 @@ import {
   SET_ABBREV, SET_ABBREV_ICON_CODE,
 } from '../lib/cardData.js'
 import { FACTION_ICONS, RARITY_GEMS, SET_ICONS, setCodeFromRef } from '../lib/assets.js'
+import { useCardZoom } from './CardZoom.jsx'
 
 const TYPE_LABEL = {
   HERO: 'Hero', CHARACTER: 'Character', SPELL: 'Spell',
@@ -221,6 +222,7 @@ function dedupeRefs(refs) {
 
 /** One compact line: cost + name (+ deck +/- when wired). Used by the List view. */
 function CompactRow({ ref_, occurrences, card, deck, poolCounts, onAdd, onRemove }) {
+  const zoom = useCardZoom()
   const poolQty = poolCounts ? (poolCounts[ref_] ?? occurrences) : occurrences
   const inDeck = deck?.[ref_] ?? 0
   const canAdd = inDeck < poolQty
@@ -231,7 +233,11 @@ function CompactRow({ ref_, occurrences, card, deck, poolCounts, onAdd, onRemove
   return (
     <div className="flex items-center gap-2 px-1.5 py-0.5 rounded hover:bg-surface2 text-sm">
       <span className="w-5 shrink-0 text-center text-xs font-bold text-ink2 tabular-nums">{cost}</span>
-      <span className="flex-1 truncate text-ink2" title={card?.name}>{card?.name ?? ref_}</span>
+      {/* Tap the name to see the card full screen (no art in this compact view). */}
+      <button onClick={() => zoom.open(card)}
+        className="flex-1 min-w-0 truncate text-left text-ink2 hover:text-ink transition-colors" title={card?.name}>
+        {card?.name ?? ref_}
+      </button>
       {onAdd && onRemove ? (
         <span className="flex items-center gap-1 shrink-0">
           <button onClick={() => onRemove(ref_)} disabled={!canRemove}
@@ -272,6 +278,7 @@ function CardGridInner({ refs, cardMap, loading, deck, poolCounts, onAdd, onRemo
 
 function PoolCard({ ref_, occurrences, card, loading, deck, poolCounts, onAdd, onRemove }) {
   const { ref, origin, onMouseEnter } = useZoomOrigin()
+  const zoom = useCardZoom()
   const poolQty = poolCounts ? (poolCounts[ref_] ?? occurrences) : occurrences
   const inDeck = deck?.[ref_] ?? 0
   const canAdd = inDeck < poolQty
@@ -280,7 +287,7 @@ function PoolCard({ ref_, occurrences, card, loading, deck, poolCounts, onAdd, o
 
   return (
     <div className="relative flex flex-col rounded-lg border border-line bg-surface">
-      <div ref={ref} onMouseEnter={onMouseEnter} style={{ transformOrigin: origin }}
+      <div ref={ref} onMouseEnter={onMouseEnter} onClick={() => zoom.open(card)} style={{ transformOrigin: origin }}
         className="aspect-[2/3] bg-surface2 overflow-hidden rounded-t-lg relative cursor-zoom-in
         transition-transform duration-150 ease-out hover:scale-[1.6] hover:z-30 hover:shadow-xl hover:shadow-black/70">
         {card?.imagePath ? (
