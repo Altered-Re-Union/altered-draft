@@ -43,13 +43,13 @@ export async function getDeck(id) {
 // Create one deck. Returns the API payload ({ id, ... }). Defaults to the API's
 // permissive `sandbox` format (valid enum: standard|nuc|singleton|singleton_nuc|sandbox)
 // so drafted/opened cards aren't rejected for collection/legality.
-export async function createDeck({ name, deckCards, isDraft = false, format = 'sandbox' }) {
+export async function createDeck({ name, deckCards, isDraft = false, format = 'sandbox', isPublic = false }) {
   if (!deckCards?.length) throw new Error('Nothing to save. The card list is empty.')
   const res = await fetch('/api/decks', {
     method: 'POST',
     headers: { ...(await authHeaders()), 'Content-Type': 'application/json' },
     // name max length is 150 per the API schema; trim to stay within it.
-    body: JSON.stringify({ name: String(name ?? '').slice(0, 150), format, isPublic: false, isDraft, deckCards }),
+    body: JSON.stringify({ name: String(name ?? '').slice(0, 150), format, isPublic, isDraft, deckCards }),
   })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
