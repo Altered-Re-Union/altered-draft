@@ -271,7 +271,9 @@ export default function Lobby() {
   // instead of starting a fresh request). Cached by set-codes + language.
   const uniquePoolsRef = useRef({ key: null, promise: null })
   async function fetchUniquePools(setCodes) {
-    const entries = await Promise.all(setCodes.map(async s => [s, await fetchRandomUniques(s, 40, lang)]))
+    // Fetch a generous random sample per set: the query costs ~the same at any size, and a
+    // bigger sample means more variety (and headroom well beyond the ≤7 uniques a pool needs).
+    const entries = await Promise.all(setCodes.map(async s => [s, await fetchRandomUniques(s, 200, lang)]))
     return Object.fromEntries(entries)
   }
   // Returns the prefetched pool when the set selection hasn't changed; otherwise kicks off
