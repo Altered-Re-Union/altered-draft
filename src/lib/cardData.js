@@ -203,7 +203,14 @@ export async function fetchRandomUniques(setCode, count = 50, lang = 'EN') {
     const res = await fetch(url, { headers: { Accept: 'application/json' } })
     if (!res.ok) throw new Error(`uniques ${setCode}: ${res.status}`)
     const members = (await res.json()).member ?? []
-    const cards = members.map(m => normalizeAlteredCore(m, loc, lang)).filter(c => c.reference)
+    // Dedupe by reference — the random=1 query can return the same serial more than once,
+    // which would otherwise shrink the effective pool and make repeats likelier.
+    const byRef = new Map()
+    for (const m of members) {
+      const c = normalizeAlteredCore(m, loc, lang)
+      if (c.reference && !byRef.has(c.reference)) byRef.set(c.reference, c)
+    }
+    const cards = [...byRef.values()]
     for (const c of cards) uniqueCache[`${c.reference}_${lang}`] = c // warm the by-ref cache
     return cards
   } catch { return [] }
