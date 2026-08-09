@@ -61,6 +61,7 @@ export function useZoomOrigin(scale = HOVER_SCALE) {
 export default function PoolGrid({ refs, cardMap, deck, poolCounts, onAdd, onRemove, loading }) {
   const [filterFaction, setFilterFaction] = useState('ALL')
   const [sortBy, setSortBy] = useState('faction')
+  const [viewMode, setViewMode] = useState('cards') // 'cards' (art grid) | 'list' (compact columns)
 
   const visibleRefs = filterFaction === 'ALL'
     ? refs
@@ -162,21 +163,86 @@ export default function PoolGrid({ refs, cardMap, deck, poolCounts, onAdd, onRem
             {s}
           </button>
         ))}
-      </div>
-
-      {/* Grouped grid — generous padding + stable gutter so zoom never reflows the page */}
-      <div className="overflow-y-auto flex-1 px-8 pt-8 pb-40 space-y-6" style={{ scrollbarGutter: 'stable' }}>
-        {groups.map(group => (
-          <div key={group.key}>
-            <div className={`inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded border mb-2 ${group.colorCls}`}>
-              {group.icon && <img src={group.icon} alt="" className="w-3.5 h-3.5 object-contain" onError={e => { e.currentTarget.style.display = 'none' }} />}
-              {group.label} <span className="font-bold">({group.refs.length})</span>
-            </div>
-            <CardGridInner refs={group.refs} cardMap={cardMap} loading={loading}
-              deck={deck} poolCounts={poolCounts} onAdd={onAdd} onRemove={onRemove} />
-          </div>
+        <span className="text-xs text-faint ml-2 hidden sm:inline">View:</span>
+        {[['cards', 'Cards'], ['list', 'List']].map(([v, label]) => (
+          <button key={v} onClick={() => setViewMode(v)}
+            className={`px-2.5 py-1 rounded text-xs transition-colors ${viewMode === v ? 'bg-accent text-on-accent font-bold' : 'bg-surface2 text-muted hover:text-ink'}`}>
+            {label}
+          </button>
         ))}
       </div>
+
+      {/* Card grid — generous padding + stable gutter so zoom never reflows the page */}
+      {viewMode === 'cards' ? (
+        <div className="overflow-y-auto flex-1 px-8 pt-8 pb-40 space-y-6" style={{ scrollbarGutter: 'stable' }}>
+          {groups.map(group => (
+            <div key={group.key}>
+              <div className={`inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded border mb-2 ${group.colorCls}`}>
+                {group.icon && <img src={group.icon} alt="" className="w-3.5 h-3.5 object-contain" onError={e => { e.currentTarget.style.display = 'none' }} />}
+                {group.label} <span className="font-bold">({group.refs.length})</span>
+              </div>
+              <CardGridInner refs={group.refs} cardMap={cardMap} loading={loading}
+                deck={deck} poolCounts={poolCounts} onAdd={onAdd} onRemove={onRemove} />
+            </div>
+          ))}
+        </div>
+      ) : (
+        /* Compact columns — each group is a vertical stack of cost + name rows, so the whole
+           pool/deck fits on one screen with little scrolling (requested by TOs for overview). */
+        <div className="overflow-auto flex-1 p-4" style={{ scrollbarGutter: 'stable' }}>
+          <div className="flex flex-wrap gap-x-6 gap-y-4 items-start">
+            {groups.map(group => (
+              <div key={group.key} className="min-w-[210px] flex-1">
+                <div className={`inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded border mb-1.5 ${group.colorCls}`}>
+                  {group.icon && <img src={group.icon} alt="" className="w-3.5 h-3.5 object-contain" onError={e => { e.currentTarget.style.display = 'none' }} />}
+                  {group.label} <span className="font-bold">({group.refs.length})</span>
+                </div>
+                <div>
+                  {dedupeRefs(group.refs).map(([ref, occ]) => (
+                    <CompactRow key={ref} ref_={ref} occurrences={occ} card={cardMap[ref]}
+                      deck={deck} poolCounts={poolCounts} onAdd={onAdd} onRemove={onRemove} />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Collapse a ref list (with duplicates) into [ref, count] pairs, order preserved. */
+function dedupeRefs(refs) {
+  const seen = new Map()
+  for (const r of refs) seen.set(r, (seen.get(r) ?? 0) + 1)
+  return [...seen.entries()]
+}
+
+/** One compact line: cost + name (+ deck +/- when wired). Used by the List view. */
+function CompactRow({ ref_, occurrences, card, deck, poolCounts, onAdd, onRemove }) {
+  const poolQty = poolCounts ? (poolCounts[ref_] ?? occurrences) : occurrences
+  const inDeck = deck?.[ref_] ?? 0
+  const canAdd = inDeck < poolQty
+  const canRemove = inDeck > 0
+  const isHero = card?.cardType === 'HERO'
+  const cost = isHero ? '' : (card?.mainCost != null ? card.mainCost : '—')
+
+  return (
+    <div className="flex items-center gap-2 px-1.5 py-0.5 rounded hover:bg-surface2 text-sm">
+      <span className="w-5 shrink-0 text-center text-xs font-bold text-ink2 tabular-nums">{cost}</span>
+      <span className="flex-1 truncate text-ink2" title={card?.name}>{card?.name ?? ref_}</span>
+      {onAdd && onRemove ? (
+        <span className="flex items-center gap-1 shrink-0">
+          <button onClick={() => onRemove(ref_)} disabled={!canRemove}
+            className="w-5 h-5 rounded bg-surface2 hover:bg-red-800 disabled:opacity-25 text-white font-bold flex items-center justify-center text-xs leading-none transition-colors">−</button>
+          <span className={`w-4 text-center text-xs font-bold ${inDeck > 0 ? 'text-accent' : 'text-faint'}`}>{inDeck}</span>
+          <button onClick={() => onAdd(ref_)} disabled={!canAdd}
+            className="w-5 h-5 rounded bg-surface2 hover:bg-green-800 disabled:opacity-25 text-white font-bold flex items-center justify-center text-xs leading-none transition-colors">+</button>
+        </span>
+      ) : (
+        occurrences > 1 && <span className="shrink-0 text-xs text-faint">×{occurrences}</span>
+      )}
     </div>
   )
 }
