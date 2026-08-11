@@ -4,11 +4,13 @@ import { getRoom, insertRoom, updateRoom } from '../lib/roomStore.js'
 import { generateRoomCode } from '../lib/roomCode.js'
 import { useAuth } from '../auth/AuthProvider.jsx'
 import { fetchBoundPools } from '../lib/tournamentApi.js'
+import { useLang } from '../lib/i18n/i18n.jsx'
 import TopNav from '../components/TopNav.jsx'
 
 export default function Home() {
   const navigate = useNavigate()
   const { user, login } = useAuth()
+  const { t } = useLang()
   const params = new URLSearchParams(window.location.search)
   const prefillCode = params.get('join') ?? ''
 
@@ -37,7 +39,7 @@ export default function Home() {
 
   async function handleCreate(e) {
     e.preventDefault()
-    if (!createName.trim()) { setError('Enter your display name'); return }
+    if (!createName.trim()) { setError(t('home.errorEnterName')); return }
     setLoading(true)
     setError('')
 
@@ -59,7 +61,7 @@ export default function Home() {
     const { error: dbErr } = await insertRoom(code, initialState)
 
     if (dbErr) {
-      setError('Could not create room. Please try again.')
+      setError(t('home.errorCreateFailed'))
       setLoading(false)
       return
     }
@@ -71,21 +73,21 @@ export default function Home() {
   async function handleJoin(e) {
     e.preventDefault()
     const code = joinCode.trim().toUpperCase()
-    if (!code || code.length < 3) { setError('Enter a valid room code'); return }
-    if (!joinName.trim()) { setError('Enter your display name'); return }
+    if (!code || code.length < 3) { setError(t('home.errorEnterCode')); return }
+    if (!joinName.trim()) { setError(t('home.errorEnterName')); return }
     setLoading(true)
     setError('')
 
     const { data, error: dbErr } = await getRoom(code)
 
     if (dbErr || !data) {
-      setError('Room not found. Check the code and try again.')
+      setError(t('home.errorRoomNotFound'))
       setLoading(false)
       return
     }
 
     if (data.state.phase !== 'lobby') {
-      setError('This draft has already started.')
+      setError(t('home.errorAlreadyStarted'))
       setLoading(false)
       return
     }
@@ -98,7 +100,7 @@ export default function Home() {
     const { error: updateErr } = await updateRoom(code, newState)
 
     if (updateErr) {
-      setError('Could not join room. Please try again.')
+      setError(t('home.errorJoinFailed'))
       setLoading(false)
       return
     }
@@ -117,29 +119,28 @@ export default function Home() {
             <span className="text-accent">Altered</span> Draft
           </h1>
           <p className="text-muted text-sm">
-            Multiplayer booster draft simulator for the Altered TCG.
-            Open a room, share the code, draft together in real time.
+            {t('home.tagline')}
           </p>
         </div>
 
         <div className="space-y-2 mb-6">
           <button onClick={() => user ? navigate('/tournament/normal') : login('/tournament/normal')}
             className="w-full bg-surface2 hover:bg-surface3 text-ink font-semibold py-3 rounded-lg transition-colors text-left px-4">
-            Jouer sur BGA en scellé (mode normal)
+            {t('home.bgaNormal')}
           </button>
           <button onClick={() => user ? navigate('/tournament/prep') : login('/tournament/prep')}
             className="w-full bg-surface2 hover:bg-surface3 text-ink font-semibold py-3 rounded-lg transition-colors text-left px-4">
-            Préparer mon prochain tournoi en scellé sur BGA
+            {t('home.bgaPrep')}
           </button>
           {user && hasBoundTournaments && (
             <button onClick={() => navigate('/tournament/pools')}
               className="w-full bg-surface2 hover:bg-surface3 text-ink font-semibold py-3 rounded-lg transition-colors text-left px-4">
-              Modifier mes decks sur les tournois en cours
+              {t('home.bgaEditDecks')}
             </button>
           )}
           {!user && (
             <p className="text-xs text-faint text-center pt-1">
-              Connexion Re:Union requise pour accéder aux scellés BGA.
+              {t('home.bgaConnectRequired')}
             </p>
           )}
           <div className="border-t border-line my-4" />
@@ -149,32 +150,32 @@ export default function Home() {
           <div className="flex gap-4">
             <button onClick={() => setMode('create')}
               className="flex-1 bg-accent hover:bg-accent2 text-on-accent font-semibold py-3 rounded-lg transition-colors">
-              Create a room
+              {t('home.createRoom')}
             </button>
             <button onClick={() => setMode('join')}
               className="flex-1 bg-surface2 hover:bg-surface3 text-ink font-semibold py-3 rounded-lg transition-colors">
-              Join a room
+              {t('home.joinRoom')}
             </button>
           </div>
         )}
 
         {mode === 'create' && (
           <form onSubmit={handleCreate} className="bg-surface rounded-xl p-6 space-y-4">
-            <h2 className="font-semibold text-lg">Create a draft room</h2>
+            <h2 className="font-semibold text-lg">{t('home.createRoomTitle')}</h2>
             <div>
-              <label className="block text-sm text-muted mb-1">Your display name</label>
+              <label className="block text-sm text-muted mb-1">{t('home.displayNameLabel')}</label>
               <input value={createName} onChange={e => setCreateName(e.target.value)}
-                placeholder="e.g. Alice"
+                placeholder={t('home.displayNamePlaceholderAlice')}
                 className="w-full bg-surface2 border border-line rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent"
                 autoFocus />
             </div>
             {error && <p className="text-red-400 text-sm">{error}</p>}
             <div className="flex gap-3">
               <button type="button" onClick={() => { setMode(null); setError('') }}
-                className="flex-1 py-2 rounded-lg bg-surface2 hover:bg-surface3 text-sm transition-colors">Back</button>
+                className="flex-1 py-2 rounded-lg bg-surface2 hover:bg-surface3 text-sm transition-colors">{t('home.back')}</button>
               <button type="submit" disabled={loading}
                 className="flex-1 py-2 rounded-lg bg-accent hover:bg-accent2 text-on-accent font-semibold text-sm transition-colors disabled:opacity-50">
-                {loading ? 'Creating…' : 'Create room'}
+                {loading ? t('home.creating') : t('home.createRoomBtn')}
               </button>
             </div>
           </form>
@@ -182,27 +183,27 @@ export default function Home() {
 
         {mode === 'join' && (
           <form onSubmit={handleJoin} className="bg-surface rounded-xl p-6 space-y-4">
-            <h2 className="font-semibold text-lg">Join a draft room</h2>
+            <h2 className="font-semibold text-lg">{t('home.joinRoomTitle')}</h2>
             <div>
-              <label className="block text-sm text-muted mb-1">Room code</label>
+              <label className="block text-sm text-muted mb-1">{t('home.roomCodeLabel')}</label>
               <input value={joinCode} onChange={e => setJoinCode(e.target.value.toUpperCase())}
-                placeholder="e.g. XKQZ" maxLength={6}
+                placeholder={t('home.roomCodePlaceholder')} maxLength={6}
                 className="w-full bg-surface2 border border-line rounded-lg px-3 py-2 text-sm font-mono tracking-widest uppercase focus:outline-none focus:border-accent"
                 autoFocus />
             </div>
             <div>
-              <label className="block text-sm text-muted mb-1">Your display name</label>
+              <label className="block text-sm text-muted mb-1">{t('home.displayNameLabel')}</label>
               <input value={joinName} onChange={e => setJoinName(e.target.value)}
-                placeholder="e.g. Bob"
+                placeholder={t('home.displayNamePlaceholderBob')}
                 className="w-full bg-surface2 border border-line rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent" />
             </div>
             {error && <p className="text-red-400 text-sm">{error}</p>}
             <div className="flex gap-3">
               <button type="button" onClick={() => { setMode(null); setError('') }}
-                className="flex-1 py-2 rounded-lg bg-surface2 hover:bg-surface3 text-sm transition-colors">Back</button>
+                className="flex-1 py-2 rounded-lg bg-surface2 hover:bg-surface3 text-sm transition-colors">{t('home.back')}</button>
               <button type="submit" disabled={loading}
                 className="flex-1 py-2 rounded-lg bg-accent hover:bg-accent2 text-on-accent font-semibold text-sm transition-colors disabled:opacity-50">
-                {loading ? 'Joining…' : 'Join room'}
+                {loading ? t('home.joining') : t('home.joinRoomBtn')}
               </button>
             </div>
           </form>

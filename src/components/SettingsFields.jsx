@@ -1,3 +1,5 @@
+import { useLang } from '../lib/i18n/i18n.jsx'
+
 const LANGS = ['EN', 'FR', 'ES', 'DE', 'IT']
 
 // Step 3 of the lobby wizard: the final knobs, mode-aware. Pure/presentational — the host's
@@ -12,28 +14,29 @@ export default function SettingsFields({
   addUniques, setAddUniques, showUniques = false,
   excludeBanlist, setExcludeBanlist, showBanlist = false,
 }) {
+  const { t } = useLang()
   const isDraft = mode === 'draft'
   const isWinston = isDraft && draftFormat === 'winston'
 
   // Booster interleaves a hero pass between card rounds; the other formats draft heroes first.
   const draftOpt = {
     v: 'draft',
-    label: 'Draft',
+    label: t('settingsFields.draftLabel'),
     desc: draftFormat === 'booster'
-      ? 'Every hero in your set or cube goes into one shared pool; snake-draft them one each between card rounds, until everyone has the number set below.'
-      : 'Every hero in your set or cube goes into one shared pool; snake-draft them at the very start, before the cards.',
+      ? t('settingsFields.draftDescBooster')
+      : t('settingsFields.draftDescOther'),
   }
 
   const heroOptions = isWinston
     ? [
-        { v: 'packs', label: 'Shuffle into the pool', desc: 'Heroes become normal cards in the draft pool, taken via take/decline like everything else.' },
-        { v: 'free', label: 'Free pick from all', desc: 'Every hero is available to both players; pick one at deckbuild. None appear in the pool.' },
-        { v: 'split', label: 'Random split (one per faction)', desc: 'Each player is dealt their own heroes, one of each faction, to choose from at deckbuild. Best when there are two heroes per faction (e.g. the all-sets cube).' },
+        { v: 'packs', label: t('settingsFields.shuffleIntoPool'), desc: t('settingsFields.shuffleIntoPoolDesc') },
+        { v: 'free', label: t('settingsFields.freePickFromAll'), desc: t('settingsFields.freePickFromAllDesc') },
+        { v: 'split', label: t('settingsFields.randomSplit'), desc: t('settingsFields.randomSplitDesc') },
         draftOpt,
       ]
     : [
-        { v: 'packs', label: 'In packs', desc: 'Hero cards appear in boosters. Draft or open them.' },
-        { v: 'free', label: 'Free choice', desc: 'Every available hero is added to your pool. Pick one at deckbuild; none appear in packs.' },
+        { v: 'packs', label: t('settingsFields.inPacks'), desc: t('settingsFields.inPacksDesc') },
+        { v: 'free', label: t('settingsFields.freeChoice'), desc: t('settingsFields.freeChoiceDesc') },
         ...(isDraft ? [draftOpt] : []),
       ]
 
@@ -41,7 +44,7 @@ export default function SettingsFields({
     <div className="space-y-6">
       {/* Card language */}
       <div>
-        <label className="block text-sm text-muted mb-2">Card language</label>
+        <label className="block text-sm text-muted mb-2">{t('settingsFields.cardLanguage')}</label>
         <div className="flex gap-2 flex-wrap">
           {LANGS.map(l => (
             <button key={l} onClick={() => setLang(l)}
@@ -56,7 +59,7 @@ export default function SettingsFields({
 
       {/* Heroes */}
       <div>
-        <label className="block text-sm text-ink2 mb-2">Heroes</label>
+        <label className="block text-sm text-ink2 mb-2">{t('settingsFields.heroesLabel')}</label>
         <div className="space-y-1.5">
           {heroOptions.map(o => {
             const active = heroMode === o.v
@@ -81,7 +84,7 @@ export default function SettingsFields({
         {isDraft && heroMode === 'draft' && (
           <div className="mt-2 pl-3 space-y-1">
             <div className="flex items-center gap-3">
-              <span className="text-sm text-ink2">Heroes per player:</span>
+              <span className="text-sm text-ink2">{t('settingsFields.heroesPerPlayer')}</span>
               {heroPoolSize > 0 ? (
                 <div className="flex items-center gap-1.5">
                   <button type="button" onClick={() => setHeroCount(Math.max(1, heroCount - 1))} disabled={heroCount <= 1}
@@ -91,11 +94,11 @@ export default function SettingsFields({
                     className="w-7 h-7 rounded bg-surface2 hover:bg-surface3 disabled:opacity-30 text-ink2 font-bold flex items-center justify-center leading-none">+</button>
                 </div>
               ) : (
-                <span className="text-xs text-faint">counting the pool…</span>
+                <span className="text-xs text-faint">{t('settingsFields.countingThePool')}</span>
               )}
             </div>
             {heroPoolSize > 0 && (
-              <p className="text-xs text-faint">All {heroPoolSize} heroes available go into the shared pool; each player drafts 1 to {maxHeroes}.</p>
+              <p className="text-xs text-faint">{t('settingsFields.allHeroesHint', { n: heroPoolSize, max: maxHeroes })}</p>
             )}
           </div>
         )}
@@ -108,14 +111,14 @@ export default function SettingsFields({
             <input type="checkbox" id="add-uniques" checked={!!addUniques}
               onChange={e => setAddUniques(e.target.checked)}
               className="accent-accent w-4 h-4" />
-            <label htmlFor="add-uniques" className="text-sm text-ink2 cursor-pointer">Add random uniques to packs</label>
+            <label htmlFor="add-uniques" className="text-sm text-ink2 cursor-pointer">{t('settingsFields.addRandomUniques')}</label>
           </div>
           <p className="text-xs text-faint pl-7 leading-relaxed">
-            About 1 in 6 boosters gets a real unique card (random stats, pulled live) in its last slot, like opening real packs.
+            {t('settingsFields.addRandomUniquesDesc')}
           </p>
           {addUniques && (
             <p className="text-xs text-accent2 pl-7 leading-relaxed">
-              Heads up: uniques are pulled live, so generating packs can take up to a minute (longer when more packs are needed).
+              {t('settingsFields.addRandomUniquesWarning')}
             </p>
           )}
         </div>
@@ -128,10 +131,10 @@ export default function SettingsFields({
             <input type="checkbox" id="exclude-banlist" checked={!!excludeBanlist}
               onChange={e => setExcludeBanlist(e.target.checked)}
               className="accent-accent w-4 h-4" />
-            <label htmlFor="exclude-banlist" className="text-sm text-ink2 cursor-pointer">Exclude suspended cards (ban list)</label>
+            <label htmlFor="exclude-banlist" className="text-sm text-ink2 cursor-pointer">{t('settingsFields.excludeBanlist')}</label>
           </div>
           <p className="text-xs text-faint pl-7 leading-relaxed">
-            Removes the Equinox competitive ban list from the pool, so suspended cards never appear in your boosters. Off by default.
+            {t('settingsFields.excludeBanlistDesc')}
           </p>
         </div>
       )}
@@ -143,11 +146,11 @@ export default function SettingsFields({
             <input type="checkbox" id="timer-enabled" checked={timerEnabled}
               onChange={e => setTimerEnabled(e.target.checked)}
               className="accent-accent w-4 h-4" />
-            <label htmlFor="timer-enabled" className="text-sm text-ink2 cursor-pointer">Pick timer</label>
+            <label htmlFor="timer-enabled" className="text-sm text-ink2 cursor-pointer">{t('settingsFields.pickTimer')}</label>
           </div>
           {timerEnabled && (
             <div className="flex items-center gap-3 pl-7">
-              <span className="text-sm text-muted">Time per pick:</span>
+              <span className="text-sm text-muted">{t('settingsFields.timePerPick')}</span>
               <div className="flex gap-2">
                 {[30, 60, 90, 120].map(s => (
                   <button key={s} onClick={() => setTimerSeconds(s)}

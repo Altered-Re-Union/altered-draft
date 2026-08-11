@@ -1,5 +1,6 @@
 import { SETS } from '../lib/cardData.js'
 import { SET_ASSETS } from '../lib/assets.js'
+import { useLang } from '../lib/i18n/i18n.jsx'
 
 /**
  * Multi-Set draft picker. Per-set booster counts; the required total depends on the
@@ -11,6 +12,7 @@ import { SET_ASSETS } from '../lib/assets.js'
  * `target` (passed in) is 4 when ON, players × 4 when OFF.
  */
 export default function MultiSetSelector({ mix, onChange, equalPacks, onEqualChange, target = 4, disabled, hideToggle = false }) {
+  const { t, tc } = useLang()
   const total = Object.values(mix).reduce((a, b) => a + (b || 0), 0)
   const reached = total === target
 
@@ -26,18 +28,18 @@ export default function MultiSetSelector({ mix, onChange, equalPacks, onEqualCha
     <div className="space-y-4">
       {/* Distribution toggle. Hidden for pooled formats (Winston) where it's meaningless. */}
       {hideToggle ? (
-        <p className="text-xs text-faint">All boosters are pooled into one shared deck and split between the players.</p>
+        <p className="text-xs text-faint">{t('multiSetSelector.allPooledHint')}</p>
       ) : (
         <label className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
           equalPacks ? 'border-accent/40 bg-accent/5' : 'border-line bg-surface2'}`}>
           <input type="checkbox" checked={equalPacks} disabled={disabled}
             onChange={e => onEqualChange(e.target.checked)} className="accent-accent w-4 h-4 mt-0.5 shrink-0" />
           <span>
-            <span className="block text-sm text-ink font-medium">All players receive the same packs</span>
+            <span className="block text-sm text-ink font-medium">{t('multiSetSelector.samePacksLabel')}</span>
             <span className="block text-xs text-faint mt-0.5">
               {equalPacks
-                ? 'Every player drafts the same single-set boosters, one set per round.'
-                : 'Build the whole booster bag; all boosters are shuffled and dealt at random.'}
+                ? t('multiSetSelector.samePacksOnDesc')
+                : t('multiSetSelector.samePacksOffDesc')}
             </span>
           </span>
         </label>
@@ -45,7 +47,7 @@ export default function MultiSetSelector({ mix, onChange, equalPacks, onEqualCha
 
       <div>
         <div className="flex items-center justify-between mb-2">
-          <label className="block text-sm text-muted">{equalPacks ? 'Packs per player' : 'Booster bag'}</label>
+          <label className="block text-sm text-muted">{equalPacks ? t('multiSetSelector.packsPerPlayer') : t('multiSetSelector.boosterBag')}</label>
           <span className={`text-sm font-mono font-bold ${
             reached ? 'text-green-400' : total > target ? 'text-red-400' : 'text-accent'}`}>
             {total} / {target}
@@ -53,8 +55,8 @@ export default function MultiSetSelector({ mix, onChange, equalPacks, onEqualCha
         </div>
         <p className="text-xs text-faint mb-3">
           {equalPacks
-            ? `Choose how many of each set make up one player's ${target} packs.`
-            : `Choose how many single-set boosters of each set go in the bag (total = ${target}).`}
+            ? t('multiSetSelector.chooseHintOn', { target })
+            : t('multiSetSelector.chooseHintOff', { target })}
         </p>
 
         <div className="space-y-2">
@@ -94,8 +96,8 @@ export default function MultiSetSelector({ mix, onChange, equalPacks, onEqualCha
         {!reached && (
           <p className={`text-xs mt-3 ${total > target ? 'text-red-400' : 'text-faint'}`}>
             {total > target
-              ? `Remove ${total - target} ${total - target === 1 ? 'pack' : 'packs'}; the total must equal ${target}.`
-              : `Add ${target - total} more ${target - total === 1 ? 'pack' : 'packs'}; the total must equal ${target}.`}
+              ? tc('multiSetSelector.removePacks', total - target, { target })
+              : tc('multiSetSelector.addPacks', target - total, { target })}
           </p>
         )}
       </div>

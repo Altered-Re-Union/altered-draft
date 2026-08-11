@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { SimpleCardGrid } from './PoolGrid.jsx'
+import { useLang } from '../lib/i18n/i18n.jsx'
 
 // Preload one pack's card images; resolves when they've all settled (or a per-image error).
 // Returns a cancel fn. Cards in this pool load from a CDN (rares/uniques a touch slower), so
@@ -33,6 +34,7 @@ export default function PackReveal({ packs, hasBonus = false, cardMap, deck, poo
   const [ready, setReady] = useState(false)
   const packsRef = useRef(packs)
   packsRef.current = packs
+  const { t } = useLang()
 
   // Escape skips the whole reveal (matches the always-visible Skip button).
   useEffect(() => {
@@ -53,8 +55,8 @@ export default function PackReveal({ packs, hasBonus = false, cardMap, deck, poo
     const refs = packsRef.current[index] ?? []
     if (refs.some(r => !cardMap[r])) return // data not in yet — re-runs when resolvedCount changes
     const cancelPreload = preloadImages(refs, cardMap, () => setReady(true))
-    const t = setTimeout(() => setReady(true), 8000) // never hang on a stuck image
-    return () => { cancelPreload(); clearTimeout(t) }
+    const timer = setTimeout(() => setReady(true), 8000) // never hang on a stuck image
+    return () => { cancelPreload(); clearTimeout(timer) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [index, refsKey, resolvedCount])
 
@@ -76,13 +78,13 @@ export default function PackReveal({ packs, hasBonus = false, cardMap, deck, poo
     <div className="fixed inset-0 z-50 bg-base flex flex-col">
       {/* Top bar: title */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-line">
-        <h2 className="text-lg font-display">Opening your pool</h2>
+        <h2 className="text-lg font-display">{t('packReveal.openingYourPool')}</h2>
       </div>
 
       {/* Pack heading */}
       <div className="px-4 pt-3 pb-2 text-center">
-        <div className="text-sm text-ink2 tabular-nums">Booster {index + 1} / {total}</div>
-        {isBonusPack && <div className="text-xs text-accent2 mt-0.5">✦ Your guaranteed unique</div>}
+        <div className="text-sm text-ink2 tabular-nums">{t('packReveal.boosterOf', { n: index + 1, total })}</div>
+        {isBonusPack && <div className="text-xs text-accent2 mt-0.5">{t('packReveal.guaranteedUnique')}</div>}
       </div>
 
       {/* Current pack — shown only once its images are ready (buffering spinner until then) */}
@@ -99,7 +101,7 @@ export default function PackReveal({ packs, hasBonus = false, cardMap, deck, poo
         ) : (
           <div className="h-full flex flex-col items-center justify-center gap-3 text-muted">
             <div className="w-8 h-8 rounded-full border-2 border-line border-t-accent animate-spin" />
-            <span className="text-sm">Opening booster…</span>
+            <span className="text-sm">{t('packReveal.openingBooster')}</span>
           </div>
         )}
       </div>
@@ -108,16 +110,16 @@ export default function PackReveal({ packs, hasBonus = false, cardMap, deck, poo
       <div className="grid grid-cols-3 items-center gap-3 px-4 py-3 border-t border-line">
         <button onClick={() => setIndex(i => Math.max(0, i - 1))} disabled={index <= 0}
           className="justify-self-start text-sm font-semibold px-4 py-2 rounded-lg border border-accent text-accent hover:bg-accent hover:text-on-accent disabled:opacity-30 transition-colors">
-          ← Previous
+          {t('packReveal.previous')}
         </button>
         <button onClick={onClose}
           className="justify-self-center text-base font-bold px-6 py-3 rounded-lg bg-accent text-on-accent hover:opacity-90 transition-opacity">
-          {isLast ? 'See full pool →' : 'Skip and see full pool'}
+          {isLast ? t('packReveal.seeFullPool') : t('packReveal.skipAndSeeFullPool')}
         </button>
         {isLast ? <span /> : (
           <button onClick={() => setIndex(i => Math.min(total - 1, i + 1))}
             className="justify-self-end text-sm font-semibold px-4 py-2 rounded-lg border border-accent text-accent hover:bg-accent hover:text-on-accent transition-colors">
-            Next booster →
+            {t('packReveal.nextBooster')}
           </button>
         )}
       </div>

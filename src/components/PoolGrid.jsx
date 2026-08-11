@@ -5,6 +5,7 @@ import {
 } from '../lib/cardData.js'
 import { FACTION_ICONS, RARITY_GEMS, SET_ICONS, setCodeFromRef } from '../lib/assets.js'
 import { useCardZoom } from './CardZoom.jsx'
+import { useLang } from '../lib/i18n/i18n.jsx'
 
 const TYPE_LABEL = {
   HERO: 'Hero', CHARACTER: 'Character', SPELL: 'Spell',
@@ -83,6 +84,30 @@ function LayersIcon({ className }) {
   )
 }
 
+function GridIcon({ className }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <rect x="3" y="3" width="7" height="7" rx="1" />
+      <rect x="14" y="3" width="7" height="7" rx="1" />
+      <rect x="3" y="14" width="7" height="7" rx="1" />
+      <rect x="14" y="14" width="7" height="7" rx="1" />
+    </svg>
+  )
+}
+
+function ListIcon({ className }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <line x1="8" y1="6" x2="21" y2="6" />
+      <line x1="8" y1="12" x2="21" y2="12" />
+      <line x1="8" y1="18" x2="21" y2="18" />
+      <circle cx="4" cy="6" r="1.2" fill="currentColor" stroke="none" />
+      <circle cx="4" cy="12" r="1.2" fill="currentColor" stroke="none" />
+      <circle cx="4" cy="18" r="1.2" fill="currentColor" stroke="none" />
+    </svg>
+  )
+}
+
 /** Collapse a ref list (with duplicates) into [ref, count] pairs, order preserved. */
 function dedupeRefs(refs) {
   const seen = new Map()
@@ -130,6 +155,8 @@ export default function PoolGrid({ refs, cardMap, deck, poolCounts, onAdd, onRem
   const [onlyInDeck, setOnlyInDeck] = useState(false)
   const canFilterByDeck = !!(deck && onAdd && onRemove)
   const zoom = useZoomNavigation(cardMap, deck, poolCounts, onAdd, onRemove)
+  const { t } = useLang()
+  const sortLabels = { faction: t('poolGrid.sortFaction'), type: t('poolGrid.sortType'), cost: t('poolGrid.sortCost'), set: t('poolGrid.sortSet') }
 
   function toggleFaction(f) {
     setFilterFactions(prev => prev.includes(f) ? prev.filter(x => x !== f) : [...prev, f])
@@ -180,10 +207,10 @@ export default function PoolGrid({ refs, cardMap, deck, poolCounts, onAdd, onRem
       const groups = Object.entries(buckets)
         .sort(([a], [b]) => a === '—' ? 1 : b === '—' ? -1 : Number(a) - Number(b))
         .map(([cost, refs]) => ({
-          key: cost, label: cost === '—' ? 'No cost' : `Cost ${cost}`, icon: null,
+          key: cost, label: cost === '—' ? t('poolGrid.noCost') : t('poolGrid.costN', { n: cost }), icon: null,
           colorCls: 'text-ink2 bg-surface2 border-line', refs,
         }))
-      if (heroes.length) groups.unshift({ key: 'HERO', label: 'Hero', icon: null, colorCls: 'text-accent bg-accent/10 border-accent/30', refs: heroes })
+      if (heroes.length) groups.unshift({ key: 'HERO', label: t('poolGrid.hero'), icon: null, colorCls: 'text-accent bg-accent/10 border-accent/30', refs: heroes })
       return groups
     }
     if (sortBy === 'set') {
@@ -216,7 +243,7 @@ export default function PoolGrid({ refs, cardMap, deck, poolCounts, onAdd, onRem
       <div className="px-4 py-2 border-b border-line flex gap-1.5 flex-wrap shrink-0 bg-base">
         <button onClick={() => setFilterFactions([])}
           className={`px-2.5 py-1 rounded text-xs transition-colors ${filterFactions.length === 0 ? 'bg-surface3 text-ink' : 'text-faint hover:text-ink2'}`}>
-          All
+          {t('common.all')}
         </button>
         {FACTIONS.map(f => (
           <button key={f} onClick={() => toggleFaction(f)}
@@ -237,25 +264,27 @@ export default function PoolGrid({ refs, cardMap, deck, poolCounts, onAdd, onRem
               className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-bold border transition-colors ${
                 onlyInDeck ? 'bg-accent text-on-accent border-accent' : 'bg-surface2 text-muted border-line hover:text-ink'}`}>
               <LayersIcon className="w-3.5 h-3.5" />
-              Deck only
+              {t('poolGrid.deckOnly')}
             </button>
             <div className="w-px h-5 bg-line" />
           </>
         )}
-        <span className="text-xs text-faint">Group by:</span>
+        <span className="text-xs text-faint">{t('poolGrid.groupBy')}</span>
         {['faction', 'type', 'cost', 'set'].map(s => (
           <button key={s} onClick={() => setSortBy(s)}
-            className={`px-2.5 py-1 rounded text-xs capitalize transition-colors ${sortBy === s ? 'bg-accent text-on-accent font-bold' : 'bg-surface2 text-muted hover:text-ink'}`}>
-            {s}
+            className={`px-2.5 py-1 rounded text-xs transition-colors ${sortBy === s ? 'bg-accent text-on-accent font-bold' : 'bg-surface2 text-muted hover:text-ink'}`}>
+            {sortLabels[s]}
           </button>
         ))}
-        <span className="text-xs text-faint ml-2 hidden sm:inline">View:</span>
-        {[['cards', 'Cards'], ['list', 'List']].map(([v, label]) => (
-          <button key={v} onClick={() => setViewMode(v)}
-            className={`px-2.5 py-1 rounded text-xs transition-colors ${viewMode === v ? 'bg-accent text-on-accent font-bold' : 'bg-surface2 text-muted hover:text-ink'}`}>
-            {label}
-          </button>
-        ))}
+        <div className="w-px h-5 bg-line ml-auto" />
+        <div className="flex items-center gap-0.5 bg-surface2 rounded-lg p-0.5">
+          {[['cards', t('poolGrid.viewCards'), GridIcon], ['list', t('poolGrid.viewList'), ListIcon]].map(([v, label, Icon]) => (
+            <button key={v} onClick={() => setViewMode(v)} aria-label={label} title={label}
+              className={`p-1.5 rounded-md transition-colors ${viewMode === v ? 'bg-accent text-on-accent' : 'text-muted hover:text-ink'}`}>
+              <Icon className="w-4 h-4" />
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Card grid — generous padding + stable gutter so zoom never reflows the page */}

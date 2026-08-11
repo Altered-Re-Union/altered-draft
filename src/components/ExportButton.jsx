@@ -1,7 +1,9 @@
 import { useState } from 'react'
+import { useLang } from '../lib/i18n/i18n.jsx'
 
 export default function ExportButton({ decklist, small }) {
   const [state, setState] = useState('idle') // idle | copied | error
+  const { t } = useLang()
 
   async function handleCopy() {
     if (!decklist) return
@@ -27,9 +29,9 @@ export default function ExportButton({ decklist, small }) {
     setTimeout(() => setState('idle'), 2500)
   }
 
-  const label = state === 'copied' ? '✓ Copied!'
-    : state === 'error' ? 'Copy failed. Select text manually'
-    : 'Copy decklist for altered.re'
+  const label = state === 'copied' ? t('exportButton.copied')
+    : state === 'error' ? t('exportButton.copyFailed')
+    : t('exportButton.copyDecklist')
 
   return (
     <button

@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
+import { useLang } from '../lib/i18n/i18n.jsx'
 
 export default function PickTimer({ deadline, isMyTurn, onTimeout }) {
   const [remaining, setRemaining] = useState(null)
+  const { t } = useLang()
 
   useEffect(() => {
     if (!deadline) { setRemaining(null); return }
@@ -30,7 +32,7 @@ export default function PickTimer({ deadline, isMyTurn, onTimeout }) {
           {remaining}s
         </span>
         {isMyTurn && (
-          <span className="text-xs text-faint">Auto-pick in {remaining}s</span>
+          <span className="text-xs text-faint">{t('pickTimer.autoPickIn', { n: remaining })}</span>
         )}
       </div>
       <div className="h-1.5 bg-surface2 rounded-full overflow-hidden">

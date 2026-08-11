@@ -6,6 +6,7 @@ import { applyPick, applyHeroPick } from '../lib/draftLogic.js'
 import { applyRochesterPick } from '../lib/rochesterLogic.js'
 import { applyRotisseriePick } from '../lib/rotisserieLogic.js'
 import { applyWinstonAction } from '../lib/winstonLogic.js'
+import { useLang } from '../lib/i18n/i18n.jsx'
 import CardGrid from '../components/CardGrid.jsx'
 import RotisserieGrid from '../components/RotisserieGrid.jsx'
 import WinstonBoard from '../components/WinstonBoard.jsx'
@@ -21,11 +22,12 @@ import { COMMUNITY_CUBES } from '../lib/cubes.js'
 
 // Compact read-only strip of the heroes you've drafted (during the hero phase, and
 // as a reminder afterward). `label` lets callers relabel it per phase.
-function MyHeroes({ heroes, cardMap, label = 'Your heroes' }) {
+function MyHeroes({ heroes, cardMap, label }) {
+  const { t } = useLang()
   if (!heroes?.length) return null
   return (
     <div className="mb-4 border border-accent/30 bg-accent/5 rounded-lg px-3 py-2.5">
-      <p className="text-xs font-semibold text-accent mb-2">{label} ({heroes.length})</p>
+      <p className="text-xs font-semibold text-accent mb-2">{label ?? t('draft.yourHeroes')} ({heroes.length})</p>
       <div className="flex flex-wrap gap-2">
         {heroes.map((ref, i) => (
           <ZoomCard key={`${ref}-${i}`} ref_={ref} card={cardMap?.[ref]} width="w-20 sm:w-24" />
@@ -38,6 +40,7 @@ function MyHeroes({ heroes, cardMap, label = 'Your heroes' }) {
 export default function Draft() {
   const { code } = useParams()
   const navigate = useNavigate()
+  const { t, tc } = useLang()
 
   const [roomState, setRoomState] = useState(null)
   const [me, setMe] = useState(null)
@@ -262,11 +265,11 @@ export default function Draft() {
   async function handleRejoin(e) {
     e.preventDefault()
     const name = rejoinName.trim()
-    if (!name) { setRejoinError('Enter your display name'); return }
+    if (!name) { setRejoinError(t('draft.errEnterName')); return }
     const { data } = await getRoom(code)
-    if (!data) { setRejoinError('Room not found'); return }
+    if (!data) { setRejoinError(t('draft.errRoomNotFound')); return }
     const player = data.state.players.find(p => p.name.toLowerCase() === name.toLowerCase())
-    if (!player) { setRejoinError('No player with that name in this room'); return }
+    if (!player) { setRejoinError(t('draft.errNoPlayerWithName')); return }
     const identity = { id: player.id, name: player.name, isHost: data.state.players[0]?.id === player.id }
     localStorage.setItem(`player_${code}`, JSON.stringify(identity))
     setMe(identity); setNeedsRejoin(false); setRejoinError('')
@@ -276,26 +279,26 @@ export default function Draft() {
     return (
       <div className="min-h-screen flex items-center justify-center px-4">
         <form onSubmit={handleRejoin} className="bg-surface rounded-xl p-6 w-full max-w-sm space-y-4">
-          <h2 className="font-semibold text-lg">Rejoin draft</h2>
-          <p className="text-sm text-muted">Enter the name you used for room <span className="text-accent font-mono">{code}</span>.</p>
-          <input value={rejoinName} onChange={e => setRejoinName(e.target.value)} placeholder="Your display name" autoFocus
+          <h2 className="font-semibold text-lg">{t('draft.rejoinTitle')}</h2>
+          <p className="text-sm text-muted">{t('draft.rejoinPrompt', { code })}</p>
+          <input value={rejoinName} onChange={e => setRejoinName(e.target.value)} placeholder={t('draft.rejoinPlaceholder')} autoFocus
             className="w-full bg-surface2 border border-line rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent" />
           {rejoinError && <p className="text-red-400 text-sm">{rejoinError}</p>}
           <div className="flex gap-3">
-            <button type="button" onClick={() => navigate('/')} className="flex-1 py-2 rounded-lg bg-surface2 text-sm">Home</button>
-            <button type="submit" className="flex-1 py-2 rounded-lg bg-accent text-on-accent font-semibold text-sm">Rejoin</button>
+            <button type="button" onClick={() => navigate('/')} className="flex-1 py-2 rounded-lg bg-surface2 text-sm">{t('draft.home')}</button>
+            <button type="submit" className="flex-1 py-2 rounded-lg bg-accent text-on-accent font-semibold text-sm">{t('draft.rejoinBtn')}</button>
           </div>
         </form>
       </div>
     )
   }
 
-  if (!roomState || !me) return <div className="min-h-screen flex items-center justify-center text-muted">Loading draft…</div>
+  if (!roomState || !me) return <div className="min-h-screen flex items-center justify-center text-muted">{t('draft.loadingDraft')}</div>
 
   if (myIndex === -1) return (
     <div className="min-h-screen flex items-center justify-center flex-col gap-4 text-muted">
-      <p>You are not a participant in this draft.</p>
-      <button onClick={() => navigate('/')} className="px-4 py-2 bg-surface2 rounded-lg text-sm">Go home</button>
+      <p>{t('draft.notParticipant')}</p>
+      <button onClick={() => navigate('/')} className="px-4 py-2 bg-surface2 rounded-lg text-sm">{t('draft.goHome')}</button>
     </div>
   )
 
@@ -325,27 +328,40 @@ export default function Draft() {
     totalPicks = fullPack
   }
 
+  const topBarLabel = isHeroPhase ? t('draft.heroDraft')
+    : isRochester ? t('draft.packOf', { n: roomState.packNum, total: roomState.totalPacks })
+    : isRotisserie ? t('draft.rotisserieOf', { n: myPicks.length, target: roomState.target })
+    : isWinston ? t('draft.winstonPool', { n: myPicks.length })
+    : t('draft.roundOf', { n: roomState.round })
+
+  // `othersKey` differs between the desktop/mobile "nobody's turn" banners below.
+  const waitingMessage = othersKey => isHeroPhase
+    ? t('draft.waitingForHeroPick', { name: heroPickerName })
+    : isSnakePick
+      ? t('draft.waitingForPick', { name: turnPlayerName })
+      : t(othersKey)
+
   return (
     <div className="min-h-screen flex flex-col pb-16 md:pb-0">
-      {reconnecting && <div className="bg-yellow-600 text-yellow-100 text-center text-sm py-2">Reconnecting…</div>}
+      {reconnecting && <div className="bg-yellow-600 text-yellow-100 text-center text-sm py-2">{t('draft.reconnecting')}</div>}
       {fetchErrors.length > 0 && (
         <div className="bg-red-900/50 border border-red-700 text-red-300 text-sm px-4 py-2">
-          Failed to load: {fetchErrors.join(', ')}
+          {t('draft.failedToLoad', { errors: fetchErrors.join(', ') })}
         </div>
       )}
 
       {/* Top bar */}
       <div className="bg-surface border-b border-line px-4 py-2 flex items-center gap-3 shrink-0">
         <span className="font-mono text-accent font-bold text-sm">{code}</span>
-        <span className="text-faint text-xs">{isHeroPhase ? 'Hero Draft' : isRochester ? `Pack ${roomState.packNum}/${roomState.totalPacks}` : isRotisserie ? `Rotisserie ${myPicks.length}/${roomState.target}` : isWinston ? `Winston · pool ${myPicks.length}` : `Round ${roomState.round}/4`}</span>
+        <span className="text-faint text-xs">{topBarLabel}</span>
         <span className="ml-auto text-sm">
           {isMyTurn
-            ? <span className="text-green-400 font-medium text-sm">Your turn</span>
-            : <span className="text-faint text-xs">Waiting…</span>}
+            ? <span className="text-green-400 font-medium text-sm">{t('draft.yourTurn')}</span>
+            : <span className="text-faint text-xs">{t('draft.waitingEllipsis')}</span>}
         </span>
         <button onClick={() => setShowPool(true)}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent/15 hover:bg-accent/25 border border-accent/40 text-accent font-semibold text-sm transition-colors shrink-0">
-          <span aria-hidden="true">▦</span> My pool ({poolRefs.length})
+          <span aria-hidden="true">▦</span> {t('draft.myPool', { n: poolRefs.length })}
         </button>
         <ThemeToggle />
       </div>
@@ -362,65 +378,61 @@ export default function Draft() {
           <div className="flex items-baseline gap-3 mb-3">
             {isHeroPhase ? (
               <>
-                <h2 className="font-semibold text-lg text-accent">Hero Draft</h2>
-                <span className="text-sm text-faint">You have {currentPickNum} / {totalPicks} heroes</span>
+                <h2 className="font-semibold text-lg text-accent">{t('draft.heroDraft')}</h2>
+                <span className="text-sm text-faint">{t('draft.youHaveHeroes', { n: currentPickNum, total: totalPicks })}</span>
               </>
             ) : isRochester ? (
               <>
-                <h2 className="font-semibold text-lg">Pack {roomState.packNum} / {roomState.totalPacks}</h2>
-                <span className="text-sm text-faint">{packSize} card{packSize !== 1 ? 's' : ''} left · your pool: {myPicks.length}</span>
+                <h2 className="font-semibold text-lg">{t('draft.packHeaderOf', { n: roomState.packNum, total: roomState.totalPacks })}</h2>
+                <span className="text-sm text-faint">{tc('draft.cardsLeft', packSize, { pool: myPicks.length })}</span>
               </>
             ) : isRotisserie ? (
               <>
-                <h2 className="font-semibold text-lg">Rotisserie</h2>
-                <span className="text-sm text-faint">your pool: {myPicks.length} / {roomState.target} · {packSize} in pool</span>
+                <h2 className="font-semibold text-lg">{t('draft.rotisserieHeader')}</h2>
+                <span className="text-sm text-faint">{t('draft.rotisseriePoolStatus', { n: myPicks.length, target: roomState.target, inPool: packSize })}</span>
               </>
             ) : isWinston ? (
               <>
-                <h2 className="font-semibold text-lg">Winston</h2>
-                <span className="text-sm text-faint">your pool: {myPicks.length}</span>
+                <h2 className="font-semibold text-lg">{t('draft.winstonHeader')}</h2>
+                <span className="text-sm text-faint">{t('draft.winstonPoolStatus', { n: myPicks.length })}</span>
               </>
             ) : (
               <>
-                <h2 className="font-semibold text-lg">Pack {roomState.round}</h2>
-                <span className="text-sm text-faint">Pick {currentPickNum}</span>
+                <h2 className="font-semibold text-lg">{t('draft.packHeaderRound', { n: roomState.round })}</h2>
+                <span className="text-sm text-faint">{t('draft.pickN', { n: currentPickNum })}</span>
               </>
             )}
           </div>
           {isHeroPhase && (
             <p className="mb-3 text-sm text-muted">
               {roomState.heroStart
-                ? `Heroes first: each player snake-drafts ${heroTarget} hero${heroTarget !== 1 ? 'es' : ''} from the shared pool, then the card draft begins.`
-                : `Between packs, each player snake-drafts one hero from the shared pool, ${heroTarget} in total.`}
+                ? tc('draft.heroBlurbStart', heroTarget)
+                : t('draft.heroBlurbBetween', { n: heroTarget })}
             </p>
           )}
           {isRochester && (
             <p className="mb-3 text-sm text-muted">
-              Rochester: one shared pack, face-up. Players take turns in snake order; pick when it’s your turn.
+              {t('draft.rochesterBlurb')}
             </p>
           )}
           {isRotisserie && (
             <p className="mb-3 text-sm text-muted">
-              Rotisserie: the whole pool is face-up. Players take turns drafting any one card in snake order until each has {roomState.target}.
+              {t('draft.rotisserieBlurb', { n: roomState.target })}
             </p>
           )}
           {isWinston && (
             <p className="mb-3 text-sm text-muted">
-              Winston (2 players): look at the top pile, then Take it or Pass. Passing adds a face-down card and moves you on; pass all three and you draw blind. Piles stay hidden from your opponent.
+              {t('draft.winstonBlurb')}
             </p>
           )}
-          {isHeroPhase && myHeroPicks.length > 0 && <MyHeroes heroes={myHeroPicks} cardMap={cardMap} label="Heroes you've taken" />}
+          {isHeroPhase && myHeroPicks.length > 0 && <MyHeroes heroes={myHeroPicks} cardMap={cardMap} label={t('draft.heroesYouveTaken')} />}
           {!isHeroPhase && myHeroPicks.length > 0 && <MyHeroes heroes={myHeroPicks} cardMap={cardMap} />}
           {roomState.config?.timerEnabled && roomState.pickDeadline && (
             <PickTimer deadline={roomState.pickDeadline} isMyTurn={isMyTurn} onTimeout={handleTimeout} />
           )}
           {!isMyTurn && !isWinston && (
             <div className="mb-4 bg-surface border border-line rounded-lg px-4 py-3 text-sm text-muted">
-              {isHeroPhase
-                ? <>Waiting for <span className="text-ink">{heroPickerName}</span> to pick a hero…</>
-                : isSnakePick
-                  ? <>Waiting for <span className="text-ink">{turnPlayerName}</span> to pick…</>
-                  : 'Waiting for other players to pick…'}
+              {waitingMessage('draft.waitingOthersToPick')}
             </div>
           )}
           {isWinston
@@ -440,20 +452,16 @@ export default function Draft() {
         {mobileTab === 'pack' && (
           <div className="p-3">
             <div className="flex items-baseline gap-2 mb-2">
-              <h2 className="font-semibold">{isHeroPhase ? <span className="text-accent">Hero Draft</span> : isRochester ? `Pack ${roomState.packNum}/${roomState.totalPacks}` : isRotisserie ? 'Rotisserie' : isWinston ? 'Winston' : `Pack ${roomState.round}`}</h2>
-              <span className="text-xs text-faint">{isHeroPhase ? `${currentPickNum} / ${totalPicks} heroes` : isRochester ? `${packSize} left` : isRotisserie ? `${myPicks.length} / ${roomState.target}` : isWinston ? `pool ${myPicks.length}` : `Pick ${currentPickNum}`}</span>
+              <h2 className="font-semibold">{isHeroPhase ? <span className="text-accent">{t('draft.heroDraft')}</span> : isRochester ? t('draft.packOf', { n: roomState.packNum, total: roomState.totalPacks }) : isRotisserie ? t('draft.rotisserieHeader') : isWinston ? t('draft.winstonHeader') : t('draft.packHeaderRound', { n: roomState.round })}</h2>
+              <span className="text-xs text-faint">{isHeroPhase ? t('draft.mobileHeroesCount', { n: currentPickNum, total: totalPicks }) : isRochester ? t('draft.mobileLeft', { n: packSize }) : isRotisserie ? t('draft.mobileRatio', { n: myPicks.length, total: roomState.target }) : isWinston ? t('draft.mobilePool', { n: myPicks.length }) : t('draft.pickN', { n: currentPickNum })}</span>
             </div>
-            {myHeroPicks.length > 0 && <MyHeroes heroes={myHeroPicks} cardMap={cardMap} label={isHeroPhase ? "Heroes you've taken" : undefined} />}
+            {myHeroPicks.length > 0 && <MyHeroes heroes={myHeroPicks} cardMap={cardMap} label={isHeroPhase ? t('draft.heroesYouveTaken') : undefined} />}
             {roomState.config?.timerEnabled && roomState.pickDeadline && (
               <PickTimer deadline={roomState.pickDeadline} isMyTurn={isMyTurn} onTimeout={handleTimeout} />
             )}
             {!isMyTurn && !isWinston && (
               <div className="mb-3 bg-surface border border-line rounded-lg px-3 py-2 text-sm text-muted">
-                {isHeroPhase
-                  ? <>Waiting for <span className="text-ink">{heroPickerName}</span> to pick a hero…</>
-                  : isSnakePick
-                    ? <>Waiting for <span className="text-ink">{turnPlayerName}</span> to pick…</>
-                    : 'Waiting for other players…'}
+                {waitingMessage('draft.waitingOthers')}
               </div>
             )}
             {isWinston
@@ -486,7 +494,7 @@ export default function Draft() {
           <div className="bg-base border border-line rounded-2xl w-full max-w-6xl mx-auto flex-1 min-h-0 flex flex-col overflow-hidden shadow-2xl">
             <div className="flex items-center justify-between px-4 py-3 border-b border-line shrink-0">
               <h2 className="font-display text-lg text-ink">
-                Your pool <span className="text-faint text-sm font-sans">({poolRefs.length} card{poolRefs.length !== 1 ? 's' : ''})</span>
+                {t('draft.yourPoolHeader')} <span className="text-faint text-sm font-sans">{tc('draft.poolCardsCount', poolRefs.length)}</span>
               </h2>
               <button onClick={() => setShowPool(false)}
                 className="text-faint hover:text-ink2 transition-colors text-2xl leading-none">×</button>
@@ -494,7 +502,7 @@ export default function Draft() {
             <div className="flex-1 min-h-0">
               {poolRefs.length
                 ? <PoolGrid refs={poolRefs} cardMap={cardMap} />
-                : <p className="p-6 text-sm text-faint">Nothing drafted yet. Pick some cards and they'll show up here.</p>}
+                : <p className="p-6 text-sm text-faint">{t('draft.nothingDraftedYet')}</p>}
             </div>
           </div>
         </div>

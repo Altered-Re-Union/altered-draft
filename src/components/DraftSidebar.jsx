@@ -2,44 +2,47 @@ import { useState } from 'react'
 import { FACTIONS, FACTION_NAMES, FACTION_COLORS } from '../lib/cardData.js'
 import { FACTION_ICONS, RARITY_GEMS, SET_ICONS, setCodeFromRef } from '../lib/assets.js'
 import { buildDecklist, groupPicksByFaction } from '../lib/exportFormat.js'
+import { useLang } from '../lib/i18n/i18n.jsx'
 import ExportButton from './ExportButton.jsx'
 import DraftStats from './DraftStats.jsx'
 
 export default function DraftSidebar({ pickedRefs, cardMap, round, code }) {
   const [tab, setTab] = useState('picks')
+  const { t, tc } = useLang()
   const grouped = groupPicksByFaction(pickedRefs, cardMap)
   const decklist = buildDecklist(pickedRefs, cardMap)
   const total = pickedRefs.length
+  const tabLabels = { picks: t('draftSidebar.tabPicks'), stats: t('draftSidebar.tabStats') }
 
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="px-4 py-3 border-b border-line">
         <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-sm">Your picks</h3>
-          <span className="text-xs text-faint">{total} cards</span>
+          <h3 className="font-semibold text-sm">{t('draftSidebar.yourPicks')}</h3>
+          <span className="text-xs text-faint">{tc('draftSidebar.cardCount', total)}</span>
         </div>
         <div className="mt-1 flex gap-1">
           {[1, 2, 3, 4].map(r => (
             <div key={r} className={`h-1 flex-1 rounded-full ${r <= round ? 'bg-accent' : 'bg-surface3'}`} />
           ))}
         </div>
-        <p className="text-xs text-faint mt-1">Pack {round} of 4</p>
+        <p className="text-xs text-faint mt-1">{t('draftSidebar.packOfFour', { n: round })}</p>
       </div>
 
       {/* Tabs */}
       <div className="flex border-b border-line">
-        {['picks', 'stats'].map(t => (
+        {['picks', 'stats'].map(tabId => (
           <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`flex-1 py-2 text-xs font-medium transition-colors capitalize ${
-              tab === t
+            key={tabId}
+            onClick={() => setTab(tabId)}
+            className={`flex-1 py-2 text-xs font-medium transition-colors ${
+              tab === tabId
                 ? 'text-accent border-b-2 border-accent2'
                 : 'text-faint hover:text-ink2'
             }`}
           >
-            {t}
+            {tabLabels[tabId]}
           </button>
         ))}
       </div>
@@ -51,7 +54,7 @@ export default function DraftSidebar({ pickedRefs, cardMap, round, code }) {
             {/* Heroes */}
             {grouped.HERO && (
               <section>
-                <h4 className="text-xs uppercase tracking-widest text-accent mb-1">Hero</h4>
+                <h4 className="text-xs uppercase tracking-widest text-accent mb-1">{t('draftSidebar.hero')}</h4>
                 {Object.entries(grouped.HERO).map(([ref, qty]) => (
                   <PickRow key={ref} ref_={ref} qty={qty} card={cardMap[ref]} />
                 ))}
@@ -82,7 +85,7 @@ export default function DraftSidebar({ pickedRefs, cardMap, round, code }) {
             })}
 
             {total === 0 && (
-              <p className="text-xs text-faint italic">No picks yet. Click a card to draft it.</p>
+              <p className="text-xs text-faint italic">{t('draftSidebar.noPicksYet')}</p>
             )}
           </div>
         ) : (

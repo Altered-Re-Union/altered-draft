@@ -12,16 +12,17 @@ import { resolveCubeRefs } from '../lib/cubeResolve.js'
 import { filterBanned } from '../lib/banlist.js'
 import { listDecks, getDeck, deckCardsToRefs } from '../lib/decks.js'
 import { useAuth } from '../auth/AuthProvider.jsx'
+import { useLang } from '../lib/i18n/i18n.jsx'
 import SetSelector from '../components/SetSelector.jsx'
 import MultiSetSelector from '../components/MultiSetSelector.jsx'
 import SettingsFields from '../components/SettingsFields.jsx'
 import { DRAFT_FORMATS } from '../lib/draftFormats.js'
 import TopNav from '../components/TopNav.jsx'
 
-const TAB_LABELS = { presets: 'Presets', cubes: 'Cubes', advanced: 'Multi-Set', multiset: 'Multi-Set' }
-
 // Lobby wizard, step 1: how to play. Modes are the draft formats plus Sealed; player-count
 // badges come from the format metadata. Booster Draft is the classic pick-and-pass format.
+// Display name/blurb come from the i18n dict (lobby.modes.<id>) keyed by `id`, not from
+// these English fallback fields — kept here only for id/players/available metadata.
 const MODES = [
   ...DRAFT_FORMATS,
   { id: 'sealed', name: 'Sealed', players: '1+', available: true,
@@ -31,7 +32,6 @@ const MODE_BY_ID = Object.fromEntries(MODES.map(m => [m.id, m]))
 // The two everyday modes show first; the alternate draft formats hide behind a toggle.
 const PRIMARY_MODE_IDS = ['booster', 'sealed']
 const OTHER_MODE_IDS = ['rochester', 'rotisserie', 'winston']
-const WIZARD_STEPS = ['How to play', 'Cards', 'Settings']
 
 // Target pool size per mode, as boosters per player (~13 cards each). The mode sets how many
 // cards a game wants; the card source then hits it — Presets generate it automatically, the
@@ -87,6 +87,7 @@ export default function Lobby() {
   const { code } = useParams()
   const navigate = useNavigate()
   const { user, login } = useAuth()
+  const { t, tc } = useLang()
 
   const [roomState, setRoomState] = useState(null)
   const [me, setMe] = useState(null)
@@ -205,7 +206,7 @@ export default function Lobby() {
     setParseMsg('')
     const { refs } = parseDecklist(customCubeText)
     if (!refs.length) {
-      setParseMsg('No card references found. Paste lines like "1 ALT_CORE_B_YZ_03_C".')
+      setParseMsg(t('lobby.noRefsFound'))
       return
     }
     setParsingCube(true)
@@ -214,13 +215,13 @@ export default function Lobby() {
       // and splits heroes — shared with the load-from-Re:Union-decks flow below.
       const { cards, heroes, unresolved } = await resolveCubeRefs(refs, lang)
       if (!cards.length) {
-        setParseMsg('No draftable (non-hero) cards resolved. Check your references.')
+        setParseMsg(t('lobby.noDraftableResolved'))
         setParsingCube(false); return
       }
-      setCustomCube({ name: customCubeName.trim() || 'Custom cube', cards, heroes, unresolved, source: 'paste' })
+      setCustomCube({ name: customCubeName.trim() || t('lobby.customPool'), cards, heroes, unresolved, source: 'paste' })
       setSelectedCube(null) // custom + built-in cubes are mutually exclusive
     } catch (e) {
-      setParseMsg('Could not load card data: ' + e.message)
+      setParseMsg(t('lobby.couldNotLoadCardData', { msg: e.message }))
     }
     setParsingCube(false)
   }
@@ -231,7 +232,7 @@ export default function Lobby() {
     try {
       const decks = await listDecks()
       setMyDecks(decks)
-      if (!decks.length) setDecksMsg('No decks found in your Re:Union account.')
+      if (!decks.length) setDecksMsg(t('lobby.noDecksFound'))
     } catch (e) { setDecksMsg(e.message) }
     setLoadingDecks(false)
   }
@@ -251,12 +252,12 @@ export default function Lobby() {
     try {
       const lists = await Promise.all(chosen.map(d => getDeck(d.id ?? d.uuid).then(deckCardsToRefs)))
       const allRefs = lists.flat()
-      if (!allRefs.length) { setDecksMsg('Those decks have no cards.'); setLoadingDecks(false); return }
+      if (!allRefs.length) { setDecksMsg(t('lobby.decksHaveNoCards')); setLoadingDecks(false); return }
       const { cards, heroes, unresolved } = await resolveCubeRefs(allRefs, lang)
-      if (!cards.length) { setDecksMsg('No draftable cards resolved from those decks.'); setLoadingDecks(false); return }
+      if (!cards.length) { setDecksMsg(t('lobby.noDraftableFromDecks')); setLoadingDecks(false); return }
       const name = chosen.length === 1
-        ? (chosen[0].name || 'Re:Union deck')
-        : `${chosen.length} decks (${chosen.map(d => d.name || 'Untitled').slice(0, 3).join(', ')}${chosen.length > 3 ? '…' : ''})`
+        ? (chosen[0].name || t('lobby.reunionDeckFallback'))
+        : `${chosen.length} decks (${chosen.map(d => d.name || t('lobby.untitled')).slice(0, 3).join(', ')}${chosen.length > 3 ? '…' : ''})`
       setCustomCube({ name, cards, heroes, unresolved, source: 'reunion' })
       setSelectedCube(null) // custom + built-in cubes are mutually exclusive
     } catch (e) { setDecksMsg(e.message) }
@@ -341,9 +342,9 @@ export default function Lobby() {
 
   const handleStart = async () => {
     if (!roomState) return
-    if (draftMode === 'draft' && roomState.players.length < 2) { setStartError('Need at least 2 players to start a draft.'); return }
+    if (draftMode === 'draft' && roomState.players.length < 2) { setStartError(t('lobby.errNeed2Players')); return }
     if (draftMode === 'draft' && draftFormat === 'winston' && roomState.players.length !== 2) {
-      setStartError('Winston is a 2-player format. Start it with exactly 2 players.'); return
+      setStartError(t('lobby.errWinston2Players')); return
     }
     setLoading(true)
     setStartError('')
@@ -377,7 +378,7 @@ export default function Lobby() {
           let pool = poolRefs.map(r => byRef.get(r)).filter(Boolean)
           if (excludeBanlist) pool = filterBanned(pool)
           if (pool.length < SEALED_PACKS) {
-            setStartError(`This cube is too small for sealed (need at least ${SEALED_PACKS} cards).`); setLoading(false); return
+            setStartError(t('lobby.errCubeTooSmallSealed', { n: SEALED_PACKS })); setLoading(false); return
           }
           const sealedPacks = {}
           for (let i = 0; i < playerCount; i++) sealedPacks[String(i)] = generateCubeDraftPacks(pool, SEALED_PACKS)
@@ -386,14 +387,14 @@ export default function Lobby() {
             players: shuffledPlayers, phase: 'sealed', sealedPacks, version: 0,
           }
           const { error: upErr } = await updateRoom(code, state)
-          if (upErr) { setStartError('Could not start: ' + upErr.message); setLoading(false); return }
+          if (upErr) { setStartError(t('lobby.errCouldNotStart', { msg: upErr.message })); setLoading(false); return }
           return
         }
 
         // Cube sealed — curated pool; boosters drawn from the whole cube
         if (configTab === 'cubes' && selectedCube) {
           const cube = COMMUNITY_CUBES.find(c => c.id === selectedCube)
-          if (!cube) { setStartError('Cube not found.'); setLoading(false); return }
+          if (!cube) { setStartError(t('lobby.errCubeNotFound')); setLoading(false); return }
           // Include hero refs so their sets load (they fill each booster's slot 0 below).
           const rawCodes = [...new Set(setsForCube([...cube.refs, ...(cube.heroes ?? [])]))]
           const results = await Promise.all(rawCodes.map(s => fetchSet(s, lang).catch(() => [])))
@@ -406,7 +407,7 @@ export default function Lobby() {
           for (const c of extraCards) byRef.set(c.reference, c)
           let allCards = cube.refs.map(r => byRef.get(r)).filter(Boolean)
           if (excludeBanlist) allCards = filterBanned(allCards)
-          if (!allCards.length) { setStartError('Could not load cube card data.'); setLoading(false); return }
+          if (!allCards.length) { setStartError(t('lobby.errCouldNotLoadCube')); setLoading(false); return }
           // Hero-draft cubes keep heroes in a separate pool (not in refs). Sealed has no
           // hero-draft phase, so deal one hero into each booster's first slot instead —
           // unless free-hero, where every player's pool is seeded with one of each hero.
@@ -427,7 +428,7 @@ export default function Lobby() {
           }
           {
             const { error: upErr } = await updateRoom(code, state)
-            if (upErr) { setStartError('Could not start: ' + upErr.message); setLoading(false); return }
+            if (upErr) { setStartError(t('lobby.errCouldNotStart', { msg: upErr.message })); setLoading(false); return }
           }
           return
         }
@@ -438,12 +439,12 @@ export default function Lobby() {
           ? { [selectedPreset]: SEALED_PACKS }
           : Object.fromEntries(Object.entries(selectedSets).filter(([, n]) => n > 0))
         const setCodes = Object.keys(mix)
-        if (!setCodes.length) { setStartError('Select a set.'); setLoading(false); return }
+        if (!setCodes.length) { setStartError(t('lobby.errSelectSet')); setLoading(false); return }
         const fetched = await Promise.all(setCodes.map(async s => [s, await fetchSet(s, lang).catch(() => [])]))
         const cardsBySet = Object.fromEntries(
           excludeBanlist ? fetched.map(([s, c]) => [s, filterBanned(c)]) : fetched
         )
-        if (!Object.values(cardsBySet).some(c => c.length)) { setStartError('No cards loaded.'); setLoading(false); return }
+        if (!Object.values(cardsBySet).some(c => c.length)) { setStartError(t('lobby.errNoCardsLoaded')); setLoading(false); return }
         const apiCodes = [...new Set(setCodes.map(apiSetCode))]
         const freeHeroPool = freeHero ? uniqueHeroRefs(Object.values(cardsBySet).flat()) : []
         const rawUniquesBySet = addUniques ? await getUniquePools(setCodes) : {}
@@ -460,7 +461,7 @@ export default function Lobby() {
         }
         {
           const { error: upErr } = await updateRoom(code, state)
-          if (upErr) { setStartError('Could not start: ' + upErr.message); setLoading(false); return }
+          if (upErr) { setStartError(t('lobby.errCouldNotStart', { msg: upErr.message })); setLoading(false); return }
         }
         return
       }
@@ -488,7 +489,7 @@ export default function Lobby() {
         const cardPool = cardRefs.map(r => byRef.get(r)).filter(Boolean)
         const totalPacks = playerCount * bpp
         if (cardPool.length < totalPacks) {
-          setStartError(`This cube is too small for ${playerCount} players. Needs at least ${totalPacks} non-hero cards (has ${cardPool.length}).`)
+          setStartError(t('lobby.errCubeTooSmallPlayers', { players: playerCount, needed: totalPacks, have: cardPool.length }))
           setLoading(false); return
         }
         const packs = generateCubeDraftPacks(cardPool, totalPacks)
@@ -499,17 +500,17 @@ export default function Lobby() {
           shuffledPlayers, packs, heroPool
         )
         const { error: upErr } = await updateRoom(code, state)
-        if (upErr) { setStartError('Could not start: ' + upErr.message); setLoading(false); return }
+        if (upErr) { setStartError(t('lobby.errCouldNotStart', { msg: upErr.message })); setLoading(false); return }
         return
       }
 
       // Cube mode — fetch card data and apply booster rules
       if (configTab === 'cubes' && selectedCube) {
         const cube = COMMUNITY_CUBES.find(c => c.id === selectedCube)
-        if (!cube) { setStartError('Cube not found.'); setLoading(false); return }
+        if (!cube) { setStartError(t('lobby.errCubeNotFound')); setLoading(false); return }
         const maxPlayers = cube.maxPlayers ?? 4
         if (cube.heroDraft && (playerCount < 2 || playerCount > maxPlayers)) {
-          setStartError(`This cube supports 2-${maxPlayers} players.`); setLoading(false); return
+          setStartError(t('lobby.errCubeSupportsPlayers', { n: maxPlayers })); setLoading(false); return
         }
         // Include the hero refs so their sets load too (heroes are drafted in-app).
         const setCodes = [...new Set(setsForCube([...cube.refs, ...(cube.heroes ?? [])]))]
@@ -530,7 +531,7 @@ export default function Lobby() {
           const uniqueCards = await fetchUniques([...cube.refs, ...(cube.heroes ?? [])].filter(needsCardApi), lang)
           for (const c of uniqueCards) byRef.set(c.reference, c)
           const allCards = cube.refs.map(r => byRef.get(r)).filter(Boolean)
-          if (!allCards.length) { setStartError('Could not load cube card data.'); setLoading(false); return }
+          if (!allCards.length) { setStartError(t('lobby.errCouldNotLoadCube')); setLoading(false); return }
           // Winston/Rotisserie flatten every booster into ONE shared pool, so the per-booster
           // recipe (which recycles cards across boosters to hit its 3C/8R/1U quota) would inject
           // duplicates. For those formats deal the cube's multiset without recycling instead.
@@ -544,7 +545,7 @@ export default function Lobby() {
         } else {
           const cubeRefSet = new Set(cube.refs)
           const allCards = results.flat().filter(c => cubeRefSet.has(c.reference))
-          if (!allCards.length) { setStartError('Could not load cube card data.'); setLoading(false); return }
+          if (!allCards.length) { setStartError(t('lobby.errCouldNotLoadCube')); setLoading(false); return }
           packs = generateAllPacks(allCards, playerCount, bpp, { includeHeroes: packHeroes, cubeMode: true })
           // 'free'/'draft' on a non-heroDraft cube use the HERO cards within the pool.
           const hh = resolveDraftHeroes(uniqueHeroRefs(allCards), playerCount, heroMode)
@@ -563,7 +564,7 @@ export default function Lobby() {
         )
         {
           const { error: upErr } = await updateRoom(code, state)
-          if (upErr) { setStartError('Could not start: ' + upErr.message); setLoading(false); return }
+          if (upErr) { setStartError(t('lobby.errCouldNotStart', { msg: upErr.message })); setLoading(false); return }
         }
         return
       }
@@ -571,7 +572,7 @@ export default function Lobby() {
       // Custom pool mode — same booster rules
       if (customPoolText.trim()) {
         const refs = customPoolText.trim().split(/\s+/).filter(r => r.startsWith('ALT_'))
-        if (!refs.length) { setStartError('No valid card references found in custom pool.'); setLoading(false); return }
+        if (!refs.length) { setStartError(t('lobby.errNoValidRefs')); setLoading(false); return }
         const rawCodes = [...new Set(refs.map(r => r.split('_')[1]).filter(Boolean))]
         const results = await Promise.all(rawCodes.map(s => fetchSet(s, lang).catch(() => [])))
         const refSet = new Set(refs)
@@ -588,7 +589,7 @@ export default function Lobby() {
         )
         {
           const { error: upErr } = await updateRoom(code, state)
-          if (upErr) { setStartError('Could not start: ' + upErr.message); setLoading(false); return }
+          if (upErr) { setStartError(t('lobby.errCouldNotStart', { msg: upErr.message })); setLoading(false); return }
         }
         return
       }
@@ -600,18 +601,18 @@ export default function Lobby() {
       if (configTab === 'multiset') {
         const mix = Object.fromEntries(Object.entries(multiSetMix).filter(([, n]) => n > 0))
         const setCodes = Object.keys(mix)
-        if (!setCodes.length) { setStartError('Select at least one set.'); setLoading(false); return }
+        if (!setCodes.length) { setStartError(t('lobby.errSelectAtLeastOneSet')); setLoading(false); return }
         const total = Object.values(mix).reduce((a, b) => a + b, 0)
         const target = effectiveEqualPacks ? bpp : playerCount * bpp
         if (total !== target) {
           setStartError(effectiveEqualPacks
-            ? `This mode wants ${bpp} packs per player. You have ${total}.`
-            : `The bag needs exactly ${target} boosters (${playerCount} × ${bpp}). You have ${total}.`)
+            ? t('lobby.errPacksPerPlayer', { bpp, total })
+            : t('lobby.errBagNeedsExactly', { target, players: playerCount, bpp, total }))
           setLoading(false); return
         }
         const fetched = await Promise.all(setCodes.map(async s => [s, await fetchSet(s, lang).catch(() => [])]))
         const cardsBySet = Object.fromEntries(fetched)
-        if (!Object.values(cardsBySet).some(c => c.length)) { setStartError('No cards loaded. Check set selection.'); setLoading(false); return }
+        if (!Object.values(cardsBySet).some(c => c.length)) { setStartError(t('lobby.errNoCardsLoadedCheck')); setLoading(false); return }
         const uniquesBySet = addUniques ? await getUniquePools(setCodes) : {}
         const uniqueOpts = { uniquesBySet, randomUniqueRate: addUniques ? UNIQUE_RATE : 0 }
         const packs = effectiveEqualPacks
@@ -625,7 +626,7 @@ export default function Lobby() {
         )
         {
           const { error: upErr } = await updateRoom(code, state)
-          if (upErr) { setStartError('Could not start: ' + upErr.message); setLoading(false); return }
+          if (upErr) { setStartError(t('lobby.errCouldNotStart', { msg: upErr.message })); setLoading(false); return }
         }
         return
       }
@@ -633,7 +634,7 @@ export default function Lobby() {
       // Preset draft — 4 packs of the one selected set per player
       const setsToUse = resolveConfig(playerCount)
       if (!setsToUse || !Object.keys(setsToUse).filter(k => setsToUse[k] > 0).length) {
-        setStartError('Select a set to draft from.')
+        setStartError(t('lobby.errSelectSetToDraft'))
         setLoading(false)
         return
       }
@@ -641,7 +642,7 @@ export default function Lobby() {
       const setCodes = Object.keys(setsToUse).filter(k => setsToUse[k] > 0)
       const results = await Promise.all(setCodes.map(s => fetchSet(s, lang)))
       const allCards = results.flat()
-      if (!allCards.length) { setStartError('No cards loaded. Check set selection.'); setLoading(false); return }
+      if (!allCards.length) { setStartError(t('lobby.errNoCardsLoadedCheck')); setLoading(false); return }
 
       const uniquePool = addUniques ? Object.values(await getUniquePools(setCodes)).flat() : []
       const packs = generateAllPacks(allCards, playerCount, bpp, { includeHeroes: packHeroes, uniquePool, randomUniqueRate: addUniques ? UNIQUE_RATE : 0 })
@@ -651,15 +652,15 @@ export default function Lobby() {
         shuffledPlayers, packs, heroPool
       )
       const { error: upErr } = await updateRoom(code, state)
-      if (upErr) { setStartError('Could not start: ' + upErr.message); setLoading(false); return }
+      if (upErr) { setStartError(t('lobby.errCouldNotStart', { msg: upErr.message })); setLoading(false); return }
     } catch (err) {
-      setStartError('Error starting draft: ' + err.message)
+      setStartError(t('lobby.errStartingDraft', { msg: err.message }))
       setLoading(false)
     }
   }
 
   if (!roomState || !me) {
-    return <div className="min-h-screen flex items-center justify-center text-muted">Loading room…</div>
+    return <div className="min-h-screen flex items-center justify-center text-muted">{t('lobby.loadingRoom')}</div>
   }
 
   const isHost = me.isHost
@@ -676,11 +677,29 @@ export default function Lobby() {
   // Short recap of the chosen card source, shown in the wizard header so the host can see
   // their earlier picks while on a later step.
   const cardSummary =
-    (draftMode === 'draft' && customPoolText.trim()) ? 'Custom pool'
+    (draftMode === 'draft' && customPoolText.trim()) ? t('lobby.customPool')
     : configTab === 'cubes' ? (customCube?.name ?? COMMUNITY_CUBES.find(c => c.id === selectedCube)?.name ?? null)
     : configTab === 'presets' ? (SETS.find(s => s.code === selectedPreset)?.name ?? null)
-    : (configTab === 'multiset' || configTab === 'advanced') ? 'Multi-Set'
+    : (configTab === 'multiset' || configTab === 'advanced') ? t('lobby.tabMultiSet')
     : null
+
+  // Wizard step labels + tab labels — computed here (not module-level) since they need t().
+  const wizardStepLabels = [t('lobby.stepHowToPlay'), t('lobby.stepCards'), t('lobby.stepSettings')]
+  const tabLabels = { presets: t('lobby.tabPresets'), cubes: t('lobby.tabCubes'), advanced: t('lobby.tabMultiSet'), multiset: t('lobby.tabMultiSet') }
+
+  // Describes a loaded cube's card/hero/unresolved counts as ready-to-render label
+  // fragments (see the paste + Re:Union confirmation blocks below).
+  function describeLoadedCube(cube) {
+    return {
+      cards: tc('lobby.cardCount', cube.cards.length),
+      heroesPart: cube.heroes.length > 0 ? tc('lobby.heroesPart', cube.heroes.length) : '',
+      heroDraftPart: cube.heroes.length > 0
+        ? (new Set(cube.heroes).size >= roomState.players.length ? t('lobby.heroesDraftedInApp') : t('lobby.tooFewHeroesFallback'))
+        : '',
+      unresolvedPart: cube.unresolved.length > 0 ? t('lobby.unresolvedPart', { n: cube.unresolved.length }) : '',
+    }
+  }
+  const loadedDesc = customCube ? describeLoadedCube(customCube) : null
 
   // Keep the alternate formats expanded if one of them is the current pick.
   const otherModesExpanded = showOtherModes || OTHER_MODE_IDS.includes(mode)
@@ -695,11 +714,11 @@ export default function Lobby() {
           <span className={`w-4 h-4 rounded-full border shrink-0 flex items-center justify-center ${active ? 'border-accent' : 'border-faint'}`}>
             {active && <span className="w-2 h-2 rounded-full bg-accent" />}
           </span>
-          <span className={`text-sm font-semibold ${active ? 'text-ink' : 'text-ink2'}`}>{m.name}</span>
-          <span className="text-[10px] uppercase tracking-wide text-faint border border-line rounded px-1 py-0.5">{m.players} players</span>
-          {active && needs2 && <span className="ml-auto text-[10px] uppercase tracking-wide text-accent2">Needs exactly 2</span>}
+          <span className={`text-sm font-semibold ${active ? 'text-ink' : 'text-ink2'}`}>{t(`lobby.modes.${m.id}.name`)}</span>
+          <span className="text-[10px] uppercase tracking-wide text-faint border border-line rounded px-1 py-0.5">{t('lobby.playersSuffix', { n: m.players })}</span>
+          {active && needs2 && <span className="ml-auto text-[10px] uppercase tracking-wide text-accent2">{t('lobby.needsExactly2')}</span>}
         </div>
-        <p className="text-xs text-faint mt-1.5 leading-relaxed pl-6">{m.blurb}</p>
+        <p className="text-xs text-faint mt-1.5 leading-relaxed pl-6">{t(`lobby.modes.${m.id}.blurb`)}</p>
       </button>
     )
   }
@@ -714,26 +733,26 @@ export default function Lobby() {
         <div className="bg-surface rounded-xl p-6">
           <div className="flex gap-6 items-center">
             <div className="flex-1">
-              <p className="text-xs text-faint uppercase tracking-widest mb-1">Room code</p>
+              <p className="text-xs text-faint uppercase tracking-widest mb-1">{t('lobby.roomCode')}</p>
               <p className="text-4xl sm:text-5xl font-mono font-bold tracking-widest text-accent">{code}</p>
-              <p className="text-sm text-faint mt-2">Share this code or the link below</p>
+              <p className="text-sm text-faint mt-2">{t('lobby.shareCode')}</p>
               <div className="flex gap-2 mt-3">
                 <input readOnly value={joinUrl}
                   className="flex-1 bg-surface2 border border-line rounded-lg px-3 py-1.5 text-xs text-muted font-mono min-w-0" />
                 <button onClick={copyLink}
                   className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors shrink-0 ${
                     linkCopied ? 'bg-green-600 text-white' : 'bg-surface3 hover:bg-surface3 text-ink2'}`}>
-                  {linkCopied ? '✓ Copied' : 'Copy'}
+                  {linkCopied ? t('lobby.copied') : t('lobby.copy')}
                 </button>
               </div>
             </div>
-            <img src={qrUrl} alt="QR code" className="hidden sm:block w-[120px] h-[120px] rounded-lg shrink-0" />
+            <img src={qrUrl} alt={t('lobby.qrCodeAlt')} className="hidden sm:block w-[120px] h-[120px] rounded-lg shrink-0" />
           </div>
         </div>
 
         {/* Players list */}
         <div className="bg-surface rounded-xl p-6">
-          <h2 className="font-semibold mb-3 text-ink2">Players ({roomState.players.length})</h2>
+          <h2 className="font-semibold mb-3 text-ink2">{t('lobby.players', { n: roomState.players.length })}</h2>
           <ul className="space-y-2">
             {roomState.players.map((p, i) => (
               <li key={p.id} className="flex items-center gap-3 text-sm">
@@ -741,16 +760,16 @@ export default function Lobby() {
                   {i + 1}
                 </span>
                 <span className="font-medium">{p.name}</span>
-                {i === 0 && <span className="text-xs text-accent ml-auto">Host</span>}
-                {p.id === me.id && <span className="text-xs text-faint ml-1">(you)</span>}
+                {i === 0 && <span className="text-xs text-accent ml-auto">{t('lobby.host')}</span>}
+                {p.id === me.id && <span className="text-xs text-faint ml-1">{t('lobby.you')}</span>}
               </li>
             ))}
           </ul>
           {roomState.players.length < 2 && (
             <p className="text-xs text-faint mt-3">
               {isHost && draftMode === 'sealed'
-                ? 'You can start sealed solo, or wait for others to join.'
-                : 'Waiting for more players to join…'}
+                ? t('lobby.startSealedSoloHint')
+                : t('lobby.waitingForPlayers')}
             </p>
           )}
         </div>
@@ -760,7 +779,7 @@ export default function Lobby() {
           <div className="bg-surface rounded-xl overflow-hidden">
             {/* Wizard progress: How to play → Cards → Settings */}
             <div className="flex border-b border-line">
-              {WIZARD_STEPS.map((label, i) => {
+              {wizardStepLabels.map((label, i) => {
                 const n = i + 1, active = wizardStep === n, done = wizardStep > n
                 return (
                   <div key={label}
@@ -777,9 +796,9 @@ export default function Lobby() {
             {/* Recap of earlier picks, so the host sees their mode/cards on later steps */}
             {wizardStep > 1 && (
               <div className="px-6 py-2 border-b border-line bg-surface2/40 text-xs flex flex-wrap items-center gap-x-4 gap-y-0.5">
-                <span><span className="text-faint">Mode:</span> <span className="text-ink2 font-medium">{MODE_BY_ID[mode]?.name}</span></span>
+                <span><span className="text-faint">{t('lobby.recapMode')}</span> <span className="text-ink2 font-medium">{t(`lobby.modes.${mode}.name`)}</span></span>
                 {wizardStep > 2 && cardSummary && (
-                  <span><span className="text-faint">Cards:</span> <span className="text-ink2 font-medium">{cardSummary}</span></span>
+                  <span><span className="text-faint">{t('lobby.recapCards')}</span> <span className="text-ink2 font-medium">{cardSummary}</span></span>
                 )}
               </div>
             )}
@@ -793,7 +812,7 @@ export default function Lobby() {
                   <button type="button" onClick={() => setShowOtherModes(v => !v)}
                     className="w-full flex items-center gap-1.5 px-3 py-2 text-sm text-muted hover:text-ink transition-colors">
                     <span className="text-xs">{otherModesExpanded ? '▼' : '▶'}</span>
-                    Other draft options
+                    {t('lobby.otherDraftOptions')}
                   </button>
                   {otherModesExpanded && OTHER_MODE_IDS.map(id => modeButton(MODE_BY_ID[id]))}
                 </div>
@@ -803,13 +822,13 @@ export default function Lobby() {
               {wizardStep === 2 && (<>
               {/* Card-source tabs */}
               <div className="flex border-b border-line -mx-6 -mt-6 mb-1">
-                {(draftMode === 'draft' ? ['presets', 'cubes', 'multiset'] : ['presets', 'cubes', 'advanced']).map(t => (
-                  <button key={t} onClick={() => setConfigTab(t)}
+                {(draftMode === 'draft' ? ['presets', 'cubes', 'multiset'] : ['presets', 'cubes', 'advanced']).map(tabId => (
+                  <button key={tabId} onClick={() => setConfigTab(tabId)}
                     className={`flex-1 py-3 text-sm font-medium transition-colors ${
-                      configTab === t
+                      configTab === tabId
                         ? 'text-accent border-b-2 border-accent2 bg-surface'
                         : 'text-faint hover:text-ink2 bg-surface2/50'}`}>
-                    {TAB_LABELS[t] ?? t}
+                    {tabLabels[tabId] ?? tabId}
                   </button>
                 ))}
               </div>
@@ -818,10 +837,10 @@ export default function Lobby() {
                 <div>
                   <p className="text-sm text-muted mb-3">
                     {isSealed
-                      ? 'Select a set. Each player receives 7 packs of that set.'
+                      ? t('lobby.presetsHintSealed')
                       : mode === 'winston'
-                        ? `Select a set. ${bpp * roomState.players.length} boosters are pooled and split between the players.`
-                        : `Select a set. Each player drafts ${bpp} packs of that set.`}
+                        ? t('lobby.presetsHintWinston', { n: bpp * roomState.players.length })
+                        : t('lobby.presetsHintDraft', { n: bpp })}
                   </p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {SETS.filter(s => !s.hidden).map(set => {
@@ -871,7 +890,7 @@ export default function Lobby() {
                             <div className="flex items-center justify-between gap-3">
                               <div>
                                 <p className="font-display text-base text-ink">{featured.name}</p>
-                                <p className="text-xs text-faint">by {featured.author} · {featured.cardCount} cards</p>
+                                <p className="text-xs text-faint">{t('lobby.byAuthorCards', { author: featured.author, cards: tc('lobby.cardCount', featured.cardCount) })}</p>
                               </div>
                               <span className="w-2.5 h-2.5 rounded-full bg-accent shrink-0" />
                             </div>
@@ -881,18 +900,18 @@ export default function Lobby() {
                             <div className="flex items-center gap-3 pt-1">
                               <button onClick={() => { setSelectedCube(featured.id); setCustomCube(null) }}
                                 className="px-3 py-1.5 rounded-lg text-sm font-medium bg-accent hover:bg-accent2 text-on-accent transition-colors">
-                                Use this cube
+                                {t('lobby.useThisCube')}
                               </button>
-                              <button onClick={() => setPreviewCube(featured)} className="text-xs text-accent hover:text-accent2 transition-colors">Preview →</button>
+                              <button onClick={() => setPreviewCube(featured)} className="text-xs text-accent hover:text-accent2 transition-colors">{t('lobby.previewArrow')}</button>
                             </div>
                           </div>
                         ) : (
-                          <p className="text-sm text-muted">A featured community cube, refreshed each month. Coming soon. 👀</p>
+                          <p className="text-sm text-muted">{t('lobby.spotlightComingSoon')}</p>
                         )}
                       </div>
                     )
                   })()}
-                  <p className="text-sm text-muted">Community cubes: curated card pools ready to draft.</p>
+                  <p className="text-sm text-muted">{t('lobby.communityCubesHint')}</p>
                   {COMMUNITY_CUBES.map(cube => {
                     const selected = selectedCube === cube.id
                     return (
@@ -904,7 +923,7 @@ export default function Lobby() {
                           <div className="flex items-start justify-between gap-3">
                             <div>
                               <p className="font-semibold text-sm text-ink">{cube.name}</p>
-                              <p className="text-xs text-faint mt-0.5">by {cube.author} · {cube.cardCount} cards</p>
+                              <p className="text-xs text-faint mt-0.5">{t('lobby.byAuthorCards', { author: cube.author, cards: tc('lobby.cardCount', cube.cardCount) })}</p>
                               <p className="text-xs text-muted mt-1.5 leading-relaxed">{cube.description}</p>
                             </div>
                             {selected && (
@@ -915,7 +934,7 @@ export default function Lobby() {
                         <div className="px-4 pb-3">
                           <button onClick={() => setPreviewCube(cube)}
                             className="text-xs text-accent hover:text-accent2 transition-colors">
-                            Preview cube →
+                            {t('lobby.previewCubeArrow')}
                           </button>
                         </div>
                       </div>
@@ -926,17 +945,17 @@ export default function Lobby() {
                   <div className={`rounded-xl border-2 p-4 space-y-3 transition-all ${
                     customCube?.source === 'reunion' ? 'border-accent bg-accent/5' : 'border-dashed border-line bg-surface2/40'}`}>
                     <div className="flex items-center justify-between">
-                      <p className="font-semibold text-sm text-ink">⬇ Load from your Re:Union decks</p>
+                      <p className="font-semibold text-sm text-ink">{t('lobby.loadFromReunion')}</p>
                       {customCube?.source === 'reunion' && (
                         <span className="w-5 h-5 rounded-full bg-accent flex items-center justify-center text-xs text-on-accent font-bold shrink-0">✓</span>
                       )}
                     </div>
                     {!user ? (
                       <div className="space-y-2">
-                        <p className="text-xs text-faint leading-relaxed">Connect your Re:Union account to pick one of your decks and draft or seal with it as a cube.</p>
+                        <p className="text-xs text-faint leading-relaxed">{t('lobby.connectReunionHint')}</p>
                         <button onClick={() => login()}
                           className="px-3 py-1.5 rounded-lg text-sm font-medium bg-surface3 hover:bg-surface3 text-ink transition-colors">
-                          Connect Re:Union
+                          {t('reunion.connect')}
                         </button>
                       </div>
                     ) : (
@@ -944,9 +963,9 @@ export default function Lobby() {
                         <div className="flex items-center gap-3">
                           <button onClick={handleLoadDecks} disabled={loadingDecks}
                             className="px-3 py-1.5 rounded-lg text-sm font-medium bg-surface3 hover:bg-surface3 disabled:opacity-40 text-ink transition-colors">
-                            {loadingDecks ? 'Loading…' : myDecks ? 'Refresh decks' : 'Load my decks'}
+                            {loadingDecks ? t('lobby.loadingEllipsis') : myDecks ? t('lobby.refreshDecks') : t('lobby.loadMyDecks')}
                           </button>
-                          <span className="text-xs text-faint">as {user.pseudo}</span>
+                          <span className="text-xs text-faint">{t('lobby.asPseudo', { pseudo: user.pseudo })}</span>
                         </div>
                         {myDecks && myDecks.length > 0 && (() => {
                           // Filter client-side by name + format. The list API has no card
@@ -960,7 +979,7 @@ export default function Lobby() {
                           return (
                             <div className="space-y-2">
                               <input value={deckSearch} onChange={e => setDeckSearch(e.target.value)}
-                                placeholder={`Search ${myDecks.length} deck${myDecks.length !== 1 ? 's' : ''} by name…`}
+                                placeholder={tc('lobby.searchDecksPlaceholder', myDecks.length)}
                                 className="w-full bg-surface2 border border-line rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-accent" />
                               {formats.length > 1 && (
                                 <div className="flex flex-wrap gap-1">
@@ -968,7 +987,7 @@ export default function Lobby() {
                                     <button key={f} onClick={() => setDeckFormat(f)}
                                       className={`px-2 py-0.5 rounded text-xs capitalize transition-colors ${
                                         deckFormat === f ? 'bg-accent text-on-accent font-bold' : 'bg-surface2 text-muted hover:text-ink'}`}>
-                                      {f === 'all' ? 'All' : f.replace('_', ' ')}
+                                      {f === 'all' ? t('lobby.filterAll') : f.replace('_', ' ')}
                                     </button>
                                   ))}
                                 </div>
@@ -982,37 +1001,35 @@ export default function Lobby() {
                                         checked ? 'bg-accent/20 text-accent2' : 'bg-surface2 hover:bg-surface3 text-ink'}`}>
                                       <span className={`w-4 h-4 rounded border shrink-0 flex items-center justify-center text-[10px] ${
                                         checked ? 'bg-accent border-accent text-on-accent' : 'border-line'}`}>{checked ? '✓' : ''}</span>
-                                      <span className="truncate flex-1">{d.name || 'Untitled deck'}</span>
+                                      <span className="truncate flex-1">{d.name || t('lobby.untitledDeck')}</span>
                                       {d.format && <span className="text-[10px] uppercase tracking-wide text-faint shrink-0">{d.format.replace('_', ' ')}</span>}
                                     </button>
                                   )
                                 })}
-                                {!shown.length && <p className="text-xs text-faint px-1 py-2">No decks match this filter.</p>}
+                                {!shown.length && <p className="text-xs text-faint px-1 py-2">{t('lobby.noDecksMatch')}</p>}
                               </div>
                               <div className="flex items-center gap-3">
                                 <button onClick={handleLoadSelectedDecks} disabled={loadingDecks || !selectedDeckIds.length}
                                   className="px-3 py-1.5 rounded-lg text-sm font-medium bg-accent hover:bg-accent2 disabled:opacity-40 text-on-accent transition-colors">
-                                  {loadingDecks ? 'Loading…' : `Load ${selectedDeckIds.length || ''} deck${selectedDeckIds.length === 1 ? '' : 's'} as cube`.replace('  ', ' ')}
+                                  {loadingDecks ? t('lobby.loadingEllipsis') : selectedDeckIds.length === 0 ? t('lobby.loadDecksAsCubeZero') : tc('lobby.loadDecksAsCube', selectedDeckIds.length)}
                                 </button>
                                 {selectedDeckIds.length > 0 && (
-                                  <button onClick={() => setSelectedDeckIds([])} className="text-xs text-faint hover:text-ink2 transition-colors">Clear selection</button>
+                                  <button onClick={() => setSelectedDeckIds([])} className="text-xs text-faint hover:text-ink2 transition-colors">{t('lobby.clearSelection')}</button>
                                 )}
                               </div>
-                              <p className="text-[11px] text-faint">Tick one or more decks. Multiple decks merge into a single, bigger cube.</p>
+                              <p className="text-[11px] text-faint">{t('lobby.tickDecksHint')}</p>
                             </div>
                           )
                         })()}
-                        {customCube?.source === 'reunion' && (
+                        {customCube?.source === 'reunion' && loadedDesc && (
                           <div className="text-xs space-y-1.5">
                             <p className="text-green-400">
-                              ✓ Loaded “{customCube.name}”: {customCube.cards.length} card{customCube.cards.length !== 1 ? 's' : ''}
-                              {customCube.heroes.length > 0 && ` · ${customCube.heroes.length} hero${customCube.heroes.length !== 1 ? 'es' : ''}`}
-                              {customCube.unresolved.length > 0 && ` (${customCube.unresolved.length} unresolved, skipped)`}.
+                              {t('lobby.loadedCubeNameOne', { name: customCube.name, cards: loadedDesc.cards, heroesPart: loadedDesc.heroesPart, unresolvedPart: loadedDesc.unresolvedPart })}
                             </p>
                             <div className="flex items-center gap-3">
                               <button onClick={() => setPreviewCube({ name: customCube.name, author: 'Re:Union', cardCount: customCube.cards.length + customCube.heroes.length, refs: [...customCube.cards, ...customCube.heroes] })}
-                                className="text-accent hover:text-accent2 transition-colors">Preview cube →</button>
-                              <button onClick={() => setCustomCube(null)} className="text-faint hover:text-ink2 transition-colors">Clear</button>
+                                className="text-accent hover:text-accent2 transition-colors">{t('lobby.previewCubeArrow')}</button>
+                              <button onClick={() => setCustomCube(null)} className="text-faint hover:text-ink2 transition-colors">{t('lobby.clear')}</button>
                             </div>
                           </div>
                         )}
@@ -1025,18 +1042,14 @@ export default function Lobby() {
                   <div className={`rounded-xl border-2 p-4 space-y-3 transition-all ${
                     customCube?.source === 'paste' ? 'border-accent bg-accent/5' : 'border-dashed border-line bg-surface2/40'}`}>
                     <div className="flex items-center justify-between">
-                      <p className="font-semibold text-sm text-ink">＋ Paste your own cube</p>
+                      <p className="font-semibold text-sm text-ink">{t('lobby.pasteYourCube')}</p>
                       {customCube?.source === 'paste' && (
                         <span className="w-5 h-5 rounded-full bg-accent flex items-center justify-center text-xs text-on-accent font-bold shrink-0">✓</span>
                       )}
                     </div>
-                    <p className="text-xs text-faint leading-relaxed">
-                      One card per line as <span className="font-mono text-muted">qty REF</span> (e.g.{' '}
-                      <span className="font-mono text-muted">3 ALT_CORE_B_MU_06_R2</span>), the same format as Export.
-                      Heroes in the list are detected automatically and snake-drafted in-app. Nothing is saved; keep your own list.
-                    </p>
+                    <p className="text-xs text-faint leading-relaxed">{t('lobby.pasteHint')}</p>
                     <input value={customCubeName} onChange={e => setCustomCubeName(e.target.value)}
-                      placeholder="Cube name (optional)"
+                      placeholder={t('lobby.cubeNamePlaceholder')}
                       className="w-full bg-surface2 border border-line rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-accent" />
                     <textarea value={customCubeText} onChange={e => setCustomCubeText(e.target.value)} rows={6}
                       placeholder={"1 ALT_CORE_B_YZ_03_C\n3 ALT_CORE_B_MU_06_R2\n..."}
@@ -1044,36 +1057,30 @@ export default function Lobby() {
                     <div className="flex items-center gap-3">
                       <button onClick={handleParseCube} disabled={parsingCube || !customCubeText.trim()}
                         className="px-3 py-1.5 rounded-lg text-sm font-medium bg-surface3 hover:bg-surface3 disabled:opacity-40 text-ink transition-colors">
-                        {parsingCube ? 'Parsing…' : customCube?.source === 'paste' ? 'Re-parse' : 'Parse & preview'}
+                        {parsingCube ? t('lobby.parsing') : customCube?.source === 'paste' ? t('lobby.reparse') : t('lobby.parseAndPreview')}
                       </button>
                       {customCube?.source === 'paste' && (
                         <>
                           <button onClick={() => setPreviewCube({ name: customCube.name, author: 'You', cardCount: customCube.cards.length + customCube.heroes.length, refs: [...customCube.cards, ...customCube.heroes] })}
                             className="text-xs text-accent hover:text-accent2 transition-colors">
-                            Preview →
+                            {t('lobby.previewArrow')}
                           </button>
                           <button onClick={() => { setCustomCube(null); setParseMsg('') }}
                             className="text-xs text-faint hover:text-ink2 transition-colors ml-auto">
-                            Clear
+                            {t('lobby.clear')}
                           </button>
                         </>
                       )}
                     </div>
                     {parseMsg && <p className="text-xs text-red-400">{parseMsg}</p>}
-                    {customCube?.source === 'paste' && (
+                    {customCube?.source === 'paste' && loadedDesc && (
                       <div className="text-xs space-y-1">
                         <p className="text-green-400">
-                          ✓ {customCube.cards.length} card{customCube.cards.length !== 1 ? 's' : ''}
-                          {customCube.heroes.length > 0 && ` · ${customCube.heroes.length} hero${customCube.heroes.length !== 1 ? 'es' : ''}`} loaded
-                          {customCube.heroes.length > 0 && (
-                            new Set(customCube.heroes).size >= roomState.players.length
-                              ? ' (heroes drafted in-app)'
-                              : ' (too few heroes to draft in-app → dealt in packs)'
-                          )}.
+                          {tc('lobby.loadedCards', customCube.cards.length, { cards: loadedDesc.cards, heroesPart: loadedDesc.heroesPart, heroDraftPart: loadedDesc.heroDraftPart })}
                         </p>
                         {customCube.unresolved.length > 0 && (
                           <p className="text-accent">
-                            ⚠ {customCube.unresolved.length} reference{customCube.unresolved.length !== 1 ? 's' : ''} couldn't be resolved and {customCube.unresolved.length !== 1 ? 'were' : 'was'} skipped:{' '}
+                            {tc('lobby.unresolvedWarning', customCube.unresolved.length)}{' '}
                             <span className="font-mono break-all text-accent2">
                               {customCube.unresolved.slice(0, 8).join(', ')}{customCube.unresolved.length > 8 ? ` … (+${customCube.unresolved.length - 8})` : ''}
                             </span>
@@ -1094,12 +1101,12 @@ export default function Lobby() {
                     <button onClick={() => setShowCustomPool(!showCustomPool)}
                       className="text-sm text-muted hover:text-ink transition-colors flex items-center gap-1">
                       <span className="text-xs">{showCustomPool ? '▼' : '▶'}</span>
-                      Custom card pool
+                      {t('lobby.customCardPool')}
                     </button>
                     {showCustomPool && (
                       <div className="mt-3">
                         <p className="text-xs text-faint mb-2">
-                          Paste card references (one per line, starting with ALT_). Overrides set selection.
+                          {t('lobby.customPoolHint')}
                         </p>
                         <textarea
                           value={customPoolText}
@@ -1131,12 +1138,12 @@ export default function Lobby() {
                     <button onClick={() => setShowCustomPool(!showCustomPool)}
                       className="text-sm text-muted hover:text-ink transition-colors flex items-center gap-1">
                       <span className="text-xs">{showCustomPool ? '▼' : '▶'}</span>
-                      Custom card pool
+                      {t('lobby.customCardPool')}
                     </button>
                     {showCustomPool && (
                       <div className="mt-3">
                         <p className="text-xs text-faint mb-2">
-                          Paste card references (one per line, starting with ALT_). Overrides set selection.
+                          {t('lobby.customPoolHint')}
                         </p>
                         <textarea
                           value={customPoolText}
@@ -1177,14 +1184,14 @@ export default function Lobby() {
               {wizardStep > 1 && (
                 <button onClick={() => { setStartError(''); setWizardStep(s => s - 1) }} disabled={loading}
                   className="px-4 py-2 rounded-lg bg-surface2 hover:bg-surface3 disabled:opacity-40 text-ink2 text-sm font-medium transition-colors">
-                  Back
+                  {t('lobby.back')}
                 </button>
               )}
               {wizardStep < 3 ? (
                 <button onClick={() => { setStartError(''); setWizardStep(s => s + 1) }}
                   disabled={wizardStep === 2 && !poolReady}
                   className="flex-1 py-2.5 bg-accent hover:bg-accent2 disabled:opacity-40 text-on-accent font-bold rounded-lg transition-colors">
-                  Next
+                  {t('lobby.next')}
                 </button>
               ) : (
                 <button onClick={handleStart}
@@ -1192,7 +1199,7 @@ export default function Lobby() {
                     || (draftMode === 'draft' && roomState.players.length < 2)
                     || (draftFormat === 'winston' && roomState.players.length !== 2)}
                   className="flex-1 py-2.5 bg-accent hover:bg-accent2 disabled:opacity-40 text-on-accent font-bold rounded-lg transition-colors">
-                  {loading ? 'Generating packs…' : isSealed ? 'Start sealed' : 'Start draft'}
+                  {loading ? t('lobby.generatingPacks') : isSealed ? t('lobby.startSealed') : t('lobby.startDraft')}
                 </button>
               )}
             </div>
@@ -1201,7 +1208,7 @@ export default function Lobby() {
 
         {!isHost && (
           <div className="bg-surface rounded-xl p-6 text-center text-muted text-sm">
-            Waiting for the host to start the draft…
+            {t('lobby.waitingForHost')}
           </div>
         )}
       </div>

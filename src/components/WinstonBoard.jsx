@@ -5,6 +5,7 @@
 // to a player who shouldn't see them.
 
 import ZoomCard from './ZoomCard.jsx'
+import { useLang } from '../lib/i18n/i18n.jsx'
 
 function nextNonEmpty(piles, from) {
   for (let k = from; k < piles.length; k++) if (piles[k].length) return k
@@ -14,6 +15,7 @@ function nextNonEmpty(piles, from) {
 // A face-down pile/deck rendered as a stack of card backs with a big card count.
 // `highlight` rings the pile the active player is currently looking at.
 function FaceDown({ label, count, highlight }) {
+  const { tc } = useLang()
   const W = 'w-24 sm:w-28'
   return (
     <div className="flex flex-col items-center gap-2">
@@ -25,7 +27,7 @@ function FaceDown({ label, count, highlight }) {
           bg-gradient-to-br from-surface3 to-surface2 ${highlight ? 'border-accent ring-2 ring-accent/60' : 'border-line'}`}>
           <span className="text-3xl text-faint/25 font-display select-none leading-none">A</span>
           <span className="text-3xl sm:text-4xl font-bold text-ink leading-none tabular-nums">{count}</span>
-          <span className="text-[10px] text-faint uppercase tracking-widest">card{count !== 1 ? 's' : ''}</span>
+          <span className="text-[10px] text-faint uppercase tracking-widest">{tc('winstonBoard.cardCount', count).replace(/^\d+\s*/, '')}</span>
         </div>
       </div>
       <span className={`text-sm ${highlight ? 'text-accent font-semibold' : 'text-muted'}`}>{label}</span>
@@ -34,13 +36,14 @@ function FaceDown({ label, count, highlight }) {
 }
 
 export default function WinstonBoard({ state, myIndex, cardMap, isMyTurn, onAction, disabled }) {
+  const { t, tc } = useLang()
   const piles = state.piles ?? [[], [], []]
   const deckCount = state.deck?.length ?? 0
   const rawPeek = state.peekIndex ?? 0
   // Match the engine's normalization: if the stored peek pile is empty (end-game), the player
   // is really looking at the next non-empty pile.
   const peek = piles[rawPeek]?.length ? rawPeek : (nextNonEmpty(piles, rawPeek) === -1 ? rawPeek : nextNonEmpty(piles, rawPeek))
-  const opponent = state.players?.[myIndex === 0 ? 1 : 0]?.name ?? 'the other player'
+  const opponent = state.players?.[myIndex === 0 ? 1 : 0]?.name ?? t('winstonBoard.opponentFallback')
   const currentPile = piles[peek] ?? []
 
   // Passing is only offered when it does something distinct from taking: while the deck has
@@ -49,17 +52,17 @@ export default function WinstonBoard({ state, myIndex, cardMap, isMyTurn, onActi
   const isLastPile = nextNonEmpty(piles, peek + 1) === -1
   const canPass = deckCount > 0 || !isLastPile
   const passLabel = deckCount > 0
-    ? (peek >= piles.length - 1 ? 'Pass (draw blind from deck)' : 'Pass (add a card, next pile)')
-    : 'Pass to next pile'
+    ? (peek >= piles.length - 1 ? t('winstonBoard.passDrawBlind') : t('winstonBoard.passAddCard'))
+    : t('winstonBoard.passToNext')
 
   return (
     <div className="flex flex-col xl:flex-row xl:items-start gap-5 xl:gap-8">
       {/* Deck + piles (left) */}
       <div className="flex items-start gap-4 sm:gap-6 flex-wrap shrink-0">
-        <FaceDown label="Deck" count={deckCount} highlight={false} />
+        <FaceDown label={t('winstonBoard.deck')} count={deckCount} highlight={false} />
         <div className="w-px self-stretch bg-line hidden sm:block" />
         {piles.map((p, idx) => (
-          <FaceDown key={idx} label={`Pile ${idx + 1}`} count={p.length}
+          <FaceDown key={idx} label={t('winstonBoard.pile', { n: idx + 1 })} count={p.length}
             highlight={isMyTurn && idx === peek} />
         ))}
       </div>
@@ -69,20 +72,22 @@ export default function WinstonBoard({ state, myIndex, cardMap, isMyTurn, onActi
         {isMyTurn ? (
           <div className="bg-surface border border-accent/30 rounded-xl p-4 space-y-3">
             <p className="text-sm text-ink2">
-              You're looking at <span className="text-accent font-semibold">Pile {peek + 1}</span> ({currentPile.length} card{currentPile.length !== 1 ? 's' : ''}).
-              Only you can see it. <span className="text-faint">Click a card to view it full-size.</span>
+              {tc('winstonBoard.lookingAt', currentPile.length, {
+                pile: t('winstonBoard.pile', { n: peek + 1 }),
+                cards: tc('winstonBoard.cardCount', currentPile.length),
+              })}
             </p>
             {currentPile.length > 0 ? (
               <div className="flex flex-wrap gap-2">
                 {currentPile.map((ref, i) => <ZoomCard key={`${ref}-${i}`} ref_={ref} card={cardMap?.[ref]} width="w-32 sm:w-36" />)}
               </div>
             ) : (
-              <p className="text-sm text-faint">This pile is empty.</p>
+              <p className="text-sm text-faint">{t('winstonBoard.pileEmpty')}</p>
             )}
             <div className="flex gap-3 pt-1">
               <button onClick={() => onAction('take')} disabled={disabled || currentPile.length === 0}
                 className="px-4 py-2 bg-accent hover:bg-accent2 disabled:opacity-40 text-on-accent font-bold rounded-lg text-sm transition-colors">
-                Take this pile
+                {t('winstonBoard.takeThisPile')}
               </button>
               {canPass && (
                 <button onClick={() => onAction('decline')} disabled={disabled}
@@ -94,7 +99,7 @@ export default function WinstonBoard({ state, myIndex, cardMap, isMyTurn, onActi
           </div>
         ) : (
           <div className="bg-surface border border-line rounded-lg px-4 py-3 text-sm text-muted">
-            Waiting for <span className="text-ink">{opponent}</span> to take or pass… (piles stay hidden until your turn)
+            {t('winstonBoard.waitingForOpponent', { name: opponent })}
           </div>
         )}
 
@@ -103,9 +108,9 @@ export default function WinstonBoard({ state, myIndex, cardMap, isMyTurn, onActi
           <div className="bg-surface border border-accent/40 rounded-xl p-3 flex items-center gap-3">
             <ZoomCard ref_={state.lastBlind.ref} card={cardMap?.[state.lastBlind.ref]} width="w-28 sm:w-32" highlight />
             <div>
-              <p className="text-sm text-accent font-semibold">You drew this off the deck</p>
+              <p className="text-sm text-accent font-semibold">{t('winstonBoard.drewOffDeckTitle')}</p>
               <p className="text-xs text-faint mt-0.5">
-                {cardMap?.[state.lastBlind.ref]?.name ?? 'A random card'} went straight into your pool, unseen.
+                {t('winstonBoard.drewOffDeckBody', { name: cardMap?.[state.lastBlind.ref]?.name ?? t('winstonBoard.randomCardFallback') })}
               </p>
             </div>
           </div>

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { FACTIONS, FACTION_NAMES, FACTION_COLORS } from '../lib/cardData.js'
 import { FACTION_ICONS } from '../lib/assets.js'
 import { cardSorter, useZoomOrigin } from './PoolGrid.jsx'
+import { useLang } from '../lib/i18n/i18n.jsx'
 
 // One pool card: art grows in place on hover (deckbuilder-style); clicking drafts one copy.
 function RotisserieCard({ ref_, card, count, onPick, disabled }) {
@@ -36,8 +37,9 @@ function RotisserieCard({ ref_, card, count, onPick, disabled }) {
 // can't show a pool with duplicates) and PoolGrid (deckbuild +/- controls).
 export default function RotisserieGrid({ refs, cardMap, onPick, disabled }) {
   const [filterFactions, setFilterFactions] = useState([])
+  const { t } = useLang()
 
-  if (!refs?.length) return <div className="text-faint text-sm">The pool is empty.</div>
+  if (!refs?.length) return <div className="text-faint text-sm">{t('rotisserieGrid.poolEmpty')}</div>
 
   function toggleFaction(f) {
     setFilterFactions(prev => prev.includes(f) ? prev.filter(x => x !== f) : [...prev, f])
@@ -55,7 +57,7 @@ export default function RotisserieGrid({ refs, cardMap, onPick, disabled }) {
       <div className="flex gap-1.5 flex-wrap mb-3">
         <button onClick={() => setFilterFactions([])}
           className={`px-2.5 py-1 rounded text-xs transition-colors ${filterFactions.length === 0 ? 'bg-surface3 text-ink' : 'text-faint hover:text-ink2'}`}>
-          All
+          {t('common.all')}
         </button>
         {FACTIONS.map(f => (
           <button key={f} onClick={() => toggleFaction(f)}

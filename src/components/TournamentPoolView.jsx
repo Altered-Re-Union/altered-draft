@@ -3,6 +3,7 @@ import { fetchSet, fetchUniques, isUniqueRef } from '../lib/cardData.js'
 import { createDeck, updateDeck, toDeckCards, getDeck, deckCardsToRefs } from '../lib/decks.js'
 import { syncPoolDeck } from '../lib/tournamentApi.js'
 import { buildRandomDeck } from '../lib/randomDeck.js'
+import { useLang } from '../lib/i18n/i18n.jsx'
 import PoolGrid from './PoolGrid.jsx'
 import PackReveal from './PackReveal.jsx'
 import TopNav from './TopNav.jsx'
@@ -37,6 +38,7 @@ function revealKey(pool) {
  * add/remove, throttled to one call per 2s.
  */
 export default function TournamentPoolView({ title, load, reset }) {
+  const { t } = useLang()
   const [pool, setPool] = useState(null)
   const [cardMap, setCardMap] = useState({})
   const [deck, setDeck] = useState({})
@@ -95,19 +97,19 @@ export default function TournamentPoolView({ title, load, reset }) {
         setDeck({})
       }
     } catch (e) {
-      setError(e.message || 'Could not load your pool.')
+      setError(e.message || t('tournamentPoolView.couldNotLoadPool'))
     } finally {
       setLoading(false)
     }
-  }, [load])
+  }, [load, t])
 
   useEffect(() => { loadPool() }, [loadPool])
 
   // Tick the reset cooldown down every second while it's active (self-corrects on a 429).
   useEffect(() => {
     if (cooldownMs <= 0) return
-    const t = setInterval(() => setCooldownMs(ms => Math.max(0, ms - 1000)), 1000)
-    return () => clearInterval(t)
+    const interval = setInterval(() => setCooldownMs(ms => Math.max(0, ms - 1000)), 1000)
+    return () => clearInterval(interval)
   }, [cooldownMs > 0])
 
   // Show the first-open pack reveal once per pool (skips if already seen, or no boosters).
@@ -136,7 +138,7 @@ export default function TournamentPoolView({ title, load, reset }) {
       setDeck({})
       await loadPool()
     } catch (e) {
-      setError(e.message || 'Could not reset your pool.')
+      setError(e.message || t('tournamentPoolView.couldNotResetPool'))
     }
   }
 
@@ -179,7 +181,7 @@ export default function TournamentPoolView({ title, load, reset }) {
         poolRef.current = updatedPool
         setPool(updatedPool)
       } catch (e) {
-        setError(e.message || 'Could not sync your deck.')
+        setError(e.message || t('tournamentPoolView.couldNotSyncDeck'))
       } finally {
         setSyncing(false)
       }
@@ -191,7 +193,7 @@ export default function TournamentPoolView({ title, load, reset }) {
     } else if (!syncTimerRef.current) {
       syncTimerRef.current = setTimeout(() => { syncTimerRef.current = null; run() }, SYNC_THROTTLE_MS - elapsed)
     }
-  }, [cardMap])
+  }, [cardMap, t])
 
   useEffect(() => {
     if (skipNextSyncRef.current) { skipNextSyncRef.current = false; return }
@@ -201,7 +203,7 @@ export default function TournamentPoolView({ title, load, reset }) {
 
   function handleResetDeck() {
     if (deckTotal === 0) return
-    if (!window.confirm('Reset your deck? This removes every card from your deck (your pool is unaffected).')) return
+    if (!window.confirm(t('tournamentPoolView.resetDeckConfirm'))) return
     setDeck({})
   }
 
@@ -224,7 +226,7 @@ export default function TournamentPoolView({ title, load, reset }) {
   }
 
   if (loading && !pool) {
-    return <div className="min-h-screen flex items-center justify-center text-muted">Loading your pool…</div>
+    return <div className="min-h-screen flex items-center justify-center text-muted">{t('tournamentPoolView.loadingYourPool')}</div>
   }
 
   const deckTotal = Object.values(deck).reduce((a, b) => a + b, 0)
@@ -268,34 +270,34 @@ export default function TournamentPoolView({ title, load, reset }) {
           {loading ? (
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border-2 border-line bg-surface2 text-base font-semibold text-muted">
               <span className="w-4 h-4 rounded-full border-2 border-line border-t-accent animate-spin shrink-0" />
-              Loading your deck…
+              {t('tournamentPoolView.loadingYourDeck')}
             </div>
           ) : (
             <div className={`flex flex-wrap items-center gap-3 px-3 py-1.5 rounded-lg border-2 text-base font-semibold ${
               isValid ? 'border-green-700 bg-green-900/25' : 'border-red-800 bg-red-950/25'}`}>
-              <span className={isEnough ? 'text-green-400' : 'text-red-400'}>{isEnough ? '✓' : '✗'} {deckTotal}/30+ cards</span>
-              <span className={isValidFactions ? 'text-green-400' : 'text-red-400'}>{isValidFactions ? '✓' : '✗'} {deckFactions.size}/3 factions</span>
-              <span className={isValidHero ? (deckHeroCount === 1 ? 'text-green-400' : 'text-faint') : 'text-red-400'}>{isValidHero ? '✓' : '✗'} {deckHeroCount}/1 hero</span>
+              <span className={isEnough ? 'text-green-400' : 'text-red-400'}>{isEnough ? '✓' : '✗'} {t('deckValidity.cardsOf30Plus', { n: deckTotal })}</span>
+              <span className={isValidFactions ? 'text-green-400' : 'text-red-400'}>{isValidFactions ? '✓' : '✗'} {t('deckValidity.factionsOf3', { n: deckFactions.size })}</span>
+              <span className={isValidHero ? (deckHeroCount === 1 ? 'text-green-400' : 'text-faint') : 'text-red-400'}>{isValidHero ? '✓' : '✗'} {t('deckValidity.heroOf1', { n: deckHeroCount })}</span>
               <span className={`font-bold ${isValid ? 'text-green-400' : 'text-red-400'}`}>
-                {isValid ? 'Deck is valid ✓' : 'Deck is not valid ✗'}
+                {isValid ? t('deckValidity.valid') : t('deckValidity.notValid')}
               </span>
             </div>
           )}
-          {syncing && <span className="text-xs text-faint">Syncing deck…</span>}
+          {syncing && <span className="text-xs text-faint">{t('tournamentPoolView.syncingDeck')}</span>}
           <div className="ml-auto flex items-center gap-2">
             <button onClick={handleMakeRandomDeck} disabled={loading || deckTotal > 0}
-              title={deckTotal > 0 ? 'Reset your deck first' : 'Build a valid deck from your pool'}
+              title={deckTotal > 0 ? t('tournamentPoolView.makeRandomDeckTitleDisabled') : t('tournamentPoolView.makeRandomDeckTitleEnabled')}
               className="text-xs px-3 py-1.5 rounded bg-surface2 hover:bg-surface3 disabled:opacity-40 transition-colors">
-              Make random deck
+              {t('tournamentPoolView.makeRandomDeck')}
             </button>
             <button onClick={handleResetDeck} disabled={loading || deckTotal === 0}
               className="text-xs px-3 py-1.5 rounded bg-surface2 hover:bg-red-900 disabled:opacity-40 transition-colors">
-              Reset deck
+              {t('tournamentPoolView.resetDeck')}
             </button>
             {reset && (
               <button onClick={handleReset} disabled={cooldownMs > 0}
                 className="text-xs px-3 py-1.5 rounded bg-surface2 hover:bg-surface3 disabled:opacity-40 transition-colors">
-                {cooldownMs > 0 ? `Reset available in ${formatCooldown(cooldownMs)}` : 'Reset pool'}
+                {cooldownMs > 0 ? t('tournamentPoolView.resetAvailableIn', { time: formatCooldown(cooldownMs) }) : t('tournamentPoolView.resetPool')}
               </button>
             )}
           </div>

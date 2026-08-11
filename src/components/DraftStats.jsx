@@ -1,9 +1,13 @@
 import { useState } from 'react'
 import { FACTIONS, FACTION_NAMES, FACTION_COLORS, SET_ABBREV, SET_ABBREV_ICON_CODE } from '../lib/cardData.js'
 import { FACTION_ICONS, RARITY_GEMS, SET_ICONS, setCodeFromRef } from '../lib/assets.js'
+import { useLang } from '../lib/i18n/i18n.jsx'
 
 const SET_ORDER = ['BTG', 'TBF', 'WTM', 'SKY', 'SDU', 'ROC', 'NEJ']
 
+// `label` is a STABLE internal grouping key (also used to look up `typeCounts['Hero']`
+// below) — never rendered directly. Render text comes from draftStats.type<Label> in the
+// i18n dict instead, via TYPE_LABEL_KEY, so switching UI language can't desync the grouping.
 const TYPE_GROUPS = {
   HERO:                 { label: 'Hero',       color: 'text-accent' },
   CHARACTER:            { label: 'Character',  color: 'text-blue-400' },
@@ -11,6 +15,10 @@ const TYPE_GROUPS = {
   PERMANENT:            { label: 'Permanent',  color: 'text-green-400' },
   LANDMARK_PERMANENT:   { label: 'Permanent',  color: 'text-green-400' },
   EXPEDITION_PERMANENT: { label: 'Permanent',  color: 'text-green-400' },
+}
+const TYPE_LABEL_KEY = {
+  Hero: 'draftStats.typeHero', Character: 'draftStats.typeCharacter',
+  Spell: 'draftStats.typeSpell', Permanent: 'draftStats.typePermanent',
 }
 
 const FACTION_BAR_COLORS = {
@@ -33,6 +41,7 @@ function buildCostCounts(cards, costField) {
 
 function CostCurve({ title, counts, maxCost, color }) {
   const [hovered, setHovered] = useState(null)
+  const { tc } = useLang()
   if (!Object.keys(counts).length) return null
   const maxCount = Math.max(...Object.values(counts), 1)
 
@@ -51,7 +60,7 @@ function CostCurve({ title, counts, maxCost, color }) {
             >
               {isHov && count > 0 && (
                 <div className="absolute -top-5 left-1/2 -translate-x-1/2 bg-surface3 text-ink text-xs rounded px-1 py-0.5 whitespace-nowrap z-10">
-                  {count} card{count !== 1 ? 's' : ''}
+                  {tc('draftStats.cardCount', count)}
                 </div>
               )}
               <div
@@ -68,6 +77,7 @@ function CostCurve({ title, counts, maxCost, color }) {
 }
 
 export default function DraftStats({ pickedRefs, cardMap }) {
+  const { t } = useLang()
   const cards = pickedRefs.map(r => cardMap[r]).filter(Boolean)
   const total = cards.length
 
@@ -122,7 +132,7 @@ export default function DraftStats({ pickedRefs, cardMap }) {
 
       {/* Faction split */}
       <section>
-        <h4 className="text-xs uppercase tracking-widest text-faint mb-2">Faction split</h4>
+        <h4 className="text-xs uppercase tracking-widest text-faint mb-2">{t('draftStats.factionSplit')}</h4>
         <div className="space-y-1.5">
           {FACTIONS.map(f => {
             const count = factionCounts[f] ?? 0
@@ -148,7 +158,7 @@ export default function DraftStats({ pickedRefs, cardMap }) {
       {/* Set breakdown */}
       {Object.keys(setCounts).length > 1 && (
         <section>
-          <h4 className="text-xs uppercase tracking-widest text-faint mb-2">Sets</h4>
+          <h4 className="text-xs uppercase tracking-widest text-faint mb-2">{t('draftStats.sets')}</h4>
           <div className="space-y-1.5">
             {SET_ORDER.filter(s => setCounts[s]).map(s => {
               const count = setCounts[s]
@@ -175,13 +185,13 @@ export default function DraftStats({ pickedRefs, cardMap }) {
 
       {/* Card type breakdown */}
       <section>
-        <h4 className="text-xs uppercase tracking-widest text-faint mb-2">Card types</h4>
+        <h4 className="text-xs uppercase tracking-widest text-faint mb-2">{t('draftStats.cardTypes')}</h4>
         <div className="grid grid-cols-2 gap-1.5">
           {Object.entries(typeCounts).map(([type, count]) => {
             const group = Object.values(TYPE_GROUPS).find(g => g.label === type)
             return (
               <div key={type} className="bg-surface2 rounded-lg px-3 py-2 flex items-center justify-between">
-                <span className={`text-xs font-medium ${group?.color ?? 'text-muted'}`}>{type}</span>
+                <span className={`text-xs font-medium ${group?.color ?? 'text-muted'}`}>{t(TYPE_LABEL_KEY[type] ?? type)}</span>
                 <span className="text-sm font-bold text-ink">{count}</span>
               </div>
             )
@@ -192,13 +202,13 @@ export default function DraftStats({ pickedRefs, cardMap }) {
       {/* Rarity breakdown */}
       {rarityTotal > 0 && (
         <section>
-          <h4 className="text-xs uppercase tracking-widest text-faint mb-2">Rarity</h4>
+          <h4 className="text-xs uppercase tracking-widest text-faint mb-2">{t('draftStats.rarity')}</h4>
           <div className="flex gap-2">
             {[
-              { key: 'C',  label: 'Common',  gem: RARITY_GEMS.C },
-              { key: 'R1', label: 'Rare',    gem: RARITY_GEMS.R1 },
-              { key: 'EX', label: 'Exalted', gem: RARITY_GEMS.EX },
-              { key: 'U',  label: 'Unique',  gem: RARITY_GEMS.U },
+              { key: 'C',  label: t('draftStats.rarityCommon'),  gem: RARITY_GEMS.C },
+              { key: 'R1', label: t('draftStats.rarityRare'),    gem: RARITY_GEMS.R1 },
+              { key: 'EX', label: t('draftStats.rarityExalted'), gem: RARITY_GEMS.EX },
+              { key: 'U',  label: t('draftStats.rarityUnique'),  gem: RARITY_GEMS.U },
             ].map(({ key, label, gem }) => {
               const count = key === 'R1' ? rarityCounts.R1 + rarityCounts.R2 : rarityCounts[key]
               if (!count) return null
@@ -216,22 +226,22 @@ export default function DraftStats({ pickedRefs, cardMap }) {
 
       {/* Cost curves */}
       <section>
-        <h4 className="text-xs uppercase tracking-widest text-faint mb-3">Cost curves</h4>
+        <h4 className="text-xs uppercase tracking-widest text-faint mb-3">{t('draftStats.costCurves')}</h4>
         <div className="space-y-4">
-          <CostCurve title="Hand cost" counts={handCounts} maxCost={costMax} color="#f59e0b" />
-          <CostCurve title="Recall cost" counts={recallCounts} maxCost={costMax} color="#60a5fa" />
+          <CostCurve title={t('draftStats.handCost')} counts={handCounts} maxCost={costMax} color="#f59e0b" />
+          <CostCurve title={t('draftStats.recallCost')} counts={recallCounts} maxCost={costMax} color="#60a5fa" />
         </div>
       </section>
 
       {/* Biome totals */}
       {hasBiomes && (
         <section>
-          <h4 className="text-xs uppercase tracking-widest text-faint mb-2">Biome power</h4>
+          <h4 className="text-xs uppercase tracking-widest text-faint mb-2">{t('draftStats.biomePower')}</h4>
           <div className="grid grid-cols-3 gap-2">
             {[
-              { label: 'Forest',   emoji: '🌲', value: forestTotal,   color: 'text-green-400' },
-              { label: 'Mountain', emoji: '⛰️',  value: mountainTotal, color: 'text-orange-400' },
-              { label: 'Ocean',    emoji: '🌊', value: oceanTotal,    color: 'text-blue-400' },
+              { label: t('draftStats.forest'),   emoji: '🌲', value: forestTotal,   color: 'text-green-400' },
+              { label: t('draftStats.mountain'), emoji: '⛰️',  value: mountainTotal, color: 'text-orange-400' },
+              { label: t('draftStats.ocean'),    emoji: '🌊', value: oceanTotal,    color: 'text-blue-400' },
             ].map(({ label, emoji, value, color }) => (
               <div key={label} className="bg-surface2 rounded-lg px-2 py-2 flex flex-col items-center gap-1">
                 <span className="text-lg leading-none">{emoji}</span>

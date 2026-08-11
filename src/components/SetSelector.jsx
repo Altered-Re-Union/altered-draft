@@ -1,11 +1,13 @@
 import { SETS } from '../lib/cardData.js'
 import { SET_ASSETS } from '../lib/assets.js'
+import { useLang } from '../lib/i18n/i18n.jsx'
 
 // Sealed "Advanced" picker. Same row styling as the Multi-Set draft picker (set icon +
 // name + −/+ stepper) so the two feel consistent. Each player opens `total` boosters (the
 // sum of the per-set counts). No fixed target — build any pool size; `recommended` (7) is
 // the standard sealed amount and is highlighted when the total matches.
 export default function SetSelector({ selectedSets, onChange, disabled, recommended = 7 }) {
+  const { t } = useLang()
   const total = Object.values(selectedSets).reduce((a, b) => a + (b || 0), 0)
 
   function setCount(code, n) {
@@ -19,13 +21,13 @@ export default function SetSelector({ selectedSets, onChange, disabled, recommen
   return (
     <div>
       <div className="flex items-center justify-between mb-2">
-        <label className="block text-sm text-muted">Boosters per player</label>
+        <label className="block text-sm text-muted">{t('setSelector.boostersPerPlayer')}</label>
         <span className={`text-sm font-mono font-bold ${total === recommended ? 'text-green-400' : total > 0 ? 'text-accent' : 'text-faint'}`}>
           {total}
         </span>
       </div>
       <p className="text-xs text-faint mb-3">
-        Choose how many single-set boosters each player opens. {recommended} is the standard sealed pool.
+        {t('setSelector.chooseHint', { n: recommended })}
       </p>
 
       <div className="space-y-2">
@@ -62,7 +64,7 @@ export default function SetSelector({ selectedSets, onChange, disabled, recommen
         })}
       </div>
 
-      {total === 0 && <p className="text-xs text-faint mt-3">Add at least one booster.</p>}
+      {total === 0 && <p className="text-xs text-faint mt-3">{t('setSelector.addAtLeastOne')}</p>}
     </div>
   )
 }

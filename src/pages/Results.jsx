@@ -11,10 +11,12 @@ import ThemeToggle from '../components/ThemeToggle.jsx'
 import DraftStats from '../components/DraftStats.jsx'
 import PoolGrid from '../components/PoolGrid.jsx'
 import { COMMUNITY_CUBES } from '../lib/cubes.js'
+import { useLang } from '../lib/i18n/i18n.jsx'
 
 export default function Results() {
   const { code } = useParams()
   const navigate = useNavigate()
+  const { t, tc } = useLang()
 
   const [roomState, setRoomState] = useState(null)
   const [me, setMe] = useState(null)
@@ -74,7 +76,7 @@ export default function Results() {
   }
 
   if (!roomState || !me) {
-    return <div className="min-h-screen flex items-center justify-center text-muted">Loading results…</div>
+    return <div className="min-h-screen flex items-center justify-center text-muted">{t('results.loading')}</div>
   }
 
   const myIndex = roomState.players.findIndex(p => p.id === me.id)
@@ -122,7 +124,7 @@ export default function Results() {
       {/* Top bar */}
       <div className="bg-surface border-b border-line px-4 py-2 flex items-center gap-3 shrink-0">
         <span className="font-mono text-accent font-bold">{code}</span>
-        <span className="text-muted text-sm">Draft Complete · {myPicks.length} picks</span>
+        <span className="text-muted text-sm">{tc('results.draftComplete', myPicks.length)}</span>
         <div className="ml-auto flex gap-2 items-center">
           <ReunionButton />
           <ExportMenu poolRefs={myPicks} deckRefs={deckRefs} deckIsValid={isValid}
@@ -138,17 +140,17 @@ export default function Results() {
       {/* Tabs */}
       <div className="bg-surface border-b border-line flex shrink-0">
         {[
-          { id: 'picks',   label: `Full Pool (${myPicks.length})` },
-          { id: 'deck',    label: `Deck (${deckTotal})`, highlight: isValid },
-          { id: 'stats',   label: 'Stats' },
-          { id: 'players', label: 'Players' },
-        ].map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)}
+          { id: 'picks',   label: t('results.tabFullPool', { n: myPicks.length }) },
+          { id: 'deck',    label: t('results.tabDeck', { n: deckTotal }), highlight: isValid },
+          { id: 'stats',   label: t('results.tabStats') },
+          { id: 'players', label: t('results.tabPlayers') },
+        ].map(tabInfo => (
+          <button key={tabInfo.id} onClick={() => setTab(tabInfo.id)}
             className={`flex-1 py-2.5 text-sm transition-colors ${
-              tab === t.id
-                ? t.highlight ? 'text-green-400 border-b-2 border-green-400' : 'text-accent border-b-2 border-accent2'
+              tab === tabInfo.id
+                ? tabInfo.highlight ? 'text-green-400 border-b-2 border-green-400' : 'text-accent border-b-2 border-accent2'
                 : 'text-faint hover:text-ink2'}`}>
-            {t.label}
+            {tabInfo.label}
           </button>
         ))}
       </div>
@@ -164,15 +166,15 @@ export default function Results() {
         <div className="flex-1 flex flex-col overflow-hidden">
           <div className={`px-4 py-3 border-b-2 shrink-0 flex flex-wrap gap-4 items-center text-base font-semibold ${
             isValid ? 'border-green-700 bg-green-900/25' : 'border-red-800 bg-red-950/25'}`}>
-            <span className={isEnough ? 'text-green-400' : 'text-red-400'}>{isEnough ? '✓' : '✗'} {deckRefs.length}/30 cards</span>
-            <span className={isValidFactions ? 'text-green-400' : 'text-red-400'}>{isValidFactions ? '✓' : '✗'} {deckFactions.size}/3 factions</span>
-            <span className={isValidHero ? (deckHeroCount === 1 ? 'text-green-400' : 'text-faint') : 'text-red-400'}>{isValidHero ? '✓' : '✗'} {deckHeroCount}/1 hero</span>
+            <span className={isEnough ? 'text-green-400' : 'text-red-400'}>{isEnough ? '✓' : '✗'} {t('deckValidity.cardsOf30', { n: deckRefs.length })}</span>
+            <span className={isValidFactions ? 'text-green-400' : 'text-red-400'}>{isValidFactions ? '✓' : '✗'} {t('deckValidity.factionsOf3', { n: deckFactions.size })}</span>
+            <span className={isValidHero ? (deckHeroCount === 1 ? 'text-green-400' : 'text-faint') : 'text-red-400'}>{isValidHero ? '✓' : '✗'} {t('deckValidity.heroOf1', { n: deckHeroCount })}</span>
             <span className={`font-bold ml-auto ${isValid ? 'text-green-400' : 'text-red-400'}`}>
-              {isValid ? 'Deck is valid ✓' : 'Deck is not valid ✗'}
+              {isValid ? t('deckValidity.valid') : t('deckValidity.notValid')}
             </span>
           </div>
           {deckTotal === 0
-            ? <div className="flex-1 flex items-center justify-center text-faint text-sm">No cards in deck yet. Add them from the Full Pool tab.</div>
+            ? <div className="flex-1 flex items-center justify-center text-faint text-sm">{t('results.noDeckCardsYet')}</div>
             : <div className="flex-1 overflow-hidden"><PoolGrid refs={deckRefs} cardMap={cardMap} deck={deck} poolCounts={poolCounts} onAdd={addToDeck} onRemove={removeFromDeck} /></div>}
         </div>
       )}
@@ -182,7 +184,7 @@ export default function Results() {
         <div className="flex-1 flex flex-col overflow-hidden">
           {deckTotal > 0 && (
             <div className="flex border-b border-line shrink-0">
-              {[['all', 'Full Pool'], ['deck', 'Deck']].map(([id, label]) => (
+              {[['all', t('results.scopeFullPool')], ['deck', t('results.scopeDeck')]].map(([id, label]) => (
                 <button key={id} onClick={() => setStatsScope(id)}
                   className={`flex-1 py-2 text-sm transition-colors ${statsScope === id ? 'text-accent border-b-2 border-accent2' : 'text-faint hover:text-ink2'}`}>
                   {label}
@@ -212,8 +214,8 @@ export default function Results() {
                 <div key={player.id} className="bg-surface rounded-xl p-4">
                   <div className="flex items-center gap-2 mb-3">
                     <span className="font-medium">{player.name}</span>
-                    {player.id === me.id && <span className="text-xs text-accent">(you)</span>}
-                    <span className="ml-auto text-xs text-faint">{picks.length} picks</span>
+                    {player.id === me.id && <span className="text-xs text-accent">{t('common.you')}</span>}
+                    <span className="ml-auto text-xs text-faint">{tc('results.pickCount', picks.length)}</span>
                   </div>
                   <div className="flex flex-wrap gap-1">
                     {FACTIONS.filter(f => factionCounts[f]).map(f => (

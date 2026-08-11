@@ -10,10 +10,12 @@ import ReunionButton from '../components/ReunionButton.jsx'
 import ThemeToggle from '../components/ThemeToggle.jsx'
 import DraftStats from '../components/DraftStats.jsx'
 import PoolGrid, { SimpleCardGrid } from '../components/PoolGrid.jsx'
+import { useLang } from '../lib/i18n/i18n.jsx'
 
 export default function Sealed() {
   const { code } = useParams()
   const navigate = useNavigate()
+  const { t, tc } = useLang()
 
   const [roomState, setRoomState] = useState(null)
   const [me, setMe] = useState(null)
@@ -74,7 +76,7 @@ export default function Sealed() {
     if (me) localStorage.setItem(`sealed_deck_${code}_${me.id}`, JSON.stringify(next))
   }
 
-  if (!roomState || !me) return <div className="min-h-screen flex items-center justify-center text-muted">Loading…</div>
+  if (!roomState || !me) return <div className="min-h-screen flex items-center justify-center text-muted">{t('sealed.loading')}</div>
 
   const myIndex = roomState.players.findIndex(p => p.id === me.id)
   const myPacks = roomState.sealedPacks?.[String(myIndex)]
@@ -143,7 +145,7 @@ export default function Sealed() {
       {/* Top bar */}
       <div className="bg-surface border-b border-line px-4 py-2 flex items-center gap-3 shrink-0">
         <span className="font-mono text-accent font-bold text-sm">{code}</span>
-        <span className="text-muted text-sm">Sealed</span>
+        <span className="text-muted text-sm">{t('sealed.sealedLabel')}</span>
         <div className="ml-auto flex gap-2 items-center">
           <ReunionButton />
           <ExportMenu poolRefs={allRefs} deckRefs={deckRefs} deckIsValid={isValid}
@@ -155,17 +157,17 @@ export default function Sealed() {
       {/* Tab bar */}
       <div className="bg-surface border-b border-line flex shrink-0">
         {[
-          { id: 'booster', label: `Boosters (${totalPacks})` },
-          { id: 'pool',    label: `Full Pool (${allRefs.length})` },
-          { id: 'deck',    label: `Deck (${deckTotal})`, highlight: isValid },
-          { id: 'stats',   label: 'Stats' },
-        ].map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)}
+          { id: 'booster', label: t('sealed.tabBoosters', { n: totalPacks }) },
+          { id: 'pool',    label: t('sealed.tabFullPool', { n: allRefs.length }) },
+          { id: 'deck',    label: t('sealed.tabDeck', { n: deckTotal }), highlight: isValid },
+          { id: 'stats',   label: t('sealed.tabStats') },
+        ].map(tabInfo => (
+          <button key={tabInfo.id} onClick={() => setTab(tabInfo.id)}
             className={`flex-1 py-2.5 text-sm transition-colors ${
-              tab === t.id
-                ? t.highlight ? 'text-green-400 border-b-2 border-green-400' : 'text-accent border-b-2 border-accent2'
+              tab === tabInfo.id
+                ? tabInfo.highlight ? 'text-green-400 border-b-2 border-green-400' : 'text-accent border-b-2 border-accent2'
                 : 'text-faint hover:text-ink2'}`}>
-            {t.label}
+            {tabInfo.label}
           </button>
         ))}
       </div>
@@ -180,7 +182,7 @@ export default function Sealed() {
               {myPacks.map((pack, i) => {
                 const s = packSet(pack)
                 return (
-                  <button key={i} onClick={() => setPackIndex(i)} title={s.name ?? `Booster ${i + 1}`}
+                  <button key={i} onClick={() => setPackIndex(i)} title={s.name ?? t('sealed.boosterFallback', { n: i + 1 })}
                     className={`h-7 px-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 ${
                       i === packIndex ? 'bg-accent text-on-accent' : 'bg-surface2 text-muted hover:bg-surface3'}`}>
                     {s.icon && <img src={s.icon} alt="" className="w-3.5 h-3.5 object-contain" onError={e => { e.currentTarget.style.display = 'none' }} />}
@@ -195,7 +197,7 @@ export default function Sealed() {
           <div className="flex-1 overflow-y-auto px-8 pt-4 pb-40" style={{ scrollbarGutter: 'stable' }}>
             <h2 className="font-semibold mb-3 flex items-center gap-2">
               {currentSet.icon && <img src={currentSet.icon} alt="" className="w-5 h-5 object-contain" onError={e => { e.currentTarget.style.display = 'none' }} />}
-              <span>Booster {packIndex + 1}</span>
+              <span>{t('sealed.boosterTitle', { n: packIndex + 1 })}</span>
               {currentSet.name && (
                 <span className="text-muted font-normal">
                   · {currentSet.name}
@@ -220,15 +222,15 @@ export default function Sealed() {
         <div className="flex-1 flex flex-col overflow-hidden">
           <div className={`px-4 py-3 border-b-2 shrink-0 flex flex-wrap gap-4 items-center text-base font-semibold ${
             isValid ? 'border-green-700 bg-green-900/25' : 'border-red-800 bg-red-950/25'}`}>
-            <span className={isEnough ? 'text-green-400' : 'text-red-400'}>{isEnough ? '✓' : '✗'} {deckRefs.length}/30 cards</span>
-            <span className={isValidFactions ? 'text-green-400' : 'text-red-400'}>{isValidFactions ? '✓' : '✗'} {deckFactions.size}/3 factions</span>
-            <span className={isValidHero ? (deckHeroCount === 1 ? 'text-green-400' : 'text-faint') : 'text-red-400'}>{isValidHero ? '✓' : '✗'} {deckHeroCount}/1 hero</span>
+            <span className={isEnough ? 'text-green-400' : 'text-red-400'}>{isEnough ? '✓' : '✗'} {t('deckValidity.cardsOf30', { n: deckRefs.length })}</span>
+            <span className={isValidFactions ? 'text-green-400' : 'text-red-400'}>{isValidFactions ? '✓' : '✗'} {t('deckValidity.factionsOf3', { n: deckFactions.size })}</span>
+            <span className={isValidHero ? (deckHeroCount === 1 ? 'text-green-400' : 'text-faint') : 'text-red-400'}>{isValidHero ? '✓' : '✗'} {t('deckValidity.heroOf1', { n: deckHeroCount })}</span>
             <span className={`font-bold ml-auto ${isValid ? 'text-green-400' : 'text-red-400'}`}>
-              {isValid ? 'Deck is valid ✓' : 'Deck is not valid ✗'}
+              {isValid ? t('deckValidity.valid') : t('deckValidity.notValid')}
             </span>
           </div>
           {deckTotal === 0
-            ? <div className="flex-1 flex items-center justify-center text-faint text-sm">No cards in deck yet. Use + on cards to add them.</div>
+            ? <div className="flex-1 flex items-center justify-center text-faint text-sm">{t('sealed.noDeckCardsYet')}</div>
             : <div className="flex-1 overflow-hidden"><PoolGrid refs={deckRefs} cardMap={cardMap} deck={deck} poolCounts={poolCounts} onAdd={addToDeck} onRemove={removeFromDeck} loading={loading} /></div>}
         </div>
       )}
@@ -238,7 +240,7 @@ export default function Sealed() {
         <div className="flex-1 flex flex-col overflow-hidden">
           {deckTotal > 0 && (
             <div className="flex border-b border-line shrink-0">
-              {[['pool', 'Full Pool'], ['deck', 'Deck']].map(([id, label]) => (
+              {[['pool', t('results.scopeFullPool')], ['deck', t('results.scopeDeck')]].map(([id, label]) => (
                 <button key={id} onClick={() => setStatsScope(id)}
                   className={`flex-1 py-2 text-sm transition-colors ${statsScope === id ? 'text-accent border-b-2 border-accent2' : 'text-faint hover:text-ink2'}`}>
                   {label}
@@ -261,7 +263,7 @@ export default function Sealed() {
             return (
               <div key={player.id} className="flex items-center gap-1.5 text-xs bg-surface2 rounded-lg px-3 py-1.5">
                 <span className={player.id === me.id ? 'text-accent font-medium' : 'text-ink2'}>{player.name}</span>
-                <span className="text-faint">{count} cards</span>
+                <span className="text-faint">{tc('sealed.cardCount', count)}</span>
               </div>
             )
           })}

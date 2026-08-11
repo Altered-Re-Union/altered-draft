@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
+import { useLang } from '../lib/i18n/i18n.jsx'
 
 // App-wide "tap a card to see it full screen" overlay. Hover-zoom (PoolGrid) only works on
 // desktop; this is the mobile-friendly way to actually read a card — important when players
@@ -25,6 +26,7 @@ const SWIPE_THRESHOLD_PX = 40
 export function CardZoomProvider({ children }) {
   const [state, setState] = useState(null) // { refs, index, card, controls } | null
   const resolverRef = useRef(() => null)
+  const { t } = useLang()
 
   const resolveAt = useCallback((refs, index) => {
     const clamped = Math.max(0, Math.min(index, refs.length - 1))
@@ -55,6 +57,11 @@ export function CardZoomProvider({ children }) {
   const close = useCallback(() => setState(null), [])
 
   // Escape closes, arrow keys navigate; lock the background from scrolling while open.
+  // Plain `overflow: hidden` on body doesn't actually stop touch-scroll on iOS Safari — the
+  // page still creeps a few px when swiping between cards, which reveals/collapses the
+  // address bar and leaves a gap above the fixed overlay. Pinning body to `position: fixed`
+  // at its current scroll offset removes anything left to scroll, and restoring scrollTo on
+  // close puts the page back exactly where it was.
   useEffect(() => {
     if (!state) return
     const onKey = e => {
@@ -63,11 +70,22 @@ export function CardZoomProvider({ children }) {
       else if (e.key === 'ArrowRight') step(1)
     }
     window.addEventListener('keydown', onKey)
-    const prevOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
+    const scrollY = window.scrollY
+    const body = document.body.style
+    const prev = { position: body.position, top: body.top, left: body.left, right: body.right, overflow: body.overflow }
+    body.position = 'fixed'
+    body.top = `-${scrollY}px`
+    body.left = '0'
+    body.right = '0'
+    body.overflow = 'hidden'
     return () => {
       window.removeEventListener('keydown', onKey)
-      document.body.style.overflow = prevOverflow
+      body.position = prev.position
+      body.top = prev.top
+      body.left = prev.left
+      body.right = prev.right
+      body.overflow = prev.overflow
+      window.scrollTo(0, scrollY)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only presence of `state` matters here
   }, [!!state, close, step])
@@ -93,16 +111,16 @@ export function CardZoomProvider({ children }) {
       {children}
       {card && createPortal(
         <div onClick={close} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}
-          role="dialog" aria-modal="true"
+          role="dialog" aria-modal="true" style={{ touchAction: 'none' }}
           className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 cursor-zoom-out">
           {hasPrev && (
-            <button onClick={e => { e.stopPropagation(); step(-1) }} aria-label="Previous card"
+            <button onClick={e => { e.stopPropagation(); step(-1) }} aria-label={t('cardZoom.previousCard')}
               className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-surface/80 hover:bg-surface text-ink text-2xl leading-none flex items-center justify-center shadow-lg">
               ‹
             </button>
           )}
           {hasNext && (
-            <button onClick={e => { e.stopPropagation(); step(1) }} aria-label="Next card"
+            <button onClick={e => { e.stopPropagation(); step(1) }} aria-label={t('cardZoom.nextCard')}
               className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-surface/80 hover:bg-surface text-ink text-2xl leading-none flex items-center justify-center shadow-lg">
               ›
             </button>
@@ -131,7 +149,7 @@ export function CardZoomProvider({ children }) {
           ) : (
             <div className="text-ink text-lg text-center px-6">{card.name}</div>
           )}
-          <button onClick={close} aria-label="Close"
+          <button onClick={close} aria-label={t('cardZoom.close')}
             className="absolute top-3 right-3 w-11 h-11 rounded-full bg-surface/80 hover:bg-surface text-ink text-xl leading-none flex items-center justify-center shadow-lg">
             ✕
           </button>

@@ -1,6 +1,7 @@
 import { FACTION_ICONS, RARITY_GEMS } from '../lib/assets.js'
 import { FACTION_NAMES } from '../lib/cardData.js'
 import { useZoomOrigin } from './PoolGrid.jsx'
+import { useLang } from '../lib/i18n/i18n.jsx'
 
 // One draftable card: art grows in place on hover (deckbuilder-style, anchored to stay
 // on-screen), info bar stays put below it. Clicking the art drafts the card.
@@ -45,8 +46,9 @@ function DraftCard({ ref_, card, onPick, disabled }) {
 }
 
 export default function CardGrid({ packRefs, cardMap, onPick, disabled }) {
+  const { t } = useLang()
   if (!packRefs?.length) {
-    return <div className="text-faint text-sm">No cards in this pack.</div>
+    return <div className="text-faint text-sm">{t('cardGrid.noCards')}</div>
   }
 
   return (

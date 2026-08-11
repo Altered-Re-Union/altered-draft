@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { FACTIONS, FACTION_NAMES, FACTION_COLORS, SET_ABBREV, SET_FULL_NAMES, SET_ABBREV_ICON_CODE, fetchSet, apiSetCode, fetchUniques, isUniqueRef, needsCardApi } from '../lib/cardData.js'
 import { FACTION_ICONS, RARITY_GEMS, SET_ICONS } from '../lib/assets.js'
 import { setsForCube } from '../lib/cubes.js'
+import { useLang } from '../lib/i18n/i18n.jsx'
 
 // Parse info from reference without any API fetch
 function parseRef(ref) {
@@ -25,9 +26,13 @@ function parseRef(ref) {
 }
 
 const RARITY_ORDER = { C: 0, R1: 1, R2: 2, EX: 3, U: 4 }
-const RARITY_LABELS = { C: 'Common', R1: 'Rare', R2: 'Rare', EX: 'Exalted', U: 'Unique' }
+// Dict keys, not display text — the actual label comes from t() at render time so it
+// stays in sync with the current UI language (see RotisserieGrid/DraftStats for the
+// same "stable internal key, translated label" split).
+const RARITY_LABEL_KEY = { C: 'cubePreview.common', R1: 'cubePreview.rare', R2: 'cubePreview.rare', EX: 'cubePreview.exalted', U: 'cubePreview.unique' }
 
 export default function CubePreviewModal({ cube, onClose }) {
+  const { t, tc } = useLang()
   const [search, setSearch] = useState('')
   const [groupBy, setGroupBy] = useState('faction')
   const [viewMode, setViewMode] = useState('list') // 'list' | 'grid'
@@ -125,7 +130,7 @@ export default function CubePreviewModal({ cube, onClose }) {
       const groups = {}
       for (const c of filtered) { if (!groups[c.rarity]) groups[c.rarity] = []; groups[c.rarity].push(c) }
       return order.filter(r => groups[r]?.length).map(key => ({
-        key, label: RARITY_LABELS[key] ?? key, icon: RARITY_GEMS[key] ?? null,
+        key, label: t(RARITY_LABEL_KEY[key]) ?? key, icon: RARITY_GEMS[key] ?? null,
         colorCls: 'text-ink2 bg-surface2 border-line',
         cards: [...(groups[key] ?? [])].sort((a, b) => a.faction.localeCompare(b.faction)),
       }))
@@ -134,6 +139,7 @@ export default function CubePreviewModal({ cube, onClose }) {
   }
 
   const groups = groupCards()
+  const groupByLabels = { faction: t('cubePreview.groupFaction'), set: t('cubePreview.groupSet'), rarity: t('cubePreview.groupRarity') }
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
@@ -144,7 +150,7 @@ export default function CubePreviewModal({ cube, onClose }) {
         <div className="flex items-start justify-between p-5 border-b border-line shrink-0">
           <div>
             <h2 className="font-bold text-lg">{cube.name}</h2>
-            <p className="text-sm text-faint">by {cube.author} · {cube.cardCount} cards</p>
+            <p className="text-sm text-faint">{t('cubePreview.byAuthorCards', { author: cube.author, cards: tc('cubePreview.cardCount', cube.cardCount) })}</p>
           </div>
           <button onClick={onClose} className="text-faint hover:text-ink text-xl leading-none p-1">✕</button>
         </div>
@@ -153,7 +159,7 @@ export default function CubePreviewModal({ cube, onClose }) {
           {/* Sidebar stats */}
           <div className="w-40 border-r border-line p-4 space-y-4 shrink-0 overflow-y-auto">
             <div>
-              <p className="text-xs uppercase tracking-widest text-faint mb-2">Factions</p>
+              <p className="text-xs uppercase tracking-widest text-faint mb-2">{t('cubePreview.factions')}</p>
               <div className="space-y-1.5">
                 {FACTIONS.filter(f => factionCounts[f]).map(f => (
                   <div key={f} className="flex items-center gap-1.5">
@@ -165,9 +171,9 @@ export default function CubePreviewModal({ cube, onClose }) {
               </div>
             </div>
             <div>
-              <p className="text-xs uppercase tracking-widest text-faint mb-2">Rarity</p>
+              <p className="text-xs uppercase tracking-widest text-faint mb-2">{t('cubePreview.rarity')}</p>
               <div className="space-y-1.5">
-                {[{ key: 'C', label: 'Common' }, { key: 'R1', label: 'Rare', merge: 'R2' }, { key: 'EX', label: 'Exalted' }, { key: 'U', label: 'Unique' }]
+                {[{ key: 'C', label: t('cubePreview.common') }, { key: 'R1', label: t('cubePreview.rare'), merge: 'R2' }, { key: 'EX', label: t('cubePreview.exalted') }, { key: 'U', label: t('cubePreview.unique') }]
                   .map(({ key, label, merge }) => {
                     const count = rarityCounts[key] + (merge ? (rarityCounts[merge] ?? 0) : 0)
                     if (!count) return null
@@ -182,7 +188,7 @@ export default function CubePreviewModal({ cube, onClose }) {
               </div>
             </div>
             <div>
-              <p className="text-xs uppercase tracking-widest text-faint mb-2">Sets</p>
+              <p className="text-xs uppercase tracking-widest text-faint mb-2">{t('cubePreview.sets')}</p>
               <div className="space-y-1.5">
                 {Object.entries(setCounts).sort((a, b) => b[1] - a[1]).map(([abbrev, count]) => {
                   const iconCode = SET_ABBREV_ICON_CODE[abbrev]
@@ -205,23 +211,23 @@ export default function CubePreviewModal({ cube, onClose }) {
             {/* Controls */}
             <div className="flex items-center gap-2 p-3 border-b border-line shrink-0">
               <input value={search} onChange={e => setSearch(e.target.value)}
-                placeholder="Search by name, faction, set…"
+                placeholder={t('cubePreview.searchPlaceholder')}
                 className="flex-1 bg-surface2 border border-line rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-accent" />
               <div className="flex gap-1">
                 {['faction', 'set', 'rarity'].map(g => (
                   <button key={g} onClick={() => setGroupBy(g)}
-                    className={`px-2 py-1.5 rounded text-xs capitalize transition-colors ${groupBy === g ? 'bg-accent text-on-accent font-bold' : 'bg-surface2 text-muted hover:text-ink'}`}>
-                    {g}
+                    className={`px-2 py-1.5 rounded text-xs transition-colors ${groupBy === g ? 'bg-accent text-on-accent font-bold' : 'bg-surface2 text-muted hover:text-ink'}`}>
+                    {groupByLabels[g]}
                   </button>
                 ))}
               </div>
               <div className="flex gap-1 border-l border-line pl-2">
                 <button onClick={() => setViewMode('list')}
                   className={`px-2 py-1.5 rounded text-xs transition-colors ${viewMode === 'list' ? 'bg-surface3 text-ink' : 'text-faint hover:text-ink2'}`}
-                  title="List view">☰</button>
+                  title={t('cubePreview.listView')}>☰</button>
                 <button onClick={() => setViewMode('grid')}
                   className={`px-2 py-1.5 rounded text-xs transition-colors ${viewMode === 'grid' ? 'bg-surface3 text-ink' : 'text-faint hover:text-ink2'}`}
-                  title="Grid view">⊞</button>
+                  title={t('cubePreview.gridView')}>⊞</button>
               </div>
               <span className="text-xs text-faint shrink-0">{filtered.length}</span>
             </div>
@@ -308,7 +314,7 @@ export default function CubePreviewModal({ cube, onClose }) {
           <img src={hoverCard.card.imagePath} alt={hoverCard.card.name} className="w-full" />
           <div className="bg-surface px-2 py-1.5">
             <p className="text-xs font-medium text-ink">{hoverCard.card.name}</p>
-            <p className="text-xs text-faint">{FACTION_NAMES[hoverCard.faction]} · {RARITY_LABELS[hoverCard.rarity] ?? hoverCard.rarity}</p>
+            <p className="text-xs text-faint">{FACTION_NAMES[hoverCard.faction]} · {t(RARITY_LABEL_KEY[hoverCard.rarity]) ?? hoverCard.rarity}</p>
           </div>
         </div>
       )}

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useAuth } from '../auth/AuthProvider.jsx'
 import { createDeck, toDeckCards } from '../lib/decks.js'
+import { useLang } from '../lib/i18n/i18n.jsx'
 
 // Where "open ↗" points after a save. A finished DECK is a legal deck (one hero), so use
 // altered.re's clean per-deck viewer (handles its own login, no raw 401). A saved POOL is
@@ -39,6 +40,7 @@ async function copyText(text) {
 // ≤1 hero) — a saved deck only clears isDraft on the decks API once it's actually legal there.
 export default function ExportMenu({ poolRefs, deckRefs, deckIsValid = false, poolDecklist, deckDecklist, name, format = 'Draft' }) {
   const { user, login } = useAuth()
+  const { t } = useLang()
   const [open, setOpen] = useState(false)
   const [toast, setToast] = useState('')
   const [saving, setSaving] = useState(null) // 'pool' | 'deck' | null
@@ -56,7 +58,7 @@ export default function ExportMenu({ poolRefs, deckRefs, deckIsValid = false, po
 
   async function copy(text, label) {
     const ok = await copyText(text)
-    setToast(ok ? `${label} copied ✓` : 'Copy failed')
+    setToast(ok ? t('exportMenu.copiedSuffix', { label }) : t('exportMenu.copyFailed'))
     setTimeout(() => setToast(''), 2000)
   }
 
@@ -86,44 +88,44 @@ export default function ExportMenu({ poolRefs, deckRefs, deckIsValid = false, po
     <div className="relative" ref={box}>
       <button onClick={() => setOpen(o => !o)}
         className="px-3 py-1.5 bg-accent hover:bg-accent2 text-on-accent font-medium text-sm rounded-lg transition-colors flex items-center gap-1.5">
-        Export / Save <span className="text-xs">▾</span>
+        {t('exportMenu.exportSave')} <span className="text-xs">▾</span>
       </button>
       {toast && !open && <span className="absolute right-0 top-full mt-1 text-xs text-green-400 whitespace-nowrap">{toast}</span>}
 
       {open && (
         <div className="absolute right-0 top-full mt-2 w-72 bg-surface border border-line rounded-xl shadow-2xl p-2 z-50 space-y-0.5">
-          <p className="px-3 pt-1 pb-1.5 text-xs uppercase tracking-widest text-faint">Copy for altered.re {toast && <span className="text-green-400 normal-case tracking-normal ml-1">{toast}</span>}</p>
-          <button className={`${item} hover:bg-surface2 text-ink`} onClick={() => copy(poolDecklist, 'Pool')} disabled={!poolDecklist}>
-            <span>Copy your pool</span>
+          <p className="px-3 pt-1 pb-1.5 text-xs uppercase tracking-widest text-faint">{t('exportMenu.copyForAlteredRe')} {toast && <span className="text-green-400 normal-case tracking-normal ml-1">{toast}</span>}</p>
+          <button className={`${item} hover:bg-surface2 text-ink`} onClick={() => copy(poolDecklist, t('exportMenu.poolLabel'))} disabled={!poolDecklist}>
+            <span>{t('exportMenu.copyYourPool')}</span>
             <span className="text-xs text-faint">{poolRefs?.length ?? 0}</span>
           </button>
-          <button className={`${item} hover:bg-surface2 text-ink`} onClick={() => copy(deckDecklist, 'Deck')} disabled={!hasDeck}>
-            <span>Copy your deck</span>
+          <button className={`${item} hover:bg-surface2 text-ink`} onClick={() => copy(deckDecklist, t('exportMenu.deckLabel'))} disabled={!hasDeck}>
+            <span>{t('exportMenu.copyYourDeck')}</span>
             <span className="text-xs text-faint">{deckRefs?.length ?? 0}</span>
           </button>
 
           <div className="h-px bg-surface2 my-1.5" />
-          <p className="px-3 pb-1.5 text-xs uppercase tracking-widest text-faint">Save to Re:Union</p>
+          <p className="px-3 pb-1.5 text-xs uppercase tracking-widest text-faint">{t('exportMenu.saveToReunion')}</p>
 
           {!user ? (
             <button className={`${item} hover:bg-surface2 text-accent`} onClick={() => login()}>
-              Connect Re:Union to save
+              {t('exportMenu.connectToSave')}
             </button>
           ) : (
             <>
               <button className={`${item} hover:bg-surface2 text-ink`} onClick={() => save('pool')} disabled={saving === 'pool' || !poolRefs?.length}>
-                <span>{saving === 'pool' ? 'Saving…' : 'Save your pool'}</span>
-                {saved.pool ? <a href={openUrl(saved.pool, 'pool')} target="_blank" rel="noopener noreferrer" className="text-xs text-green-400 hover:underline" onClick={e => e.stopPropagation()}>open ↗</a>
-                  : saved.poolErr ? <span className="text-xs text-red-400" title={saved.poolErr}>failed</span>
+                <span>{saving === 'pool' ? t('exportMenu.saving') : t('exportMenu.saveYourPool')}</span>
+                {saved.pool ? <a href={openUrl(saved.pool, 'pool')} target="_blank" rel="noopener noreferrer" className="text-xs text-green-400 hover:underline" onClick={e => e.stopPropagation()}>{t('exportMenu.open')}</a>
+                  : saved.poolErr ? <span className="text-xs text-red-400" title={saved.poolErr}>{t('exportMenu.failed')}</span>
                   : <span className="text-xs text-faint">{poolRefs?.length ?? 0}</span>}
               </button>
               <button className={`${item} hover:bg-surface2 text-ink`} onClick={() => save('deck')} disabled={saving === 'deck' || !hasDeck}>
-                <span>{saving === 'deck' ? 'Saving…' : 'Save your deck'}</span>
-                {saved.deck ? <a href={openUrl(saved.deck, 'deck')} target="_blank" rel="noopener noreferrer" className="text-xs text-green-400 hover:underline" onClick={e => e.stopPropagation()}>open ↗</a>
-                  : saved.deckErr ? <span className="text-xs text-red-400" title={saved.deckErr}>failed</span>
+                <span>{saving === 'deck' ? t('exportMenu.saving') : t('exportMenu.saveYourDeck')}</span>
+                {saved.deck ? <a href={openUrl(saved.deck, 'deck')} target="_blank" rel="noopener noreferrer" className="text-xs text-green-400 hover:underline" onClick={e => e.stopPropagation()}>{t('exportMenu.open')}</a>
+                  : saved.deckErr ? <span className="text-xs text-red-400" title={saved.deckErr}>{t('exportMenu.failed')}</span>
                   : <span className="text-xs text-faint">{deckRefs?.length ?? 0}</span>}
               </button>
-              <p className="px-3 pt-1 text-xs text-faint">Saved as sandbox decks under {user.pseudo}.{!deckIsValid && hasDeck ? ' Deck saves as draft until it meets the validity rules.' : ''}</p>
+              <p className="px-3 pt-1 text-xs text-faint">{t('exportMenu.savedAs', { pseudo: user.pseudo })}{!deckIsValid && hasDeck ? t('exportMenu.draftUntilValid') : ''}</p>
             </>
           )}
         </div>
