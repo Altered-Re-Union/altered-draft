@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import {
   FACTIONS, FACTION_NAMES, FACTION_COLORS,
   SET_ABBREV, SET_ABBREV_ICON_CODE,
@@ -31,9 +31,24 @@ export function cardSorter(cardMap) {
   }
 }
 
-// Hover-zoom origin: anchor the scale to whichever viewport edge the card is
-// near so the enlarged card never spills off-screen. Works at any breakpoint /
-// column count because it measures the card's real position on mouseenter.
+// The scrollable list itself clips the hover-zoomed card (any ancestor with overflow
+// auto/scroll/hidden establishes a clip box at ITS OWN edges) — the true boundary the
+// zoom must stay inside is that ancestor's rect, not the browser viewport.
+function clipBoundsFor(el) {
+  let node = el.parentElement
+  while (node && node !== document.body) {
+    const { overflowY } = getComputedStyle(node)
+    if (overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'hidden') {
+      return node.getBoundingClientRect()
+    }
+    node = node.parentElement
+  }
+  return { top: 0, left: 0, right: window.innerWidth, bottom: window.innerHeight }
+}
+
+// Hover-zoom origin: anchor the scale to whichever edge of the scrollable list the card is
+// near so the enlarged card never spills outside it (and gets clipped). Works at any
+// breakpoint/column count because it measures the card's real position on mouseenter.
 export const HOVER_SCALE = 1.6
 export function useZoomOrigin(scale = HOVER_SCALE) {
   const ref = useRef(null)
@@ -42,17 +57,17 @@ export function useZoomOrigin(scale = HOVER_SCALE) {
     const el = ref.current
     if (!el) return
     const r = el.getBoundingClientRect()
+    const bounds = clipBoundsFor(el)
     const growX = (r.width * (scale - 1)) / 2   // overflow each side when centered
     const growY = r.height * (scale - 1)         // overflow below when top-anchored
-    const vw = window.innerWidth, vh = window.innerHeight
     let x = ''
-    if (r.left - growX < 8) x = 'left'
-    else if (r.right + growX > vw - 8) x = 'right'
+    if (r.left - growX < bounds.left + 8) x = 'left'
+    else if (r.right + growX > bounds.right - 8) x = 'right'
     // Grow upward by default (anchored to the bottom edge) so the enlarged card overlaps
     // the row above instead of bleeding down into the next row's cards/controls — that
     // downward bleed used to hijack hover as the mouse moved right along a row.
     let y = 'bottom'
-    if (r.top - growY < 8 && r.bottom + growY < vh - 8) y = 'top'
+    if (r.top - growY < bounds.top + 8 && r.bottom + growY < bounds.bottom - 8) y = 'top'
     setOrigin(`${y}${x ? ' ' + x : ''}`)
   }
   return { ref, origin, onMouseEnter }
@@ -236,12 +251,24 @@ function CompactRow({ ref_, occurrences, card, deck, poolCounts, onAdd, onRemove
   const canRemove = inDeck > 0
   const isHero = card?.cardType === 'HERO'
   const cost = isHero ? '' : (card?.mainCost != null ? card.mainCost : '—')
+  const hasControls = onAdd && onRemove
+  const zoomControls = hasControls
+    ? { qty: inDeck, total: poolQty, canAdd, canRemove, onAdd: () => onAdd(ref_), onRemove: () => onRemove(ref_) }
+    : null
+
+  // Keep the full-screen modal's qty/total live if this card's slot is the one currently open.
+  useEffect(() => {
+    if (zoomControls) zoom.sync(ref_, zoomControls)
+  }, [inDeck, poolQty])
 
   return (
     <div className="flex items-center gap-2 px-1.5 py-0.5 rounded hover:bg-surface2 text-sm">
       <span className="w-5 shrink-0 text-center text-xs font-bold text-ink2 tabular-nums">{cost}</span>
+      <span className="w-3.5 shrink-0 flex items-center justify-center">
+        {!isHero && RARITY_GEMS[card?.rarity] && <img src={RARITY_GEMS[card.rarity]} alt={card.rarity} title={card.rarity} className="w-3 h-3 object-contain" />}
+      </span>
       {/* Tap the name to see the card full screen (no art in this compact view). */}
-      <button onClick={() => zoom.open(card)}
+      <button onClick={() => zoom.open(card, ref_, zoomControls)}
         className="flex-1 min-w-0 truncate text-left text-ink2 hover:text-ink transition-colors" title={card?.name}>
         {card?.name ?? ref_}
       </button>
@@ -292,6 +319,14 @@ function PoolCard({ ref_, occurrences, card, loading, deck, poolCounts, onAdd, o
   const canRemove = inDeck > 0
   const setIcon = SET_ICONS[setCodeFromRef(ref_)]
   const hasControls = onAdd && onRemove
+  const zoomControls = hasControls
+    ? { qty: inDeck, total: poolQty, canAdd, canRemove, onAdd: () => onAdd(ref_), onRemove: () => onRemove(ref_) }
+    : null
+
+  // Keep the full-screen modal's qty/total live if this card's slot is the one currently open.
+  useEffect(() => {
+    if (zoomControls) zoom.sync(ref_, zoomControls)
+  }, [inDeck, poolQty])
 
   return (
     // The whole tile (art + name/icons + +/-) is the hover-zoom target, so the controls
@@ -299,7 +334,7 @@ function PoolCard({ ref_, occurrences, card, loading, deck, poolCounts, onAdd, o
     <div ref={ref} onMouseEnter={onMouseEnter} style={{ transformOrigin: origin }}
       className="relative flex flex-col rounded-lg border border-line bg-surface
       transition-transform duration-150 ease-out hover:scale-[1.6] hover:z-30 hover:shadow-xl hover:shadow-black/70">
-      <div onClick={() => zoom.open(card)}
+      <div onClick={() => zoom.open(card, ref_, zoomControls)}
         className="aspect-[2/3] bg-surface2 overflow-hidden rounded-t-lg relative cursor-zoom-in">
         {card?.imagePath ? (
           <img src={card.imagePath} alt={card?.name} className="w-full h-full object-cover" loading="lazy"

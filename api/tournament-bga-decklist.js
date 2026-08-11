@@ -14,8 +14,9 @@
 //
 // Auth: altered-bga-api forwards whatever Authorization header BGA itself sent, same
 // bearer-token verification as every other endpoint here.
-import { verifySub } from './_lib/auth.js'
+import { verifySub, bearerToken } from './_lib/auth.js'
 import { getOrCreateNormalPool, bindTournamentId, recordGamePlayed } from '../src/lib/poolStore.js'
+import { ensureDeck } from './_lib/tournamentPool.js'
 
 function queryParam(req, name) {
   return (req.query?.[name] ?? new URL(req.url, 'http://x').searchParams.get(name) ?? '').trim()
@@ -34,12 +35,21 @@ export default async function handler(req, res) {
   const tournamentName = queryParam(req, 'tournamentName')
   const gameId = queryParam(req, 'gameId')
 
-  const pool = tournamentId
+  let pool = tournamentId
     ? await bindTournamentId(sub, tournamentId, tournamentName || null)
     : await getOrCreateNormalPool(sub)
 
   if (gameId) {
     await recordGamePlayed(pool.id, gameId)
+  }
+
+  // No deck yet, or a linked one with zero cards — mint & save a random one so BGA still
+  // gets something legal to play with (named "Random …" so the integration can warn the
+  // player it's unreviewed; the name reverts on their next real edit in the app).
+  try {
+    pool = await ensureDeck(sub, pool, bearerToken(req))
+  } catch (e) {
+    console.log(`tournament-bga-decklist: ensureDeck failed for pool ${pool.id}: ${e?.message}`)
   }
 
   const member = pool.deck_id

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { fetchSet, fetchUniques, isUniqueRef } from '../lib/cardData.js'
 import { createDeck, updateDeck, toDeckCards, getDeck, deckCardsToRefs } from '../lib/decks.js'
 import { syncPoolDeck } from '../lib/tournamentApi.js'
+import { buildRandomDeck } from '../lib/randomDeck.js'
 import PoolGrid from './PoolGrid.jsx'
 import PackReveal from './PackReveal.jsx'
 import TopNav from './TopNav.jsx'
@@ -50,6 +51,10 @@ export default function TournamentPoolView({ title, load, reset }) {
   const syncTimerRef = useRef(null)
   const deckRef = useRef(deck)
   deckRef.current = deck
+  // Seeding `deck` from a load (or a reset) is not a user edit — it must NOT re-trigger a
+  // sync, or a BGA-generated "Random …" deck would lose that name the moment the player
+  // merely opens the page, before they've touched anything.
+  const skipNextSyncRef = useRef(false)
 
   const loadPool = useCallback(async () => {
     setLoading(true)
@@ -74,6 +79,7 @@ export default function TournamentPoolView({ title, load, reset }) {
       // Seed the local deck editor from whatever's already been synced for this pool.
       // We don't have a per-card deck breakdown server-side (only the summary), so an
       // existing deck's contents come from decks-api directly.
+      skipNextSyncRef.current = true
       if (data.deck?.id) {
         try {
           const existingDeck = await getDeck(data.deck.id)
@@ -126,6 +132,7 @@ export default function TournamentPoolView({ title, load, reset }) {
       }
       poolRef.current = result
       setPool(result)
+      skipNextSyncRef.current = true
       setDeck({})
       await loadPool()
     } catch (e) {
@@ -186,8 +193,22 @@ export default function TournamentPoolView({ title, load, reset }) {
     }
   }, [cardMap])
 
-  useEffect(() => { scheduleSync() }, [deck, scheduleSync])
+  useEffect(() => {
+    if (skipNextSyncRef.current) { skipNextSyncRef.current = false; return }
+    scheduleSync()
+  }, [deck, scheduleSync])
   useEffect(() => () => { if (syncTimerRef.current) clearTimeout(syncTimerRef.current) }, [])
+
+  function handleResetDeck() {
+    if (deckTotal === 0) return
+    if (!window.confirm('Reset your deck? This removes every card from your deck (your pool is unaffected).')) return
+    setDeck({})
+  }
+
+  function handleMakeRandomDeck() {
+    if (deckTotal > 0) return
+    setDeck(buildRandomDeck(pool?.cards ?? {}, cardMap))
+  }
 
   function addCard(ref) {
     setDeck(d => ({ ...d, [ref]: (d[ref] ?? 0) + 1 }))
@@ -210,7 +231,10 @@ export default function TournamentPoolView({ title, load, reset }) {
   const deckRefs = Object.entries(deck).flatMap(([ref, qty]) => Array(qty).fill(ref))
   const deckFactions = new Set(deckRefs.map(r => cardMap[r]?.faction).filter(Boolean))
   const deckHeroCount = deckRefs.filter(r => cardMap[r]?.cardType === 'HERO').length
-  const isValid = deckTotal >= 30 && deckFactions.size <= 3 && deckHeroCount <= 1
+  const isEnough = deckTotal >= 30
+  const isValidFactions = deckFactions.size <= 3
+  const isValidHero = deckHeroCount <= 1
+  const isValid = isEnough && isValidFactions && isValidHero
 
   // Boosters (from the API's `boosters`) feed the first-open reveal only; deckbuilding
   // always uses the full pool. Heroes aren't in boosters — they're in the full pool.
@@ -241,17 +265,33 @@ export default function TournamentPoolView({ title, load, reset }) {
       <div className="w-full px-4 py-4 flex-1 flex flex-col">
         <div className="flex items-center gap-3 mb-3 flex-wrap">
           <h1 className="text-xl font-display">{title}</h1>
-          <span className="text-xs text-faint">
-            {deckTotal}/30+ cards · {deckFactions.size}/3 factions · {deckHeroCount}/1 hero
-            {isValid ? ' · ✓ valid' : ''}
-          </span>
+          <div className={`flex flex-wrap items-center gap-3 px-3 py-1.5 rounded-lg border-2 text-base font-semibold ${
+            isValid ? 'border-green-700 bg-green-900/25' : 'border-red-800 bg-red-950/25'}`}>
+            <span className={isEnough ? 'text-green-400' : 'text-red-400'}>{isEnough ? '✓' : '✗'} {deckTotal}/30+ cards</span>
+            <span className={isValidFactions ? 'text-green-400' : 'text-red-400'}>{isValidFactions ? '✓' : '✗'} {deckFactions.size}/3 factions</span>
+            <span className={isValidHero ? (deckHeroCount === 1 ? 'text-green-400' : 'text-faint') : 'text-red-400'}>{isValidHero ? '✓' : '✗'} {deckHeroCount}/1 hero</span>
+            <span className={`font-bold ${isValid ? 'text-green-400' : 'text-red-400'}`}>
+              {isValid ? 'Deck is valid ✓' : 'Deck is not valid ✗'}
+            </span>
+          </div>
           {syncing && <span className="text-xs text-faint">Syncing deck…</span>}
-          {reset && (
-            <button onClick={handleReset} disabled={cooldownMs > 0}
-              className="ml-auto text-xs px-3 py-1.5 rounded bg-surface2 hover:bg-surface3 disabled:opacity-40 transition-colors">
-              {cooldownMs > 0 ? `Reset available in ${formatCooldown(cooldownMs)}` : 'Reset pool'}
+          <div className="ml-auto flex items-center gap-2">
+            <button onClick={handleMakeRandomDeck} disabled={deckTotal > 0}
+              title={deckTotal > 0 ? 'Reset your deck first' : 'Build a valid deck from your pool'}
+              className="text-xs px-3 py-1.5 rounded bg-surface2 hover:bg-surface3 disabled:opacity-40 transition-colors">
+              Make random deck
             </button>
-          )}
+            <button onClick={handleResetDeck} disabled={deckTotal === 0}
+              className="text-xs px-3 py-1.5 rounded bg-surface2 hover:bg-red-900 disabled:opacity-40 transition-colors">
+              Reset deck
+            </button>
+            {reset && (
+              <button onClick={handleReset} disabled={cooldownMs > 0}
+                className="text-xs px-3 py-1.5 rounded bg-surface2 hover:bg-surface3 disabled:opacity-40 transition-colors">
+                {cooldownMs > 0 ? `Reset available in ${formatCooldown(cooldownMs)}` : 'Reset pool'}
+              </button>
+            )}
+          </div>
         </div>
         {error && <p className="text-red-400 text-sm mb-2">{error}</p>}
 
