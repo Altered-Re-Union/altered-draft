@@ -24,17 +24,33 @@ export function buildRandomDeck(poolCards, cardMap, { size = 30 } = {}) {
     const f = cardMap[ref]?.faction
     if (f) (byFaction[f] = byFaction[f] ?? []).push(ref)
   }
+  const countOf = f => (byFaction[f] ?? []).reduce((sum, ref) => sum + (poolCards[ref] ?? 1), 0)
 
-  // Pick up to 3 factions (in random order), stopping once they cover the remaining slots.
-  const chosen = new Set(heroFaction ? [heroFaction] : [])
-  let covered = 0
-  for (const f of shuffle(Object.keys(byFaction))) {
-    if (chosen.size >= 3) break
-    if (chosen.has(f)) continue
-    chosen.add(f)
-    covered += byFaction[f].reduce((sum, ref) => sum + (poolCards[ref] ?? 1), 0)
-    if (covered >= remaining) break
+  // Pick up to 3 factions total (heroFaction, if any, is one of them) whose combined count
+  // covers `remaining` cards — checked BEFORE drawing any individual card, so a random pick
+  // of sparse factions can't leave the deck short (and invalid) when a better combo existed.
+  const otherFactions = Object.keys(byFaction).filter(f => f !== heroFaction)
+  const slotsLeft = heroFaction ? 2 : 3
+  const baseCovered = heroFaction ? countOf(heroFaction) : 0
+
+  const byCountDesc = [...otherFactions].sort((a, b) => countOf(b) - countOf(a))
+  let pick = byCountDesc.slice(0, slotsLeft) // the best any combo of `slotsLeft` factions can cover
+  const bestTotal = baseCovered + pick.reduce((sum, f) => sum + countOf(f), 0)
+
+  if (bestTotal >= remaining) {
+    // The pool CAN reach a full-size deck — look for a random combo that also reaches it,
+    // so the pick isn't always "the biggest factions". Falls back to the best combo above
+    // if no random attempt covers it within a reasonable number of tries.
+    for (let attempt = 0; attempt < 20; attempt++) {
+      const candidate = shuffle(otherFactions).slice(0, slotsLeft)
+      const total = baseCovered + candidate.reduce((sum, f) => sum + countOf(f), 0)
+      if (total >= remaining) { pick = candidate; break }
+    }
   }
+  // else: even the best combo falls short — the pool itself is too small for a full deck
+  // across ≤3 factions; use the best combo anyway (maximizes what's achievable).
+
+  const chosen = new Set(heroFaction ? [heroFaction, ...pick] : pick)
 
   // Flatten the chosen factions' cards into one copy-per-owned-copy list, shuffle, and take
   // only as many as still needed — lands the deck on exactly `size` cards (or the pool's

@@ -158,8 +158,12 @@ export default function TournamentPoolView({ title, load, reset }) {
         const deckFactions = new Set(refs.map(r => cardMap[r]?.faction).filter(Boolean))
         const deckHeroCount = refs.filter(r => cardMap[r]?.cardType === 'HERO').length
         const isValid = refs.length >= 30 && deckFactions.size <= 3 && deckHeroCount <= 1
+        // "Invalid " is a literal token the BGA-side integration matches on to flag the
+        // deck explicitly, instead of failing opaquely on the next decks-api call — do not
+        // route it through t()/translate it, same rule as ensureDeck's "Random " prefix.
+        const namePrefix = isValid ? '' : 'Invalid '
         const summary = {
-          name: `${currentPool.setCode} sealed · ${new Date().toLocaleDateString()}`,
+          name: `${namePrefix}${currentPool.setCode} sealed · ${new Date().toLocaleDateString()}`,
           deckCards,
           isDraft: !isValid,
           format: 'sealed',
