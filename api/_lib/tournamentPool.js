@@ -137,21 +137,44 @@ export async function ensureDeck(sub, poolRow, bearerToken) {
   const faction = heroRef ? (cardMap[heroRef]?.faction ?? null) : null
   const name = `Random ${poolRow.set_code} sealed · ${new Date().toISOString().slice(0, 10)}`
 
+  // Create as a DRAFT first. decks-api's SealedFormatValidator only runs when isDraft is
+  // false, and it validates pool membership by calling BACK into altered-draft's own
+  // /api/tournament-pool-by-deck — for a brand-new deck id, that link doesn't exist on our
+  // side yet (we only write it below, via updateDeckSummary). Validating with isDraft:false
+  // right away would always fail that first check, and decks-api CACHES the failure for
+  // 30s keyed by deck id — so even an immediate retry on the same deck would still read as
+  // invalid. isDraft:true skips validation entirely on creation, sidestepping the race.
   const res = await fetch(DECKS_API, {
     method: 'POST',
     headers: { Authorization: `Bearer ${bearerToken}`, Accept: 'application/json', 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, format: 'sealed', isDraft: false, isPublic: false, deckCards: toDeckCards(refs) }),
+    body: JSON.stringify({ name, format: 'sealed', isDraft: true, isPublic: false, deckCards: toDeckCards(refs) }),
   })
   if (!res.ok) throw new Error(`Could not save the random deck (HTTP ${res.status}).`)
   const created = await res.json()
 
-  return updateDeckSummary(poolRow.id, {
+  const updated = await updateDeckSummary(poolRow.id, {
     deckId: created.id,
     name,
     heroRef,
     faction,
     cardQuantity: refs.length,
   })
+
+  // Now that the pool<->deck link exists on our side, flip it off draft — decks-api
+  // re-validates on this PATCH, and this time the pool-membership lookup succeeds and
+  // caches a good result instead of the earlier failure.
+  const patchRes = await fetch(`${DECKS_API}/${encodeURIComponent(created.id)}`, {
+    method: 'PATCH',
+    // decks-api's api_platform.yaml restricts PATCH to application/merge-patch+json
+    // (patch_formats) — application/json here gets rejected outright.
+    headers: { Authorization: `Bearer ${bearerToken}`, Accept: 'application/json', 'Content-Type': 'application/merge-patch+json' },
+    body: JSON.stringify({ isDraft: false }),
+  })
+  if (!patchRes.ok) {
+    console.log(`ensureDeck: could not flip deck ${created.id} off draft (HTTP ${patchRes.status})`)
+  }
+
+  return updated
 }
 
 /**
