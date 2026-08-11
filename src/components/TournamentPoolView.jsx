@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { fetchSet, fetchUniques, isUniqueRef } from '../lib/cardData.js'
-import { createDeck, updateDeck, toDeckCards } from '../lib/decks.js'
+import { createDeck, updateDeck, toDeckCards, getDeck, deckCardsToRefs } from '../lib/decks.js'
 import { syncPoolDeck } from '../lib/tournamentApi.js'
 import PoolGrid from './PoolGrid.jsx'
 import PackReveal from './PackReveal.jsx'
@@ -74,7 +74,20 @@ export default function TournamentPoolView({ title, load, reset }) {
       // Seed the local deck editor from whatever's already been synced for this pool.
       // We don't have a per-card deck breakdown server-side (only the summary), so an
       // existing deck's contents come from decks-api directly.
-      setDeck({})
+      if (data.deck?.id) {
+        try {
+          const existingDeck = await getDeck(data.deck.id)
+          const counts = {}
+          for (const ref of deckCardsToRefs(existingDeck)) counts[ref] = (counts[ref] ?? 0) + 1
+          setDeck(counts)
+        } catch {
+          // Deck may have been deleted server-side (e.g. a prior reset's best-effort
+          // delete) — fall back to an empty editor rather than failing the whole load.
+          setDeck({})
+        }
+      } else {
+        setDeck({})
+      }
     } catch (e) {
       setError(e.message || 'Could not load your pool.')
     } finally {
