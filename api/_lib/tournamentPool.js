@@ -88,17 +88,44 @@ function toDeckCards(refs) {
 }
 
 /**
- * If `poolRow` has no linked deck yet (or one with zero cards), mints a random valid-shaped
- * deck from the pool's own cards, saves it via decks-api, and caches the summary onto the
- * pool row — so a BGA game that loads before the player has built anything still gets a
- * legal deck instead of none. The name is prefixed "Random " so the BGA-side integration
- * can flag it as unreviewed; any later edit through the app's own deckbuilder overwrites
- * the name (dropping the prefix) the next time it syncs via decks-api, since that sync
- * always recomputes the name from scratch.
+ * Whether `deckId` still exists on decks-api. The cached summary on `sealed_pools` is only
+ * ever refreshed by our own throttled frontend sync (TournamentPoolView.jsx) — a deck
+ * deleted or edited out-of-band (directly through decks-api, e.g. a third-party
+ * deckbuilder) leaves the cache stale with no signal to invalidate it, so this is a live
+ * check rather than trusting the cache outright. Non-404 failures (network hiccup, decks-api
+ * outage, an expired bearer token) are NOT treated as "gone" — only a definitive 404 does,
+ * so a transient error can't wipe a perfectly good cached deck.
+ */
+async function deckStillExists(deckId, bearerToken) {
+  const res = await fetch(`${DECKS_API}/${encodeURIComponent(deckId)}`, {
+    headers: { Authorization: `Bearer ${bearerToken}`, Accept: 'application/json' },
+  })
+  if (res.status === 404) return false
+  if (!res.ok) throw new Error(`Could not verify deck ${deckId} (HTTP ${res.status}).`)
+  return true
+}
+
+/**
+ * If `poolRow` has no linked deck yet (or one with zero cards, or one that's since been
+ * deleted/edited away on decks-api directly), mints a random valid-shaped deck from the
+ * pool's own cards, saves it via decks-api, and caches the summary onto the pool row — so a
+ * BGA game that loads before the player has built anything still gets a legal deck instead
+ * of none (or a dead deck id that 404s when BGA fetches its content). The name is prefixed
+ * "Random " so the BGA-side integration can flag it as unreviewed; any later edit through
+ * the app's own deckbuilder overwrites the name (dropping the prefix) the next time it
+ * syncs via decks-api, since that sync always recomputes the name from scratch.
  * @returns {Promise<object>} the pool row, updated if a deck was minted (unchanged otherwise)
  */
 export async function ensureDeck(sub, poolRow, bearerToken) {
-  if (poolRow.deck_id && poolRow.deck_card_quantity) return poolRow
+  if (poolRow.deck_id && poolRow.deck_card_quantity) {
+    try {
+      if (await deckStillExists(poolRow.deck_id, bearerToken)) return poolRow
+      console.log(`ensureDeck: cached deck ${poolRow.deck_id} for pool ${poolRow.id} no longer exists — reminting`)
+    } catch (e) {
+      console.log(`ensureDeck: existence check failed for deck ${poolRow.deck_id}, trusting cache: ${e?.message}`)
+      return poolRow
+    }
+  }
 
   const { counts } = await regeneratePool(sub, poolRow)
   const cardMap = await buildCardMap(poolRow.set_code, Object.keys(counts))
