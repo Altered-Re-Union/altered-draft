@@ -35,7 +35,9 @@ async function copyText(text) {
 // One dropdown for both copying card lists (altered.re format) and saving to Re:Union —
 // replaces the separate copy + save buttons on Results & Sealed. `format` is the human
 // label ("Draft" | "Sealed") woven into saved deck names, e.g. "AB12 · Draft deck · 1706".
-export default function ExportMenu({ poolRefs, deckRefs, poolDecklist, deckDecklist, name, format = 'Draft' }) {
+// `deckIsValid` mirrors the page's own validity check (≥30 non-hero cards, ≤3 factions,
+// ≤1 hero) — a saved deck only clears isDraft on the decks API once it's actually legal there.
+export default function ExportMenu({ poolRefs, deckRefs, deckIsValid = false, poolDecklist, deckDecklist, name, format = 'Draft' }) {
   const { user, login } = useAuth()
   const [open, setOpen] = useState(false)
   const [toast, setToast] = useState('')
@@ -68,7 +70,9 @@ export default function ExportMenu({ poolRefs, deckRefs, poolDecklist, deckDeckl
       // Pools open in deckbuilder.alteredcore.org, which 401s on a PRIVATE deck when the
       // viewer isn't logged in there → save pools PUBLIC so the "Open ↗" link just works
       // (and is shareable). Decks stay private: they open on altered.re, which handles login.
-      const { id } = await createDeck({ name: deckName, deckCards: toDeckCards(refs), isDraft: kind === 'pool', format: 'sandbox', isPublic: kind === 'pool' })
+      // A deck only loses draft status once it's actually valid per our own rules — pushing
+      // an unfinished deck as non-draft would misreport it as legal on the decks API.
+      const { id } = await createDeck({ name: deckName, deckCards: toDeckCards(refs), isDraft: kind === 'pool' ? true : !deckIsValid, format: 'sandbox', isPublic: kind === 'pool' })
       setSaved(s => ({ ...s, [kind]: id }))
     } catch (e) {
       setSaved(s => ({ ...s, [`${kind}Err`]: e.message }))
@@ -119,7 +123,7 @@ export default function ExportMenu({ poolRefs, deckRefs, poolDecklist, deckDeckl
                   : saved.deckErr ? <span className="text-xs text-red-400" title={saved.deckErr}>failed</span>
                   : <span className="text-xs text-faint">{deckRefs?.length ?? 0}</span>}
               </button>
-              <p className="px-3 pt-1 text-xs text-faint">Saved as sandbox decks under {user.pseudo}.</p>
+              <p className="px-3 pt-1 text-xs text-faint">Saved as sandbox decks under {user.pseudo}.{!deckIsValid && hasDeck ? ' Deck saves as draft until it meets the validity rules.' : ''}</p>
             </>
           )}
         </div>

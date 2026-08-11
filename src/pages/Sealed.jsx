@@ -146,7 +146,7 @@ export default function Sealed() {
         <span className="text-muted text-sm">Sealed</span>
         <div className="ml-auto flex gap-2 items-center">
           <ReunionButton />
-          <ExportMenu poolRefs={allRefs} deckRefs={deckRefs}
+          <ExportMenu poolRefs={allRefs} deckRefs={deckRefs} deckIsValid={isValid}
             poolDecklist={allDecklist} deckDecklist={deckDecklist} name={code} format="Sealed" />
           <ThemeToggle />
         </div>

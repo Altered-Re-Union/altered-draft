@@ -146,10 +146,13 @@ export default function TournamentPoolView({ title, load, reset }) {
         const refs = Object.entries(deckRef.current).flatMap(([ref, qty]) => Array(qty).fill(ref))
         const deckCards = toDeckCards(refs)
         const heroRef = refs.find(r => cardMap[r]?.cardType === 'HERO')
+        const deckFactions = new Set(refs.map(r => cardMap[r]?.faction).filter(Boolean))
+        const deckHeroCount = refs.filter(r => cardMap[r]?.cardType === 'HERO').length
+        const isValid = refs.length >= 30 && deckFactions.size <= 3 && deckHeroCount <= 1
         const summary = {
           name: `${currentPool.setCode} sealed · ${new Date().toLocaleDateString()}`,
           deckCards,
-          isDraft: true,
+          isDraft: !isValid,
           format: 'sealed',
         }
         let deckId = currentPool.deck?.id

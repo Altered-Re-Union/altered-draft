@@ -125,7 +125,7 @@ export default function Results() {
         <span className="text-muted text-sm">Draft Complete · {myPicks.length} picks</span>
         <div className="ml-auto flex gap-2 items-center">
           <ReunionButton />
-          <ExportMenu poolRefs={myPicks} deckRefs={deckRefs}
+          <ExportMenu poolRefs={myPicks} deckRefs={deckRefs} deckIsValid={isValid}
             poolDecklist={allDecklist} deckDecklist={deckDecklist} name={code} format="Draft" />
           <a href="https://altered.re/pages/decks" target="_blank" rel="noopener noreferrer"
             className="px-3 py-1.5 bg-surface2 hover:bg-surface3 text-sm rounded-lg text-ink2 transition-colors">

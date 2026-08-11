@@ -48,8 +48,11 @@ export function useZoomOrigin(scale = HOVER_SCALE) {
     let x = ''
     if (r.left - growX < 8) x = 'left'
     else if (r.right + growX > vw - 8) x = 'right'
-    let y = 'top'
-    if (r.bottom + growY > vh - 8 && r.top - growY > 8) y = 'bottom'
+    // Grow upward by default (anchored to the bottom edge) so the enlarged card overlaps
+    // the row above instead of bleeding down into the next row's cards/controls — that
+    // downward bleed used to hijack hover as the mouse moved right along a row.
+    let y = 'bottom'
+    if (r.top - growY < 8 && r.bottom + growY < vh - 8) y = 'top'
     setOrigin(`${y}${x ? ' ' + x : ''}`)
   }
   return { ref, origin, onMouseEnter }
@@ -229,12 +232,15 @@ function CompactRow({ ref_, occurrences, card, deck, poolCounts, onAdd, onRemove
   const canRemove = inDeck > 0
   const isHero = card?.cardType === 'HERO'
   const cost = isHero ? '' : (card?.mainCost != null ? card.mainCost : '—')
+  const zoomControls = (onAdd && onRemove)
+    ? { qty: inDeck, total: poolQty, canAdd, canRemove, onAdd: () => onAdd(ref_), onRemove: () => onRemove(ref_) }
+    : null
 
   return (
     <div className="flex items-center gap-2 px-1.5 py-0.5 rounded hover:bg-surface2 text-sm">
       <span className="w-5 shrink-0 text-center text-xs font-bold text-ink2 tabular-nums">{cost}</span>
       {/* Tap the name to see the card full screen (no art in this compact view). */}
-      <button onClick={() => zoom.open(card)}
+      <button onClick={() => zoom.open(card, zoomControls)}
         className="flex-1 min-w-0 truncate text-left text-ink2 hover:text-ink transition-colors" title={card?.name}>
         {card?.name ?? ref_}
       </button>
@@ -285,10 +291,13 @@ function PoolCard({ ref_, occurrences, card, loading, deck, poolCounts, onAdd, o
   const canRemove = inDeck > 0
   const setIcon = SET_ICONS[setCodeFromRef(ref_)]
   const hasControls = onAdd && onRemove
+  const zoomControls = hasControls
+    ? { qty: inDeck, total: poolQty, canAdd, canRemove, onAdd: () => onAdd(ref_), onRemove: () => onRemove(ref_) }
+    : null
 
   return (
     <div className="relative flex flex-col rounded-lg border border-line bg-surface">
-      <div ref={ref} onMouseEnter={onMouseEnter} onClick={() => zoom.open(card)} style={{ transformOrigin: origin }}
+      <div ref={ref} onMouseEnter={onMouseEnter} onClick={() => zoom.open(card, zoomControls)} style={{ transformOrigin: origin }}
         className="aspect-[2/3] bg-surface2 overflow-hidden rounded-t-lg relative cursor-zoom-in
         transition-transform duration-150 ease-out hover:scale-[1.6] hover:z-30 hover:shadow-xl hover:shadow-black/70">
         {card?.imagePath ? (
@@ -304,35 +313,32 @@ function PoolCard({ ref_, occurrences, card, loading, deck, poolCounts, onAdd, o
             ×{occurrences}
           </div>
         )}
-        {/* +/- live ON the image (same element that scales on hover) so they zoom together
-            with the card, stay big and clickable while zoomed, and never end up covered
-            by the enlarged art the way a separate footer did. */}
-        {hasControls && (
-          <div onClick={e => e.stopPropagation()}
-            className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-2 py-1.5 bg-black/70 rounded-b-lg">
-            <button onClick={() => onRemove(ref_)} disabled={!canRemove}
-              className="w-7 h-7 shrink-0 rounded-md bg-white/15 hover:bg-red-700 disabled:opacity-25 text-white font-bold flex items-center justify-center text-lg leading-none transition-colors">
-              −
-            </button>
-            <span className={`min-w-[2.75rem] text-center text-sm font-bold tabular-nums ${inDeck > 0 ? 'text-accent2' : 'text-white/80'}`}>
-              {inDeck}/{poolQty}
-            </span>
-            <button onClick={() => onAdd(ref_)} disabled={!canAdd}
-              className="w-7 h-7 shrink-0 rounded-md bg-white/15 hover:bg-green-700 disabled:opacity-25 text-white font-bold flex items-center justify-center text-lg leading-none transition-colors">
-              +
-            </button>
-          </div>
-        )}
       </div>
-      {/* Footer: name + set/rarity icons only — never interactive, so it can't get in the way */}
+      {/* Footer: name/icons + the deck +/- controls, in a fixed area below the art (never
+          scaled, never overlapping the illustration) so hovering never drifts their position. */}
       <div className="p-1">
-        <p className="text-xs text-ink2 leading-tight line-clamp-1">{card?.name ?? ''}</p>
-        <div className="flex items-center gap-1 mt-1">
-          <span className="ml-auto flex items-center gap-1">
+        <div className="flex items-center gap-1">
+          <p className="flex-1 min-w-0 text-xs text-ink2 leading-tight line-clamp-1">{card?.name ?? ''}</p>
+          <span className="flex items-center gap-1 shrink-0">
             {card?.cardType !== 'HERO' && RARITY_GEMS[card?.rarity] && <img src={RARITY_GEMS[card.rarity]} alt="" className="w-3 h-3 object-contain" />}
             {setIcon && <img src={setIcon} alt="" className="w-3 h-3 object-contain opacity-50" onError={e => { e.currentTarget.style.display = 'none' }} />}
           </span>
         </div>
+        {hasControls && (
+          <div className="flex items-center justify-center gap-2 mt-1.5">
+            <button onClick={() => onRemove(ref_)} disabled={!canRemove}
+              className="w-8 h-8 shrink-0 rounded-md bg-surface2 hover:bg-red-800 disabled:opacity-25 text-white font-bold flex items-center justify-center text-lg leading-none transition-colors">
+              −
+            </button>
+            <span className={`min-w-[2.75rem] text-center text-sm font-bold tabular-nums ${inDeck > 0 ? 'text-accent' : 'text-faint'}`}>
+              {inDeck}/{poolQty}
+            </span>
+            <button onClick={() => onAdd(ref_)} disabled={!canAdd}
+              className="w-8 h-8 shrink-0 rounded-md bg-surface2 hover:bg-green-800 disabled:opacity-25 text-white font-bold flex items-center justify-center text-lg leading-none transition-colors">
+              +
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )
