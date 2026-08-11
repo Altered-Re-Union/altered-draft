@@ -73,6 +73,16 @@ export function useZoomOrigin(scale = HOVER_SCALE) {
   return { ref, origin, onMouseEnter }
 }
 
+function LayersIcon({ className }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <polygon points="12 2 2 7 12 12 22 7 12 2" />
+      <polyline points="2 17 12 22 22 17" />
+      <polyline points="2 12 12 17 22 12" />
+    </svg>
+  )
+}
+
 /** Collapse a ref list (with duplicates) into [ref, count] pairs, order preserved. */
 function dedupeRefs(refs) {
   const seen = new Map()
@@ -219,16 +229,18 @@ export default function PoolGrid({ refs, cardMap, deck, poolCounts, onAdd, onRem
         ))}
       </div>
 
-      {/* Sort + count */}
-      <div className="px-4 py-2 border-b border-line flex items-center gap-2 shrink-0 bg-base">
-        <span className="text-xs text-faint mr-auto">
-          {new Set(visibleRefs).size} unique{visibleRefs.length !== new Set(visibleRefs).size && ` · ${visibleRefs.length} total`}
-        </span>
+      {/* Sort + view */}
+      <div className="px-4 py-2 border-b border-line flex items-center gap-2 flex-wrap shrink-0 bg-base">
         {canFilterByDeck && (
-          <button onClick={() => setOnlyInDeck(v => !v)}
-            className={`px-2.5 py-1 rounded text-xs transition-colors ${onlyInDeck ? 'bg-accent text-on-accent font-bold' : 'bg-surface2 text-muted hover:text-ink'}`}>
-            {onlyInDeck ? 'In deck only' : 'Show all'}
-          </button>
+          <>
+            <button onClick={() => setOnlyInDeck(v => !v)}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-bold border transition-colors ${
+                onlyInDeck ? 'bg-accent text-on-accent border-accent' : 'bg-surface2 text-muted border-line hover:text-ink'}`}>
+              <LayersIcon className="w-3.5 h-3.5" />
+              Deck only
+            </button>
+            <div className="w-px h-5 bg-line" />
+          </>
         )}
         <span className="text-xs text-faint">Group by:</span>
         {['faction', 'type', 'cost', 'set'].map(s => (
@@ -338,7 +350,7 @@ function CardGridInner({ refs, cardMap, loading, deck, poolCounts, onAdd, onRemo
   const unique = dedupeRefs(refs)
 
   return (
-    <div className="grid grid-cols-5 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-2">
+    <div className="grid grid-cols-3 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-2">
       {unique.map(([ref, occurrences]) => (
         <PoolCard key={ref} ref_={ref} occurrences={occurrences} card={cardMap[ref]}
           loading={loading} deck={deck} poolCounts={poolCounts} onAdd={onAdd} onRemove={onRemove}
@@ -357,19 +369,19 @@ function PoolCard({ ref_, occurrences, card, loading, deck, poolCounts, onAdd, o
   const setIcon = SET_ICONS[setCodeFromRef(ref_)]
   const hasControls = onAdd && onRemove
 
-  // Duplicate copies: fan a couple of dimmed "ghost" copies out behind the art (capped —
-  // beyond 3 the offset stack just looks messy) and still show the exact count as a badge.
+  // Duplicate copies: fan a couple of dimmed "ghost" copies out behind the art, peeking out
+  // top-right (standard stacking direction) — capped at 2, beyond that it just looks messy.
   const ghostLayers = Math.min(occurrences - 1, 2)
 
   return (
-    // The whole tile (art + name/icons + +/-) is the hover-zoom target, so the controls
+    // The whole tile (art + set icon + +/-) is the hover-zoom target, so the controls
     // scale up together with the card instead of sitting at a fixed size below it.
     <div ref={ref} onMouseEnter={onMouseEnter} style={{ transformOrigin: origin }}
       className="relative flex flex-col rounded-lg border border-line bg-surface
       transition-transform duration-150 ease-out hover:scale-[1.6] hover:z-30 hover:shadow-xl hover:shadow-black/70">
       <div onClick={() => zoom.open(orderedRefs, orderedRefs.indexOf(ref_))} className="aspect-[2/3] relative cursor-zoom-in">
         {Array.from({ length: ghostLayers }).map((_, i) => (
-          <div key={i} aria-hidden style={{ transform: `translate(${(ghostLayers - i) * 4}px, ${(ghostLayers - i) * 4}px)`, zIndex: i }}
+          <div key={i} aria-hidden style={{ transform: `translate(${(ghostLayers - i) * 4}px, ${-(ghostLayers - i) * 4}px)`, zIndex: i }}
             className="absolute inset-0 rounded-t-lg overflow-hidden bg-surface2 border border-line brightness-75">
             {card?.imagePath && <img src={card.imagePath} alt="" className="w-full h-full object-cover" />}
           </div>
@@ -383,40 +395,27 @@ function PoolCard({ ref_, occurrences, card, loading, deck, poolCounts, onAdd, o
               <span className="text-xs text-faint text-center leading-tight">{loading ? '…' : (card?.name ?? ref_)}</span>
             </div>
           )}
+          {setIcon && (
+            <img src={setIcon} alt="" className="absolute bottom-1 right-1 w-3 h-3 object-contain opacity-60"
+              onError={e => { e.currentTarget.style.display = 'none' }} />
+          )}
         </div>
-        {occurrences > 1 && (
-          <div style={{ zIndex: ghostLayers + 1 }}
-            className="absolute -top-1.5 -left-1.5 bg-accent text-on-accent font-bold text-[10px] min-w-[1.15rem] h-[1.15rem] px-1 rounded-full flex items-center justify-center border border-line">
-            {occurrences}
-          </div>
-        )}
       </div>
-      {/* Name/icons + the deck +/- controls, below the art (never overlapping it) but still
-          inside the zoomed tile above, so they grow together with the card on hover. */}
-      <div className="p-1">
-        <div className="flex items-center gap-1">
-          <p className="flex-1 min-w-0 text-xs text-ink2 leading-tight line-clamp-1">{card?.name ?? ''}</p>
-          <span className="flex items-center gap-1 shrink-0">
-            {card?.cardType !== 'HERO' && RARITY_GEMS[card?.rarity] && <img src={RARITY_GEMS[card.rarity]} alt="" className="w-3 h-3 object-contain" />}
-            {setIcon && <img src={setIcon} alt="" className="w-3 h-3 object-contain opacity-50" onError={e => { e.currentTarget.style.display = 'none' }} />}
+      {hasControls && (
+        <div className="flex items-center justify-center gap-1 sm:gap-2 mt-1 mb-1">
+          <button onClick={() => onRemove(ref_)} disabled={!canRemove}
+            className="w-6 h-6 sm:w-8 sm:h-8 shrink-0 rounded-md bg-surface2 hover:bg-red-800 disabled:opacity-25 text-white font-bold flex items-center justify-center text-sm sm:text-lg leading-none transition-colors">
+            −
+          </button>
+          <span className={`min-w-[2rem] sm:min-w-[2.75rem] text-center text-xs sm:text-sm font-bold tabular-nums ${inDeck > 0 ? 'text-accent' : 'text-faint'}`}>
+            {inDeck}/{poolQty}
           </span>
+          <button onClick={() => onAdd(ref_)} disabled={!canAdd}
+            className="w-6 h-6 sm:w-8 sm:h-8 shrink-0 rounded-md bg-surface2 hover:bg-green-800 disabled:opacity-25 text-white font-bold flex items-center justify-center text-sm sm:text-lg leading-none transition-colors">
+            +
+          </button>
         </div>
-        {hasControls && (
-          <div className="flex items-center justify-center gap-2 mt-1.5">
-            <button onClick={() => onRemove(ref_)} disabled={!canRemove}
-              className="w-8 h-8 shrink-0 rounded-md bg-surface2 hover:bg-red-800 disabled:opacity-25 text-white font-bold flex items-center justify-center text-lg leading-none transition-colors">
-              −
-            </button>
-            <span className={`min-w-[2.75rem] text-center text-sm font-bold tabular-nums ${inDeck > 0 ? 'text-accent' : 'text-faint'}`}>
-              {inDeck}/{poolQty}
-            </span>
-            <button onClick={() => onAdd(ref_)} disabled={!canAdd}
-              className="w-8 h-8 shrink-0 rounded-md bg-surface2 hover:bg-green-800 disabled:opacity-25 text-white font-bold flex items-center justify-center text-lg leading-none transition-colors">
-              +
-            </button>
-          </div>
-        )}
-      </div>
+      )}
     </div>
   )
 }
