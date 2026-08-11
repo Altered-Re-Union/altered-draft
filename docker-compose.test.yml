@@ -1,0 +1,25 @@
+# Postgres-only stack for integration tests (api/rooms/*.js against a real DB, matching
+# the self-hosted AlteredOps deployment's Postgres — see sync-with-servers/services/
+# altered-draft/docker-compose.yml there). Deliberately smaller than that stack: no
+# realtime/migrations/traefik, just the draft_rooms table these tests exercise.
+# Spun up/torn down automatically by `npm run test:integration` (see
+# tests/integration/globalSetup.js) — not meant to be left running.
+services:
+  postgres-test:
+    image: postgres:16-alpine
+    restart: "no"
+    environment:
+      POSTGRES_DB: altered_draft_test
+      POSTGRES_USER: altered_draft_test
+      POSTGRES_PASSWORD: altered_draft_test
+    ports:
+      - '55432:5432'
+    volumes:
+      - ./draft-rooms-schema.sql:/docker-entrypoint-initdb.d/01-draft-rooms-schema.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U altered_draft_test -d altered_draft_test']
+      interval: 1s
+      timeout: 1s
+      retries: 30
+    tmpfs:
+      - /var/lib/postgresql/data # throwaway data dir — no volume to clean up between runs

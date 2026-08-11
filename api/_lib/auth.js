@@ -13,13 +13,20 @@ export function bearerToken(req) {
 /** Returns the verified Keycloak `sub` for this request's Bearer token, or null. */
 export async function verifySub(req) {
   const token = bearerToken(req)
-  if (!token) return null
+  if (!token) {
+    console.log(`verifySub: no bearer token on ${req.method} ${req.url}`)
+    return null
+  }
   try {
     const res = await fetch(USERINFO, { headers: { Authorization: `Bearer ${token}` } })
-    if (!res.ok) return null
+    if (!res.ok) {
+      console.log(`verifySub: userinfo returned ${res.status} on ${req.method} ${req.url}`)
+      return null
+    }
     const data = await res.json()
     return data.sub || null
-  } catch {
+  } catch (e) {
+    console.log(`verifySub: userinfo call threw "${e?.message}" on ${req.method} ${req.url}`)
     return null
   }
 }

@@ -17,14 +17,22 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'method_not_allowed' })
   }
 
-  const sub = await verifySub(req)
-  if (!sub) return res.status(401).json({ error: 'unauthorized' })
-
   const deckId = (req.query?.deckId ?? new URL(req.url, 'http://x').searchParams.get('deckId') ?? '').trim()
+
+  const sub = await verifySub(req)
+  if (!sub) {
+    console.log(`tournament-pool-by-deck: unauthorized for deckId=${deckId}`)
+    return res.status(401).json({ error: 'unauthorized' })
+  }
+
   if (!deckId) return res.status(400).json({ error: 'invalid_request' })
 
   const pool = await getPoolByDeckId(sub, deckId)
-  if (!pool) return res.status(404).json({ error: 'not_found' })
+  if (!pool) {
+    console.log(`tournament-pool-by-deck: no pool found for sub=${sub} deckId=${deckId}`)
+    return res.status(404).json({ error: 'not_found' })
+  }
+  console.log(`tournament-pool-by-deck: OK sub=${sub} deckId=${deckId} poolId=${pool.id}`)
 
   const cards = await regeneratePoolCounts(sub, pool)
   const gamesPlayed = await countGamesPlayed(pool.id)

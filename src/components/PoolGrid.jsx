@@ -239,12 +239,12 @@ function CompactRow({ ref_, occurrences, card, deck, poolCounts, onAdd, onRemove
         {card?.name ?? ref_}
       </button>
       {onAdd && onRemove ? (
-        <span className="flex items-center gap-1 shrink-0">
+        <span className="flex items-center gap-1.5 shrink-0">
           <button onClick={() => onRemove(ref_)} disabled={!canRemove}
-            className="w-5 h-5 rounded bg-surface2 hover:bg-red-800 disabled:opacity-25 text-white font-bold flex items-center justify-center text-xs leading-none transition-colors">−</button>
-          <span className={`w-4 text-center text-xs font-bold ${inDeck > 0 ? 'text-accent' : 'text-faint'}`}>{inDeck}</span>
+            className="w-7 h-7 rounded-md bg-surface2 hover:bg-red-800 disabled:opacity-25 text-white font-bold flex items-center justify-center text-base leading-none transition-colors">−</button>
+          <span className={`min-w-[2.5rem] text-center text-xs font-bold tabular-nums ${inDeck > 0 ? 'text-accent' : 'text-faint'}`}>{inDeck}/{poolQty}</span>
           <button onClick={() => onAdd(ref_)} disabled={!canAdd}
-            className="w-5 h-5 rounded bg-surface2 hover:bg-green-800 disabled:opacity-25 text-white font-bold flex items-center justify-center text-xs leading-none transition-colors">+</button>
+            className="w-7 h-7 rounded-md bg-surface2 hover:bg-green-800 disabled:opacity-25 text-white font-bold flex items-center justify-center text-base leading-none transition-colors">+</button>
         </span>
       ) : (
         occurrences > 1 && <span className="shrink-0 text-xs text-faint">×{occurrences}</span>
@@ -284,6 +284,7 @@ function PoolCard({ ref_, occurrences, card, loading, deck, poolCounts, onAdd, o
   const canAdd = inDeck < poolQty
   const canRemove = inDeck > 0
   const setIcon = SET_ICONS[setCodeFromRef(ref_)]
+  const hasControls = onAdd && onRemove
 
   return (
     <div className="relative flex flex-col rounded-lg border border-line bg-surface">
@@ -303,30 +304,30 @@ function PoolCard({ ref_, occurrences, card, loading, deck, poolCounts, onAdd, o
             ×{occurrences}
           </div>
         )}
-        {inDeck > 0 && (
-          <div className="absolute top-1 right-1 bg-accent text-on-accent font-bold text-xs px-1.5 py-0.5 rounded">
-            {inDeck} in deck
+        {/* +/- live ON the image (same element that scales on hover) so they zoom together
+            with the card, stay big and clickable while zoomed, and never end up covered
+            by the enlarged art the way a separate footer did. */}
+        {hasControls && (
+          <div onClick={e => e.stopPropagation()}
+            className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-2 py-1.5 bg-black/70 rounded-b-lg">
+            <button onClick={() => onRemove(ref_)} disabled={!canRemove}
+              className="w-7 h-7 shrink-0 rounded-md bg-white/15 hover:bg-red-700 disabled:opacity-25 text-white font-bold flex items-center justify-center text-lg leading-none transition-colors">
+              −
+            </button>
+            <span className={`min-w-[2.75rem] text-center text-sm font-bold tabular-nums ${inDeck > 0 ? 'text-accent2' : 'text-white/80'}`}>
+              {inDeck}/{poolQty}
+            </span>
+            <button onClick={() => onAdd(ref_)} disabled={!canAdd}
+              className="w-7 h-7 shrink-0 rounded-md bg-white/15 hover:bg-green-700 disabled:opacity-25 text-white font-bold flex items-center justify-center text-lg leading-none transition-colors">
+              +
+            </button>
           </div>
         )}
       </div>
-      {/* Footer: name + controls (never overlaps the art) */}
+      {/* Footer: name + set/rarity icons only — never interactive, so it can't get in the way */}
       <div className="p-1">
         <p className="text-xs text-ink2 leading-tight line-clamp-1">{card?.name ?? ''}</p>
         <div className="flex items-center gap-1 mt-1">
-          {/* Deck +/- controls only when wired (deckbuilder). Read-only pool views omit them. */}
-          {onAdd && onRemove && (
-            <>
-              <button onClick={() => onRemove(ref_)} disabled={!canRemove}
-                className="w-5 h-5 rounded bg-surface2 hover:bg-red-800 disabled:opacity-25 text-white font-bold flex items-center justify-center text-sm leading-none transition-colors">
-                −
-              </button>
-              <span className={`w-4 text-center text-xs font-bold ${inDeck > 0 ? 'text-accent' : 'text-faint'}`}>{inDeck}</span>
-              <button onClick={() => onAdd(ref_)} disabled={!canAdd}
-                className="w-5 h-5 rounded bg-surface2 hover:bg-green-800 disabled:opacity-25 text-white font-bold flex items-center justify-center text-sm leading-none transition-colors">
-                +
-              </button>
-            </>
-          )}
           <span className="ml-auto flex items-center gap-1">
             {card?.cardType !== 'HERO' && RARITY_GEMS[card?.rarity] && <img src={RARITY_GEMS[card.rarity]} alt="" className="w-3 h-3 object-contain" />}
             {setIcon && <img src={setIcon} alt="" className="w-3 h-3 object-contain opacity-50" onError={e => { e.currentTarget.style.display = 'none' }} />}
