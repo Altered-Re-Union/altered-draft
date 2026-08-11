@@ -13,12 +13,8 @@ export function useCardZoom() {
 
 export function CardZoomProvider({ children }) {
   const [card, setCard] = useState(null)
-  // Optional deck +/- controls, passed by callers that opened the modal from a
-  // deckbuilder context — lets mobile users (no hover) manage quantity from the
-  // full-screen view, since tapping a card there is otherwise the only way to see it big.
-  const [controls, setControls] = useState(null)
-  const open = useCallback((c, ctrl = null) => { if (c && (c.imagePath || c.name)) { setCard(c); setControls(ctrl) } }, [])
-  const close = useCallback(() => { setCard(null); setControls(null) }, [])
+  const open = useCallback(c => { if (c && (c.imagePath || c.name)) setCard(c) }, [])
+  const close = useCallback(() => setCard(null), [])
 
   // Escape closes; lock the background from scrolling while open.
   useEffect(() => {
@@ -40,26 +36,8 @@ export function CardZoomProvider({ children }) {
         <div onClick={close} role="dialog" aria-modal="true"
           className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 cursor-zoom-out">
           {card.imagePath ? (
-            <div className="flex flex-col items-center gap-3">
-              <img src={card.imagePath} alt={card.name ?? ''}
-                className="max-h-[82vh] max-w-[94vw] w-auto h-auto rounded-2xl shadow-2xl select-none" />
-              {controls && (
-                <div onClick={e => e.stopPropagation()}
-                  className="flex items-center justify-center gap-3 bg-surface/90 rounded-full px-4 py-2 shadow-lg">
-                  <button onClick={controls.onRemove} disabled={!controls.canRemove}
-                    className="w-11 h-11 rounded-full bg-surface2 hover:bg-red-800 disabled:opacity-25 text-ink font-bold flex items-center justify-center text-xl leading-none transition-colors">
-                    −
-                  </button>
-                  <span className="min-w-[3rem] text-center text-base font-bold tabular-nums text-ink">
-                    {controls.qty}/{controls.total}
-                  </span>
-                  <button onClick={controls.onAdd} disabled={!controls.canAdd}
-                    className="w-11 h-11 rounded-full bg-surface2 hover:bg-green-800 disabled:opacity-25 text-ink font-bold flex items-center justify-center text-xl leading-none transition-colors">
-                    +
-                  </button>
-                </div>
-              )}
-            </div>
+            <img src={card.imagePath} alt={card.name ?? ''}
+              className="max-h-[92vh] max-w-[94vw] w-auto h-auto rounded-2xl shadow-2xl select-none" />
           ) : (
             <div className="text-ink text-lg text-center px-6">{card.name}</div>
           )}

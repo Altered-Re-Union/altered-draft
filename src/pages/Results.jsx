@@ -162,12 +162,14 @@ export default function Results() {
       {/* DECK TAB */}
       {tab === 'deck' && (
         <div className="flex-1 flex flex-col overflow-hidden">
-          <div className={`px-4 py-2 border-b shrink-0 flex flex-wrap gap-3 items-center text-sm ${
-            isValid ? 'border-green-800 bg-green-900/20' : 'border-line bg-surface'}`}>
+          <div className={`px-4 py-3 border-b-2 shrink-0 flex flex-wrap gap-4 items-center text-base font-semibold ${
+            isValid ? 'border-green-700 bg-green-900/25' : 'border-red-800 bg-red-950/25'}`}>
             <span className={isEnough ? 'text-green-400' : 'text-red-400'}>{isEnough ? '✓' : '✗'} {deckRefs.length}/30 cards</span>
             <span className={isValidFactions ? 'text-green-400' : 'text-red-400'}>{isValidFactions ? '✓' : '✗'} {deckFactions.size}/3 factions</span>
             <span className={isValidHero ? (deckHeroCount === 1 ? 'text-green-400' : 'text-faint') : 'text-red-400'}>{isValidHero ? '✓' : '✗'} {deckHeroCount}/1 hero</span>
-            {isValid && <span className="text-green-400 font-semibold ml-auto">Deck is valid ✓</span>}
+            <span className={`font-bold ml-auto ${isValid ? 'text-green-400' : 'text-red-400'}`}>
+              {isValid ? 'Deck is valid ✓' : 'Deck is not valid ✗'}
+            </span>
           </div>
           {deckTotal === 0
             ? <div className="flex-1 flex items-center justify-center text-faint text-sm">No cards in deck yet. Add them from the Full Pool tab.</div>

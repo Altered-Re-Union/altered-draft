@@ -35,28 +35,32 @@ function RotisserieCard({ ref_, card, count, onPick, disabled }) {
 // drafts ONE copy — only enabled on your turn. Distinct from CardGrid (which keys by ref and so
 // can't show a pool with duplicates) and PoolGrid (deckbuild +/- controls).
 export default function RotisserieGrid({ refs, cardMap, onPick, disabled }) {
-  const [filterFaction, setFilterFaction] = useState('ALL')
+  const [filterFactions, setFilterFactions] = useState([])
 
   if (!refs?.length) return <div className="text-faint text-sm">The pool is empty.</div>
+
+  function toggleFaction(f) {
+    setFilterFactions(prev => prev.includes(f) ? prev.filter(x => x !== f) : [...prev, f])
+  }
 
   const counts = new Map()
   for (const r of refs) counts.set(r, (counts.get(r) ?? 0) + 1)
   let unique = [...counts.keys()]
-  if (filterFaction !== 'ALL') unique = unique.filter(r => cardMap[r]?.faction === filterFaction)
+  if (filterFactions.length > 0) unique = unique.filter(r => filterFactions.includes(cardMap[r]?.faction))
   unique.sort(cardSorter(cardMap))
 
   return (
     <div>
       {/* Faction filter */}
       <div className="flex gap-1.5 flex-wrap mb-3">
-        <button onClick={() => setFilterFaction('ALL')}
-          className={`px-2.5 py-1 rounded text-xs transition-colors ${filterFaction === 'ALL' ? 'bg-surface3 text-ink' : 'text-faint hover:text-ink2'}`}>
+        <button onClick={() => setFilterFactions([])}
+          className={`px-2.5 py-1 rounded text-xs transition-colors ${filterFactions.length === 0 ? 'bg-surface3 text-ink' : 'text-faint hover:text-ink2'}`}>
           All
         </button>
         {FACTIONS.map(f => (
-          <button key={f} onClick={() => setFilterFaction(f === filterFaction ? 'ALL' : f)}
+          <button key={f} onClick={() => toggleFaction(f)}
             className={`px-2 py-1 rounded text-xs transition-colors flex items-center gap-1 border ${
-              filterFaction === f ? FACTION_COLORS[f] : 'border-transparent text-faint hover:text-ink2'}`}>
+              filterFactions.includes(f) ? FACTION_COLORS[f] : 'border-transparent text-faint hover:text-ink2'}`}>
             {FACTION_ICONS[f] && <img src={FACTION_ICONS[f]} alt={f} className="w-3 h-3 object-contain" />}
             <span className="hidden sm:inline">{FACTION_NAMES[f]}</span>
             <span className="sm:hidden">{f}</span>

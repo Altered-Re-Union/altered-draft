@@ -63,13 +63,17 @@ export function useZoomOrigin(scale = HOVER_SCALE) {
  * and a large hover preview. Heroes are grouped inside their own faction.
  */
 export default function PoolGrid({ refs, cardMap, deck, poolCounts, onAdd, onRemove, loading }) {
-  const [filterFaction, setFilterFaction] = useState('ALL')
+  const [filterFactions, setFilterFactions] = useState([])
   const [sortBy, setSortBy] = useState('faction')
   const [viewMode, setViewMode] = useState('cards') // 'cards' (art grid) | 'list' (compact columns)
 
-  const visibleRefs = filterFaction === 'ALL'
+  function toggleFaction(f) {
+    setFilterFactions(prev => prev.includes(f) ? prev.filter(x => x !== f) : [...prev, f])
+  }
+
+  const visibleRefs = filterFactions.length === 0
     ? refs
-    : refs.filter(r => cardMap[r]?.faction === filterFaction)
+    : refs.filter(r => filterFactions.includes(cardMap[r]?.faction))
 
   const cards = visibleRefs.map(r => ({ ref: r, card: cardMap[r] }))
 
@@ -140,14 +144,14 @@ export default function PoolGrid({ refs, cardMap, deck, poolCounts, onAdd, onRem
     <div className="flex flex-col h-full overflow-hidden">
       {/* Faction filter */}
       <div className="px-4 py-2 border-b border-line flex gap-1.5 flex-wrap shrink-0 bg-base">
-        <button onClick={() => setFilterFaction('ALL')}
-          className={`px-2.5 py-1 rounded text-xs transition-colors ${filterFaction === 'ALL' ? 'bg-surface3 text-ink' : 'text-faint hover:text-ink2'}`}>
+        <button onClick={() => setFilterFactions([])}
+          className={`px-2.5 py-1 rounded text-xs transition-colors ${filterFactions.length === 0 ? 'bg-surface3 text-ink' : 'text-faint hover:text-ink2'}`}>
           All
         </button>
         {FACTIONS.map(f => (
-          <button key={f} onClick={() => setFilterFaction(f === filterFaction ? 'ALL' : f)}
+          <button key={f} onClick={() => toggleFaction(f)}
             className={`px-2 py-1 rounded text-xs transition-colors flex items-center gap-1 border ${
-              filterFaction === f ? FACTION_COLORS[f] : 'border-transparent text-faint hover:text-ink2'}`}>
+              filterFactions.includes(f) ? FACTION_COLORS[f] : 'border-transparent text-faint hover:text-ink2'}`}>
             {FACTION_ICONS[f] && <img src={FACTION_ICONS[f]} alt={f} className="w-3 h-3 object-contain" />}
             <span className="hidden sm:inline">{FACTION_NAMES[f]}</span>
             <span className="sm:hidden">{f}</span>
@@ -232,15 +236,12 @@ function CompactRow({ ref_, occurrences, card, deck, poolCounts, onAdd, onRemove
   const canRemove = inDeck > 0
   const isHero = card?.cardType === 'HERO'
   const cost = isHero ? '' : (card?.mainCost != null ? card.mainCost : '—')
-  const zoomControls = (onAdd && onRemove)
-    ? { qty: inDeck, total: poolQty, canAdd, canRemove, onAdd: () => onAdd(ref_), onRemove: () => onRemove(ref_) }
-    : null
 
   return (
     <div className="flex items-center gap-2 px-1.5 py-0.5 rounded hover:bg-surface2 text-sm">
       <span className="w-5 shrink-0 text-center text-xs font-bold text-ink2 tabular-nums">{cost}</span>
       {/* Tap the name to see the card full screen (no art in this compact view). */}
-      <button onClick={() => zoom.open(card, zoomControls)}
+      <button onClick={() => zoom.open(card)}
         className="flex-1 min-w-0 truncate text-left text-ink2 hover:text-ink transition-colors" title={card?.name}>
         {card?.name ?? ref_}
       </button>
@@ -291,15 +292,15 @@ function PoolCard({ ref_, occurrences, card, loading, deck, poolCounts, onAdd, o
   const canRemove = inDeck > 0
   const setIcon = SET_ICONS[setCodeFromRef(ref_)]
   const hasControls = onAdd && onRemove
-  const zoomControls = hasControls
-    ? { qty: inDeck, total: poolQty, canAdd, canRemove, onAdd: () => onAdd(ref_), onRemove: () => onRemove(ref_) }
-    : null
 
   return (
-    <div className="relative flex flex-col rounded-lg border border-line bg-surface">
-      <div ref={ref} onMouseEnter={onMouseEnter} onClick={() => zoom.open(card, zoomControls)} style={{ transformOrigin: origin }}
-        className="aspect-[2/3] bg-surface2 overflow-hidden rounded-t-lg relative cursor-zoom-in
-        transition-transform duration-150 ease-out hover:scale-[1.6] hover:z-30 hover:shadow-xl hover:shadow-black/70">
+    // The whole tile (art + name/icons + +/-) is the hover-zoom target, so the controls
+    // scale up together with the card instead of sitting at a fixed size below it.
+    <div ref={ref} onMouseEnter={onMouseEnter} style={{ transformOrigin: origin }}
+      className="relative flex flex-col rounded-lg border border-line bg-surface
+      transition-transform duration-150 ease-out hover:scale-[1.6] hover:z-30 hover:shadow-xl hover:shadow-black/70">
+      <div onClick={() => zoom.open(card)}
+        className="aspect-[2/3] bg-surface2 overflow-hidden rounded-t-lg relative cursor-zoom-in">
         {card?.imagePath ? (
           <img src={card.imagePath} alt={card?.name} className="w-full h-full object-cover" loading="lazy"
             onError={e => { e.currentTarget.style.display = 'none' }} />
@@ -314,8 +315,8 @@ function PoolCard({ ref_, occurrences, card, loading, deck, poolCounts, onAdd, o
           </div>
         )}
       </div>
-      {/* Footer: name/icons + the deck +/- controls, in a fixed area below the art (never
-          scaled, never overlapping the illustration) so hovering never drifts their position. */}
+      {/* Name/icons + the deck +/- controls, below the art (never overlapping it) but still
+          inside the zoomed tile above, so they grow together with the card on hover. */}
       <div className="p-1">
         <div className="flex items-center gap-1">
           <p className="flex-1 min-w-0 text-xs text-ink2 leading-tight line-clamp-1">{card?.name ?? ''}</p>
