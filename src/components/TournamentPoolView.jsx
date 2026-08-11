@@ -265,23 +265,30 @@ export default function TournamentPoolView({ title, load, reset }) {
       <div className="w-full px-4 py-4 flex-1 flex flex-col">
         <div className="flex items-center gap-3 mb-3 flex-wrap">
           <h1 className="text-xl font-display">{title}</h1>
-          <div className={`flex flex-wrap items-center gap-3 px-3 py-1.5 rounded-lg border-2 text-base font-semibold ${
-            isValid ? 'border-green-700 bg-green-900/25' : 'border-red-800 bg-red-950/25'}`}>
-            <span className={isEnough ? 'text-green-400' : 'text-red-400'}>{isEnough ? '✓' : '✗'} {deckTotal}/30+ cards</span>
-            <span className={isValidFactions ? 'text-green-400' : 'text-red-400'}>{isValidFactions ? '✓' : '✗'} {deckFactions.size}/3 factions</span>
-            <span className={isValidHero ? (deckHeroCount === 1 ? 'text-green-400' : 'text-faint') : 'text-red-400'}>{isValidHero ? '✓' : '✗'} {deckHeroCount}/1 hero</span>
-            <span className={`font-bold ${isValid ? 'text-green-400' : 'text-red-400'}`}>
-              {isValid ? 'Deck is valid ✓' : 'Deck is not valid ✗'}
-            </span>
-          </div>
+          {loading ? (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border-2 border-line bg-surface2 text-base font-semibold text-muted">
+              <span className="w-4 h-4 rounded-full border-2 border-line border-t-accent animate-spin shrink-0" />
+              Loading your deck…
+            </div>
+          ) : (
+            <div className={`flex flex-wrap items-center gap-3 px-3 py-1.5 rounded-lg border-2 text-base font-semibold ${
+              isValid ? 'border-green-700 bg-green-900/25' : 'border-red-800 bg-red-950/25'}`}>
+              <span className={isEnough ? 'text-green-400' : 'text-red-400'}>{isEnough ? '✓' : '✗'} {deckTotal}/30+ cards</span>
+              <span className={isValidFactions ? 'text-green-400' : 'text-red-400'}>{isValidFactions ? '✓' : '✗'} {deckFactions.size}/3 factions</span>
+              <span className={isValidHero ? (deckHeroCount === 1 ? 'text-green-400' : 'text-faint') : 'text-red-400'}>{isValidHero ? '✓' : '✗'} {deckHeroCount}/1 hero</span>
+              <span className={`font-bold ${isValid ? 'text-green-400' : 'text-red-400'}`}>
+                {isValid ? 'Deck is valid ✓' : 'Deck is not valid ✗'}
+              </span>
+            </div>
+          )}
           {syncing && <span className="text-xs text-faint">Syncing deck…</span>}
           <div className="ml-auto flex items-center gap-2">
-            <button onClick={handleMakeRandomDeck} disabled={deckTotal > 0}
+            <button onClick={handleMakeRandomDeck} disabled={loading || deckTotal > 0}
               title={deckTotal > 0 ? 'Reset your deck first' : 'Build a valid deck from your pool'}
               className="text-xs px-3 py-1.5 rounded bg-surface2 hover:bg-surface3 disabled:opacity-40 transition-colors">
               Make random deck
             </button>
-            <button onClick={handleResetDeck} disabled={deckTotal === 0}
+            <button onClick={handleResetDeck} disabled={loading || deckTotal === 0}
               className="text-xs px-3 py-1.5 rounded bg-surface2 hover:bg-red-900 disabled:opacity-40 transition-colors">
               Reset deck
             </button>

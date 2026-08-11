@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import {
   FACTIONS, FACTION_NAMES, FACTION_COLORS,
   SET_ABBREV, SET_ABBREV_ICON_CODE,
@@ -73,6 +73,42 @@ export function useZoomOrigin(scale = HOVER_SCALE) {
   return { ref, origin, onMouseEnter }
 }
 
+/** Collapse a ref list (with duplicates) into [ref, count] pairs, order preserved. */
+function dedupeRefs(refs) {
+  const seen = new Map()
+  for (const r of refs) seen.set(r, (seen.get(r) ?? 0) + 1)
+  return [...seen.entries()]
+}
+
+// Registers a resolve(ref) -> { card, controls } function with the full-screen zoom modal
+// (see CardZoom.jsx) so it can navigate to ANY ref this view is showing, always with live
+// deck/cardMap data, and returns the zoom handle cards/rows use to open it.
+function useZoomNavigation(cardMap, deck, poolCounts, onAdd, onRemove) {
+  const zoom = useCardZoom()
+  const hasControls = !!(onAdd && onRemove)
+
+  const resolve = useCallback(ref => {
+    const card = cardMap[ref]
+    if (!card) return null
+    if (!hasControls) return { card }
+    const poolQty = poolCounts ? (poolCounts[ref] ?? 1) : 1
+    const inDeck = deck?.[ref] ?? 0
+    return {
+      card,
+      controls: {
+        qty: inDeck, total: poolQty,
+        canAdd: inDeck < poolQty, canRemove: inDeck > 0,
+        onAdd: () => onAdd(ref), onRemove: () => onRemove(ref),
+      },
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cardMap, deck, poolCounts, hasControls])
+
+  useEffect(() => { zoom.setResolver(resolve) }, [zoom, resolve])
+
+  return zoom
+}
+
 /**
  * Shared pool browser with faction filter, sort/group, +/- deck controls,
  * and a large hover preview. Heroes are grouped inside their own faction.
@@ -81,14 +117,20 @@ export default function PoolGrid({ refs, cardMap, deck, poolCounts, onAdd, onRem
   const [filterFactions, setFilterFactions] = useState([])
   const [sortBy, setSortBy] = useState('faction')
   const [viewMode, setViewMode] = useState('cards') // 'cards' (art grid) | 'list' (compact columns)
+  const [onlyInDeck, setOnlyInDeck] = useState(false)
+  const canFilterByDeck = !!(deck && onAdd && onRemove)
+  const zoom = useZoomNavigation(cardMap, deck, poolCounts, onAdd, onRemove)
 
   function toggleFaction(f) {
     setFilterFactions(prev => prev.includes(f) ? prev.filter(x => x !== f) : [...prev, f])
   }
 
-  const visibleRefs = filterFactions.length === 0
+  const factionFiltered = filterFactions.length === 0
     ? refs
     : refs.filter(r => filterFactions.includes(cardMap[r]?.faction))
+  const visibleRefs = (canFilterByDeck && onlyInDeck)
+    ? factionFiltered.filter(r => (deck[r] ?? 0) > 0)
+    : factionFiltered
 
   const cards = visibleRefs.map(r => ({ ref: r, card: cardMap[r] }))
 
@@ -154,6 +196,9 @@ export default function PoolGrid({ refs, cardMap, deck, poolCounts, onAdd, onRem
 
   const cmp = cardSorter(cardMap)
   const groups = buildGroups().map(g => ({ ...g, refs: [...g.refs].sort(cmp) }))
+  // Full-screen zoom navigation order: every card tile as it's actually rendered below,
+  // group by group, top to bottom — same list backs both the "cards" and "list" views.
+  const orderedRefs = groups.flatMap(g => dedupeRefs(g.refs).map(([ref]) => ref))
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -179,6 +224,12 @@ export default function PoolGrid({ refs, cardMap, deck, poolCounts, onAdd, onRem
         <span className="text-xs text-faint mr-auto">
           {new Set(visibleRefs).size} unique{visibleRefs.length !== new Set(visibleRefs).size && ` · ${visibleRefs.length} total`}
         </span>
+        {canFilterByDeck && (
+          <button onClick={() => setOnlyInDeck(v => !v)}
+            className={`px-2.5 py-1 rounded text-xs transition-colors ${onlyInDeck ? 'bg-accent text-on-accent font-bold' : 'bg-surface2 text-muted hover:text-ink'}`}>
+            {onlyInDeck ? 'In deck only' : 'Show all'}
+          </button>
+        )}
         <span className="text-xs text-faint">Group by:</span>
         {['faction', 'type', 'cost', 'set'].map(s => (
           <button key={s} onClick={() => setSortBy(s)}
@@ -205,7 +256,8 @@ export default function PoolGrid({ refs, cardMap, deck, poolCounts, onAdd, onRem
                 {group.label} <span className="font-bold">({group.refs.length})</span>
               </div>
               <CardGridInner refs={group.refs} cardMap={cardMap} loading={loading}
-                deck={deck} poolCounts={poolCounts} onAdd={onAdd} onRemove={onRemove} />
+                deck={deck} poolCounts={poolCounts} onAdd={onAdd} onRemove={onRemove}
+                zoom={zoom} orderedRefs={orderedRefs} />
             </div>
           ))}
         </div>
@@ -223,7 +275,8 @@ export default function PoolGrid({ refs, cardMap, deck, poolCounts, onAdd, onRem
                 <div>
                   {dedupeRefs(group.refs).map(([ref, occ]) => (
                     <CompactRow key={ref} ref_={ref} occurrences={occ} card={cardMap[ref]}
-                      deck={deck} poolCounts={poolCounts} onAdd={onAdd} onRemove={onRemove} />
+                      deck={deck} poolCounts={poolCounts} onAdd={onAdd} onRemove={onRemove}
+                      zoom={zoom} orderedRefs={orderedRefs} />
                   ))}
                 </div>
               </div>
@@ -235,31 +288,14 @@ export default function PoolGrid({ refs, cardMap, deck, poolCounts, onAdd, onRem
   )
 }
 
-/** Collapse a ref list (with duplicates) into [ref, count] pairs, order preserved. */
-function dedupeRefs(refs) {
-  const seen = new Map()
-  for (const r of refs) seen.set(r, (seen.get(r) ?? 0) + 1)
-  return [...seen.entries()]
-}
-
 /** One compact line: cost + name (+ deck +/- when wired). Used by the List view. */
-function CompactRow({ ref_, occurrences, card, deck, poolCounts, onAdd, onRemove }) {
-  const zoom = useCardZoom()
+function CompactRow({ ref_, occurrences, card, deck, poolCounts, onAdd, onRemove, zoom, orderedRefs }) {
   const poolQty = poolCounts ? (poolCounts[ref_] ?? occurrences) : occurrences
   const inDeck = deck?.[ref_] ?? 0
   const canAdd = inDeck < poolQty
   const canRemove = inDeck > 0
   const isHero = card?.cardType === 'HERO'
   const cost = isHero ? '' : (card?.mainCost != null ? card.mainCost : '—')
-  const hasControls = onAdd && onRemove
-  const zoomControls = hasControls
-    ? { qty: inDeck, total: poolQty, canAdd, canRemove, onAdd: () => onAdd(ref_), onRemove: () => onRemove(ref_) }
-    : null
-
-  // Keep the full-screen modal's qty/total live if this card's slot is the one currently open.
-  useEffect(() => {
-    if (zoomControls) zoom.sync(ref_, zoomControls)
-  }, [inDeck, poolQty])
 
   return (
     <div className="flex items-center gap-2 px-1.5 py-0.5 rounded hover:bg-surface2 text-sm">
@@ -268,7 +304,7 @@ function CompactRow({ ref_, occurrences, card, deck, poolCounts, onAdd, onRemove
         {!isHero && RARITY_GEMS[card?.rarity] && <img src={RARITY_GEMS[card.rarity]} alt={card.rarity} title={card.rarity} className="w-3 h-3 object-contain" />}
       </span>
       {/* Tap the name to see the card full screen (no art in this compact view). */}
-      <button onClick={() => zoom.open(card, ref_, zoomControls)}
+      <button onClick={() => zoom.open(orderedRefs, orderedRefs.indexOf(ref_))}
         className="flex-1 min-w-0 truncate text-left text-ink2 hover:text-ink transition-colors" title={card?.name}>
         {card?.name ?? ref_}
       </button>
@@ -289,44 +325,41 @@ function CompactRow({ ref_, occurrences, card, deck, poolCounts, onAdd, onRemove
 
 /** Self-contained card grid (no filter/sort controls). */
 export function SimpleCardGrid({ refs, cardMap, loading, deck, poolCounts, onAdd, onRemove }) {
+  const zoom = useZoomNavigation(cardMap, deck, poolCounts, onAdd, onRemove)
+  const orderedRefs = dedupeRefs(refs).map(([ref]) => ref)
   return (
     <CardGridInner refs={refs} cardMap={cardMap} loading={loading}
-      deck={deck} poolCounts={poolCounts} onAdd={onAdd} onRemove={onRemove} />
+      deck={deck} poolCounts={poolCounts} onAdd={onAdd} onRemove={onRemove}
+      zoom={zoom} orderedRefs={orderedRefs} />
   )
 }
 
-function CardGridInner({ refs, cardMap, loading, deck, poolCounts, onAdd, onRemove }) {
-  const seen = new Map()
-  for (const ref of refs) seen.set(ref, (seen.get(ref) ?? 0) + 1)
-  const unique = [...seen.entries()]
+function CardGridInner({ refs, cardMap, loading, deck, poolCounts, onAdd, onRemove, zoom, orderedRefs }) {
+  const unique = dedupeRefs(refs)
 
   return (
     <div className="grid grid-cols-5 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-2">
       {unique.map(([ref, occurrences]) => (
         <PoolCard key={ref} ref_={ref} occurrences={occurrences} card={cardMap[ref]}
-          loading={loading} deck={deck} poolCounts={poolCounts} onAdd={onAdd} onRemove={onRemove} />
+          loading={loading} deck={deck} poolCounts={poolCounts} onAdd={onAdd} onRemove={onRemove}
+          zoom={zoom} orderedRefs={orderedRefs} />
       ))}
     </div>
   )
 }
 
-function PoolCard({ ref_, occurrences, card, loading, deck, poolCounts, onAdd, onRemove }) {
+function PoolCard({ ref_, occurrences, card, loading, deck, poolCounts, onAdd, onRemove, zoom, orderedRefs }) {
   const { ref, origin, onMouseEnter } = useZoomOrigin()
-  const zoom = useCardZoom()
   const poolQty = poolCounts ? (poolCounts[ref_] ?? occurrences) : occurrences
   const inDeck = deck?.[ref_] ?? 0
   const canAdd = inDeck < poolQty
   const canRemove = inDeck > 0
   const setIcon = SET_ICONS[setCodeFromRef(ref_)]
   const hasControls = onAdd && onRemove
-  const zoomControls = hasControls
-    ? { qty: inDeck, total: poolQty, canAdd, canRemove, onAdd: () => onAdd(ref_), onRemove: () => onRemove(ref_) }
-    : null
 
-  // Keep the full-screen modal's qty/total live if this card's slot is the one currently open.
-  useEffect(() => {
-    if (zoomControls) zoom.sync(ref_, zoomControls)
-  }, [inDeck, poolQty])
+  // Duplicate copies: fan a couple of dimmed "ghost" copies out behind the art (capped —
+  // beyond 3 the offset stack just looks messy) and still show the exact count as a badge.
+  const ghostLayers = Math.min(occurrences - 1, 2)
 
   return (
     // The whole tile (art + name/icons + +/-) is the hover-zoom target, so the controls
@@ -334,19 +367,27 @@ function PoolCard({ ref_, occurrences, card, loading, deck, poolCounts, onAdd, o
     <div ref={ref} onMouseEnter={onMouseEnter} style={{ transformOrigin: origin }}
       className="relative flex flex-col rounded-lg border border-line bg-surface
       transition-transform duration-150 ease-out hover:scale-[1.6] hover:z-30 hover:shadow-xl hover:shadow-black/70">
-      <div onClick={() => zoom.open(card, ref_, zoomControls)}
-        className="aspect-[2/3] bg-surface2 overflow-hidden rounded-t-lg relative cursor-zoom-in">
-        {card?.imagePath ? (
-          <img src={card.imagePath} alt={card?.name} className="w-full h-full object-cover" loading="lazy"
-            onError={e => { e.currentTarget.style.display = 'none' }} />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center p-1">
-            <span className="text-xs text-faint text-center leading-tight">{loading ? '…' : (card?.name ?? ref_)}</span>
+      <div onClick={() => zoom.open(orderedRefs, orderedRefs.indexOf(ref_))} className="aspect-[2/3] relative cursor-zoom-in">
+        {Array.from({ length: ghostLayers }).map((_, i) => (
+          <div key={i} aria-hidden style={{ transform: `translate(${(ghostLayers - i) * 4}px, ${(ghostLayers - i) * 4}px)`, zIndex: i }}
+            className="absolute inset-0 rounded-t-lg overflow-hidden bg-surface2 border border-line brightness-75">
+            {card?.imagePath && <img src={card.imagePath} alt="" className="w-full h-full object-cover" />}
           </div>
-        )}
+        ))}
+        <div style={{ zIndex: ghostLayers }} className="absolute inset-0 bg-surface2 overflow-hidden rounded-t-lg border border-line">
+          {card?.imagePath ? (
+            <img src={card.imagePath} alt={card?.name} className="w-full h-full object-cover" loading="lazy"
+              onError={e => { e.currentTarget.style.display = 'none' }} />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center p-1">
+              <span className="text-xs text-faint text-center leading-tight">{loading ? '…' : (card?.name ?? ref_)}</span>
+            </div>
+          )}
+        </div>
         {occurrences > 1 && (
-          <div className="absolute top-1 left-1 bg-surface/90 text-ink2 font-bold text-xs px-1.5 py-0.5 rounded border border-line">
-            ×{occurrences}
+          <div style={{ zIndex: ghostLayers + 1 }}
+            className="absolute -top-1.5 -left-1.5 bg-accent text-on-accent font-bold text-[10px] min-w-[1.15rem] h-[1.15rem] px-1 rounded-full flex items-center justify-center border border-line">
+            {occurrences}
           </div>
         )}
       </div>

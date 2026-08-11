@@ -3,36 +3,65 @@ import { createPortal } from 'react-dom'
 
 // App-wide "tap a card to see it full screen" overlay. Hover-zoom (PoolGrid) only works on
 // desktop; this is the mobile-friendly way to actually read a card — important when players
-// are discovering a new set. Any card tile calls useCardZoom().open(card); the modal is
-// rendered once at the app root (see main.jsx) so it sits above everything.
+// are discovering a new set. The modal is rendered once at the app root (see main.jsx).
 //
-// Optional deck +/- controls: open(card, id, controls) shows a qty/total + +/- bar under the
-// image. `id` identifies the card slot (its ref) so a caller can push fresh numbers in via
-// sync(id, controls) as its own qty/total change — otherwise the modal would freeze on the
-// snapshot taken at open() time and drift from the live deck state.
+// Navigation: open(refs, index) shows refs[index] with left/right arrows, arrow keys, and
+// touch swipe all moving through the same ordered ref list — e.g. every card currently in a
+// PoolGrid view, in on-screen order, so browsing doesn't require closing and reopening.
+//
+// Callers register a `resolve(ref) => { card, controls } | null` function via setResolver()
+// — called on every render of the list that's on screen (deck/cardMap changes), so an open
+// modal always shows live data instead of a snapshot frozen at open() time, and navigation
+// can resolve any ref in the list on demand.
 const CardZoomContext = createContext(null)
+const noop = () => {}
 
 export function useCardZoom() {
-  return useContext(CardZoomContext) ?? { open: () => {}, close: () => {}, sync: () => {} }
+  return useContext(CardZoomContext) ?? { open: noop, close: noop, setResolver: noop }
 }
 
+const SWIPE_THRESHOLD_PX = 40
+
 export function CardZoomProvider({ children }) {
-  const [card, setCard] = useState(null)
-  const [controls, setControls] = useState(null)
-  const openId = useRef(null)
+  const [state, setState] = useState(null) // { refs, index, card, controls } | null
+  const resolverRef = useRef(() => null)
 
-  const open = useCallback((c, id = null, ctrl = null) => {
-    if (c && (c.imagePath || c.name)) { openId.current = id; setCard(c); setControls(ctrl) }
+  const resolveAt = useCallback((refs, index) => {
+    const clamped = Math.max(0, Math.min(index, refs.length - 1))
+    const resolved = resolverRef.current(refs[clamped]) || {}
+    return { refs, index: clamped, card: resolved.card ?? null, controls: resolved.controls ?? null }
   }, [])
-  const sync = useCallback((id, ctrl) => {
-    if (openId.current !== null && openId.current === id) setControls(ctrl)
-  }, [])
-  const close = useCallback(() => { openId.current = null; setCard(null); setControls(null) }, [])
 
-  // Escape closes; lock the background from scrolling while open.
+  const setResolver = useCallback(fn => {
+    resolverRef.current = fn
+    setState(prev => (prev ? resolveAt(prev.refs, prev.index) : prev))
+  }, [resolveAt])
+
+  const open = useCallback((refs, index) => {
+    if (!refs?.length) return
+    const next = resolveAt(refs, index)
+    if (next.card) setState(next)
+  }, [resolveAt])
+
+  const step = useCallback(delta => {
+    setState(prev => {
+      if (!prev) return prev
+      const index = prev.index + delta
+      if (index < 0 || index > prev.refs.length - 1) return prev
+      return resolveAt(prev.refs, index)
+    })
+  }, [resolveAt])
+
+  const close = useCallback(() => setState(null), [])
+
+  // Escape closes, arrow keys navigate; lock the background from scrolling while open.
   useEffect(() => {
-    if (!card) return
-    const onKey = e => { if (e.key === 'Escape') close() }
+    if (!state) return
+    const onKey = e => {
+      if (e.key === 'Escape') close()
+      else if (e.key === 'ArrowLeft') step(-1)
+      else if (e.key === 'ArrowRight') step(1)
+    }
     window.addEventListener('keydown', onKey)
     const prevOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
@@ -40,14 +69,44 @@ export function CardZoomProvider({ children }) {
       window.removeEventListener('keydown', onKey)
       document.body.style.overflow = prevOverflow
     }
-  }, [card, close])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only presence of `state` matters here
+  }, [!!state, close, step])
+
+  const touchStartXRef = useRef(null)
+  function onTouchStart(e) { touchStartXRef.current = e.touches[0]?.clientX ?? null }
+  function onTouchEnd(e) {
+    const startX = touchStartXRef.current
+    touchStartXRef.current = null
+    if (startX == null) return
+    const dx = (e.changedTouches[0]?.clientX ?? startX) - startX
+    if (Math.abs(dx) < SWIPE_THRESHOLD_PX) return // treat as a tap, not a swipe
+    step(dx < 0 ? 1 : -1)
+  }
+
+  const card = state?.card
+  const controls = state?.controls
+  const hasPrev = !!state && state.index > 0
+  const hasNext = !!state && state.index < state.refs.length - 1
 
   return (
-    <CardZoomContext.Provider value={{ open, close, sync }}>
+    <CardZoomContext.Provider value={{ open, close, setResolver }}>
       {children}
       {card && createPortal(
-        <div onClick={close} role="dialog" aria-modal="true"
+        <div onClick={close} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}
+          role="dialog" aria-modal="true"
           className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 cursor-zoom-out">
+          {hasPrev && (
+            <button onClick={e => { e.stopPropagation(); step(-1) }} aria-label="Previous card"
+              className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-surface/80 hover:bg-surface text-ink text-2xl leading-none flex items-center justify-center shadow-lg">
+              ‹
+            </button>
+          )}
+          {hasNext && (
+            <button onClick={e => { e.stopPropagation(); step(1) }} aria-label="Next card"
+              className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-surface/80 hover:bg-surface text-ink text-2xl leading-none flex items-center justify-center shadow-lg">
+              ›
+            </button>
+          )}
           {card.imagePath ? (
             <div className="flex flex-col items-center gap-3">
               <img src={card.imagePath} alt={card.name ?? ''}
