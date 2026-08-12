@@ -4,6 +4,7 @@ import { useAuth } from '../auth/AuthProvider.jsx'
 import { fetchPoolByDeckId } from '../lib/tournamentApi.js'
 import { useLang } from '../lib/i18n/i18n.jsx'
 import TopNav from '../components/TopNav.jsx'
+import Footer from '../components/Footer.jsx'
 
 // Deep link from a decks-api deck id (e.g. surfaced by BGA or altered.re) straight to that
 // deck's edit page in here — resolved by asking which of the caller's OWN sealed pools links
@@ -49,6 +50,7 @@ export default function EditDeckRedirect() {
           </p>
         )}
       </div>
+      <Footer />
     </div>
   )
 }

@@ -7,6 +7,7 @@ import { useLang } from '../lib/i18n/i18n.jsx'
 import PoolGrid from './PoolGrid.jsx'
 import PackReveal from './PackReveal.jsx'
 import TopNav from './TopNav.jsx'
+import Footer from './Footer.jsx'
 
 const SYNC_THROTTLE_MS = 2000
 const RESET_COOLDOWN_MS = 30 * 60 * 1000 // mirrors poolStore.js RESET_COOLDOWN_MS
@@ -322,6 +323,7 @@ export default function TournamentPoolView({ title, load, reset }) {
           />
         </div>
       </div>
+      <Footer />
     </div>
   )
 }
