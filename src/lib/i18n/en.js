@@ -469,6 +469,8 @@ export default {
     resetDeck: 'Reset deck',
     resetAvailableIn: 'Reset available in {{time}}',
     resetPool: 'Reset pool',
+    nextTournamentDeckName: 'Next tournament sealed set 6',
+    normalDeckName: 'Sealed set 6 · out of tournament',
   },
   sealed: {
     loading: 'Loading…',

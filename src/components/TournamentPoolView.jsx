@@ -162,9 +162,15 @@ export default function TournamentPoolView({ title, load, reset }) {
         // "Invalid " is a literal token the BGA-side integration matches on to flag the
         // deck explicitly, instead of failing opaquely on the next decks-api call — do not
         // route it through t()/translate it, same rule as ensureDeck's "Random " prefix.
+        // The base name itself always tracks the tournament this pool is/will be bound to
+        // (no date): the real tournament name once bound, else a generic placeholder for
+        // the still-pending preparation pool or the out-of-tournament normal pool.
         const namePrefix = isValid ? '' : 'Invalid '
+        const baseName = currentPool.kind === 'tournament'
+          ? (currentPool.tournamentName || t('tournamentPoolView.nextTournamentDeckName'))
+          : t('tournamentPoolView.normalDeckName')
         const summary = {
-          name: `${namePrefix}${currentPool.setCode} sealed · ${new Date().toLocaleDateString()}`,
+          name: `${namePrefix}${baseName}`,
           deckCards,
           isDraft: !isValid,
           format: 'sealed',

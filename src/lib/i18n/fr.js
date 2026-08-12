@@ -468,6 +468,8 @@ export default {
     resetDeck: 'Réinitialiser le deck',
     resetAvailableIn: 'Réinitialisation possible dans {{time}}',
     resetPool: 'Réinitialiser la pool',
+    nextTournamentDeckName: 'Prochain tournoi scellé set 6',
+    normalDeckName: 'Scellé set 6 hors tournoi',
   },
   sealed: {
     loading: 'Chargement…',

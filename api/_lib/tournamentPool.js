@@ -104,6 +104,20 @@ function deckCardsToRefs(deck) {
 // TournamentPoolView.jsx, whose throttled sync enforces this same rule + prefix on every
 // app-side edit).
 const INVALID_PREFIX = 'Invalid '
+// Flags an unreviewed auto-built deck (see ensureDeck below); stripped/dropped the moment
+// the player makes their own edit, since TournamentPoolView.jsx's sync never adds it back.
+const RANDOM_PREFIX = 'Random '
+
+// The base deck name (no date, no prefix) always tracks the tournament this pool is/will be
+// bound to — the real tournament name once bound (see poolStore.js's bindTournamentId),
+// else a generic placeholder for the still-pending preparation pool or the out-of-tournament
+// normal pool. Fixed English (no user locale available on this backend-only path) — mirrors
+// TournamentPoolView.jsx's own fallback strings, which recompute the same name from the
+// player's own sync and take over as soon as they touch their deck.
+function baseDeckName(poolRow) {
+  if (poolRow.kind === 'tournament') return poolRow.tournament_name || 'Next tournament sealed set 6'
+  return 'Sealed set 6 · out of tournament'
+}
 
 function isSealedValid(refs, cardMap) {
   const heroCount = refs.filter(r => cardMap[r]?.cardType === 'HERO').length
@@ -134,6 +148,9 @@ async function patchDeck(deckId, bearerToken, body) {
  *  - the deck's actual legality (>=30 cards, <=3 factions, <=1 hero) drives BOTH `isDraft`
  *    (invalid -> draft, valid -> off draft) and the "Invalid " name prefix (added/stripped
  *    to match), regardless of whatever isDraft/name it walked in with.
+ *  - the base name itself is always re-derived from the pool (see baseDeckName below), not
+ *    trusted from the deck, so a prep pool getting bound to a real tournament renames its
+ *    already-minted deck too.
  * Any reconciling PATCH is written to decks-api immediately, and the pool's cached summary
  * is refreshed to match so later responses (built from the cache, not a live fetch) don't
  * serve the stale name. Returns the (possibly refreshed) pool row, or `null` if the deck is
@@ -153,8 +170,14 @@ async function deckStillExists(poolRow, bearerToken) {
   const refs = deckCardsToRefs(deck)
   const cardMap = await buildCardMap(poolRow.set_code, refs)
   const valid = isSealedValid(refs, cardMap)
-  const baseName = deck.name?.startsWith(INVALID_PREFIX) ? deck.name.slice(INVALID_PREFIX.length) : (deck.name ?? '')
-  const desiredName = valid ? baseName : `${INVALID_PREFIX}${baseName}`
+  // Always re-derive the base name from the pool itself (tournament name / placeholder),
+  // not from whatever's currently on the deck — so a pool binding to a real tournament (or
+  // the tournament's name changing) renames an already-minted deck the next time BGA loads
+  // it, same as any other drift this function reconciles. Only the "still unreviewed"
+  // Random flag is read off the existing name, since nothing else records that state.
+  const isRandom = deck.name?.startsWith(RANDOM_PREFIX) ?? false
+  const base = baseDeckName(poolRow)
+  const desiredName = isRandom ? `${RANDOM_PREFIX}${base}` : (valid ? base : `${INVALID_PREFIX}${base}`)
 
   const patch = {}
   if (deck.format !== 'sealed') patch.format = 'sealed'
@@ -208,7 +231,7 @@ export async function ensureDeck(sub, poolRow, bearerToken) {
 
   const heroRef = refs.find(r => cardMap[r]?.cardType === 'HERO') ?? null
   const faction = heroRef ? (cardMap[heroRef]?.faction ?? null) : null
-  const name = `Random ${poolRow.set_code} sealed · ${new Date().toISOString().slice(0, 10)}`
+  const name = `${RANDOM_PREFIX}${baseDeckName(poolRow)}`
 
   // Create as a DRAFT first. decks-api's SealedFormatValidator only runs when isDraft is
   // false, and it validates pool membership by calling BACK into altered-draft's own
