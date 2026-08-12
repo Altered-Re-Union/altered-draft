@@ -5,6 +5,7 @@ import { generateRoomCode } from '../lib/roomCode.js'
 import { useAuth } from '../auth/AuthProvider.jsx'
 import { useLang } from '../lib/i18n/i18n.jsx'
 import TopNav from '../components/TopNav.jsx'
+import Footer from '../components/Footer.jsx'
 
 export default function Home() {
   const navigate = useNavigate()
@@ -203,10 +204,7 @@ export default function Home() {
           </form>
         )}
 
-        <div className="mt-12 flex flex-col items-center gap-2">
-          <img src="/images/fan-content.png" alt="Altered Fan Content" className="fan-content-badge h-8 w-auto" />
-          <p className="text-xs text-faint text-center">{t('home.fanContentDisclaimer')}</p>
-        </div>
+        <Footer />
       </div>
       </div>
     </div>

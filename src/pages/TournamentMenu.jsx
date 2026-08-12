@@ -4,6 +4,7 @@ import { useAuth } from '../auth/AuthProvider.jsx'
 import { fetchBoundPools } from '../lib/tournamentApi.js'
 import { useLang } from '../lib/i18n/i18n.jsx'
 import TopNav from '../components/TopNav.jsx'
+import Footer from '../components/Footer.jsx'
 
 const BGA_TOURNAMENT_LIST_URL = 'https://boardgamearena.com/tournamentlist?d&type=&players_per_match_min=0&players_per_match_max=0&status=future&gamecateg=3&game=1909&full=true&tournament_i_registered=0&time=0&prestige=0&order=recommended'
 
@@ -38,7 +39,6 @@ export default function TournamentMenu() {
             </a>
           </p>
           <p className="mt-1">{t('tournamentPages.registerNoticeSchedule')}</p>
-          <p className="mt-1">{t('tournamentPages.registerNoticeAfterStart')}</p>
         </div>
 
         {!user && !authLoading ? (
@@ -52,9 +52,11 @@ export default function TournamentMenu() {
         ) : (
           <>
             <button onClick={() => navigate('/tournament/prep')}
-              className="w-full bg-surface2 hover:bg-surface3 text-ink font-semibold py-3 rounded-lg transition-colors text-left px-4 mb-8">
+              className="w-full bg-surface2 hover:bg-surface3 text-ink font-semibold py-3 rounded-lg transition-colors text-left px-4 mb-4">
               {t('tournamentPages.prepareNext')}
             </button>
+
+            <p className="text-muted text-sm mb-8">{t('tournamentPages.registerNoticeAfterStart')}</p>
 
             <h2 className="font-semibold text-lg mb-3">{t('tournamentPages.myOngoingTournaments')}</h2>
             {error && <p className="text-red-400 text-sm mb-4">{error}</p>}

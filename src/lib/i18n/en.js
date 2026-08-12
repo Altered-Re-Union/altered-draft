@@ -7,6 +7,9 @@ export default {
     all: 'All',
     you: '(you)',
   },
+  footer: {
+    fanContentDisclaimer: 'Altered Re:Union is an unofficial community site and is not affiliated with Equinox.',
+  },
   deckValidity: {
     cardsOf30: '{{n}}/30 cards',
     cardsOf30Plus: '{{n}}/30+ cards',
@@ -57,7 +60,6 @@ export default {
     normalModeBtn: 'Normal mode',
     bgaConnectRequired: 'Re:Union login required to access BGA sealed.',
     otherFormatsTitle: 'Other limited formats',
-    fanContentDisclaimer: 'Altered Re:Union is an unofficial community site and is not affiliated with Equinox.',
     createRoom: 'Create a room',
     joinRoom: 'Join a room',
     createRoomTitle: 'Create a draft room',
