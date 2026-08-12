@@ -271,7 +271,7 @@ export default function TournamentPoolView({ title, load, reset }) {
       )}
       <div className="w-full px-4 py-4 flex-1 flex flex-col">
         <div className="flex items-center gap-3 mb-3 flex-wrap">
-          <h1 className="text-xl font-display">{title}</h1>
+          <h1 className="text-xl font-display">{pool?.tournamentName || title}</h1>
           {loading ? (
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border-2 border-line bg-surface2 text-base font-semibold text-muted">
               <span className="w-4 h-4 rounded-full border-2 border-line border-t-accent animate-spin shrink-0" />

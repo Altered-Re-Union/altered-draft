@@ -69,10 +69,10 @@ export default function TournamentMenu() {
                 <div key={p.id}
                   className="flex items-center justify-between gap-3 bg-surface border border-line rounded-lg px-4 py-3">
                   <div>
-                    <p className="font-semibold text-sm">{p.deck?.name ?? t('tournamentPages.sealedPoolFallback', { set: p.setCode })}</p>
+                    <p className="font-semibold text-sm">{p.tournamentName || t('tournamentPages.sealedPoolFallback', { set: p.setCode })}</p>
                     <p className="text-xs text-faint">
                       {t('tournamentPages.boundAt', { date: p.boundAt ? new Date(p.boundAt).toLocaleString() : '—' })}
-                      {p.deck ? ` · ${tc('tournamentPages.cardsInDeck', p.deck.cardQuantity ?? 0)}` : ` · ${t('tournamentPages.noDeckStartedYet')}`}
+                      {p.deck ? ` · ${p.deck.name} · ${tc('tournamentPages.cardsInDeck', p.deck.cardQuantity ?? 0)}` : ` · ${t('tournamentPages.noDeckStartedYet')}`}
                     </p>
                   </div>
                   <Link to={`/tournament/pools/${p.id}`}
