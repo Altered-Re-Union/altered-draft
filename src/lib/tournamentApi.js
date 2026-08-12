@@ -47,6 +47,13 @@ export async function fetchPoolById(id) {
   return handle(res)
 }
 
+/** Resolves a decks-api deck id to the caller's own sealed pool. 404s (via `handle`) if the
+ * deck doesn't exist, isn't linked to any pool, or belongs to someone else. */
+export async function fetchPoolByDeckId(deckId) {
+  const res = await fetch(`/api/tournament-pool-by-deck?deckId=${encodeURIComponent(deckId)}`, { headers: await authHeaders() })
+  return handle(res)
+}
+
 export async function syncPoolDeck(id, { deckId, name, heroRef, faction, cardQuantity }) {
   const res = await fetch(`/api/tournament-pool?id=${encodeURIComponent(id)}`, {
     method: 'POST',

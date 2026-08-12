@@ -38,6 +38,16 @@
   --c-on-accent:   44 36 22;     /* #2C2416 dark text on gold */
 }
 
+/* Fan Content badge is black artwork on a transparent background — invert it in dark
+   mode (the default palette above) so it stays visible instead of vanishing into the
+   dark background; light mode shows it unmodified. */
+.fan-content-badge {
+  filter: invert(1);
+}
+:root[data-theme="light"] .fan-content-badge {
+  filter: invert(0);
+}
+
 @layer base {
   html { transition: background-color 0.25s, color 0.25s; }
   body {

@@ -3,7 +3,6 @@ import { useNavigate, Link } from 'react-router-dom'
 import { getRoom, insertRoom, updateRoom } from '../lib/roomStore.js'
 import { generateRoomCode } from '../lib/roomCode.js'
 import { useAuth } from '../auth/AuthProvider.jsx'
-import { fetchBoundPools } from '../lib/tournamentApi.js'
 import { useLang } from '../lib/i18n/i18n.jsx'
 import TopNav from '../components/TopNav.jsx'
 
@@ -20,14 +19,6 @@ export default function Home() {
   const [mode, setMode] = useState(prefillCode ? 'join' : null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [hasBoundTournaments, setHasBoundTournaments] = useState(false)
-
-  // Button 3 ("modifier mes decks sur les tournois en cours") only shows up once the
-  // player actually has at least one bound tournament pool.
-  useEffect(() => {
-    if (!user) { setHasBoundTournaments(false); return }
-    fetchBoundPools().then(data => setHasBoundTournaments((data.pools ?? []).length > 0)).catch(() => {})
-  }, [user])
 
   // Logged in to Re:Union → prefill the display name with your pseudo (without
   // overwriting anything you've already typed).
@@ -118,32 +109,35 @@ export default function Home() {
           <h1 className="text-4xl font-display tracking-wide mb-2">
             <span className="text-accent">Altered</span> Draft
           </h1>
-          <p className="text-muted text-sm">
-            {t('home.tagline')}
-          </p>
         </div>
 
-        <div className="space-y-2 mb-6">
-          <button onClick={() => user ? navigate('/tournament/normal') : login('/tournament/normal')}
-            className="w-full bg-surface2 hover:bg-surface3 text-ink font-semibold py-3 rounded-lg transition-colors text-left px-4">
-            {t('home.bgaNormal')}
-          </button>
-          <button onClick={() => user ? navigate('/tournament/prep') : login('/tournament/prep')}
-            className="w-full bg-surface2 hover:bg-surface3 text-ink font-semibold py-3 rounded-lg transition-colors text-left px-4">
-            {t('home.bgaPrep')}
-          </button>
-          {user && hasBoundTournaments && (
-            <button onClick={() => navigate('/tournament/pools')}
-              className="w-full bg-surface2 hover:bg-surface3 text-ink font-semibold py-3 rounded-lg transition-colors text-left px-4">
-              {t('home.bgaEditDecks')}
+        <div className="mb-6">
+          <h2 className="font-semibold text-lg">{t('home.sealedTitle')}</h2>
+          <p className="text-muted text-sm mb-3">{t('home.sealedDesc')}</p>
+          <div className="space-y-2">
+            <button onClick={() => user ? navigate('/tournament') : login('/tournament')}
+              className="w-full bg-surface2 hover:bg-surface3 text-ink rounded-lg overflow-hidden transition-colors text-left">
+              <img src="/images/tournois.png" alt="" className="w-full h-24 object-cover" />
+              <span className="block font-semibold py-3 px-4">{t('home.tournamentsBtn')}</span>
             </button>
-          )}
-          {!user && (
-            <p className="text-xs text-faint text-center pt-1">
-              {t('home.bgaConnectRequired')}
-            </p>
-          )}
-          <div className="border-t border-line my-4" />
+            <button onClick={() => user ? navigate('/tournament/normal') : login('/tournament/normal')}
+              className="w-full bg-surface2 hover:bg-surface3 text-ink rounded-lg overflow-hidden transition-colors text-left">
+              <img src="/images/normal.png" alt="" className="w-full h-24 object-cover" />
+              <span className="block font-semibold py-3 px-4">{t('home.normalModeBtn')}</span>
+            </button>
+            {!user && (
+              <p className="text-xs text-faint text-center pt-1">
+                {t('home.bgaConnectRequired')}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="border-t border-line my-6" />
+
+        <div className="mb-6">
+          <h2 className="font-semibold text-lg">{t('home.otherFormatsTitle')}</h2>
+          <p className="text-muted text-sm mb-3">{t('home.tagline')}</p>
         </div>
 
         {!mode && (
@@ -208,6 +202,11 @@ export default function Home() {
             </div>
           </form>
         )}
+
+        <div className="mt-12 flex flex-col items-center gap-2">
+          <img src="/images/fan-content.png" alt="Altered Fan Content" className="fan-content-badge h-8 w-auto" />
+          <p className="text-xs text-faint text-center">{t('home.fanContentDisclaimer')}</p>
+        </div>
       </div>
       </div>
     </div>

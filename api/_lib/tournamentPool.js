@@ -87,22 +87,94 @@ function toDeckCards(refs) {
   }))
 }
 
+// Same shape as decks.js's deckCardsToRefs (frontend) — duplicated here rather than
+// imported, since that module pulls in browser-only auth code (reunion.js).
+function deckCardsToRefs(deck) {
+  const cards = deck?.deckCards ?? deck?.cards ?? []
+  const refs = []
+  for (const c of cards) {
+    const ref = String(c.cardReference ?? c.reference ?? '').toUpperCase()
+    const qty = Math.max(1, parseInt(c.quantity ?? 1, 10) || 1)
+    if (ref) for (let i = 0; i < qty; i++) refs.push(ref)
+  }
+  return refs
+}
+
+// "Invalid " is the literal token the BGA-side integration matches on (see
+// TournamentPoolView.jsx, whose throttled sync enforces this same rule + prefix on every
+// app-side edit).
+const INVALID_PREFIX = 'Invalid '
+
+function isSealedValid(refs, cardMap) {
+  const heroCount = refs.filter(r => cardMap[r]?.cardType === 'HERO').length
+  const factions = new Set(refs.map(r => cardMap[r]?.faction).filter(Boolean))
+  return refs.length >= 30 && factions.size <= 3 && heroCount <= 1
+}
+
+async function patchDeck(deckId, bearerToken, body) {
+  const res = await fetch(`${DECKS_API}/${encodeURIComponent(deckId)}`, {
+    method: 'PATCH',
+    // decks-api's api_platform.yaml restricts PATCH to application/merge-patch+json
+    // (patch_formats) — application/json here gets rejected outright.
+    headers: { Authorization: `Bearer ${bearerToken}`, Accept: 'application/json', 'Content-Type': 'application/merge-patch+json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new Error(`Could not update deck ${deckId} (HTTP ${res.status}).`)
+  return res.json()
+}
+
 /**
- * Whether `deckId` still exists on decks-api. The cached summary on `sealed_pools` is only
- * ever refreshed by our own throttled frontend sync (TournamentPoolView.jsx) — a deck
- * deleted or edited out-of-band (directly through decks-api, e.g. a third-party
- * deckbuilder) leaves the cache stale with no signal to invalidate it, so this is a live
- * check rather than trusting the cache outright. Non-404 failures (network hiccup, decks-api
- * outage, an expired bearer token) are NOT treated as "gone" — only a definitive 404 does,
- * so a transient error can't wipe a perfectly good cached deck.
+ * Whether `poolRow.deck_id` still exists on decks-api — and, if it does, reconciles it back
+ * onto the rules the app's own sync enforces (TournamentPoolView.jsx): a deck edited
+ * out-of-band (directly through decks-api, or a third-party deckbuilder) can drift from
+ * both `format` and the isDraft/"Invalid " convention with no signal to invalidate the
+ * cached summary on `sealed_pools`, so this always re-derives from the deck's live card
+ * list rather than trusting the cache:
+ *  - `format` is forced back to `'sealed'` whenever it's anything else.
+ *  - the deck's actual legality (>=30 cards, <=3 factions, <=1 hero) drives BOTH `isDraft`
+ *    (invalid -> draft, valid -> off draft) and the "Invalid " name prefix (added/stripped
+ *    to match), regardless of whatever isDraft/name it walked in with.
+ * Any reconciling PATCH is written to decks-api immediately, and the pool's cached summary
+ * is refreshed to match so later responses (built from the cache, not a live fetch) don't
+ * serve the stale name. Returns the (possibly refreshed) pool row, or `null` if the deck is
+ * definitively gone (404) — non-404 failures (network hiccup, decks-api outage, an expired
+ * bearer token) are NOT treated as "gone", so a transient error can't wipe a perfectly good
+ * cached deck.
  */
-async function deckStillExists(deckId, bearerToken) {
+async function deckStillExists(poolRow, bearerToken) {
+  const deckId = poolRow.deck_id
   const res = await fetch(`${DECKS_API}/${encodeURIComponent(deckId)}`, {
     headers: { Authorization: `Bearer ${bearerToken}`, Accept: 'application/json' },
   })
-  if (res.status === 404) return false
+  if (res.status === 404) return null
   if (!res.ok) throw new Error(`Could not verify deck ${deckId} (HTTP ${res.status}).`)
-  return true
+  const deck = await res.json()
+
+  const refs = deckCardsToRefs(deck)
+  const cardMap = await buildCardMap(poolRow.set_code, refs)
+  const valid = isSealedValid(refs, cardMap)
+  const baseName = deck.name?.startsWith(INVALID_PREFIX) ? deck.name.slice(INVALID_PREFIX.length) : (deck.name ?? '')
+  const desiredName = valid ? baseName : `${INVALID_PREFIX}${baseName}`
+
+  const patch = {}
+  if (deck.format !== 'sealed') patch.format = 'sealed'
+  if (deck.isDraft !== !valid) patch.isDraft = !valid
+  if (deck.name !== desiredName) patch.name = desiredName
+  if (!Object.keys(patch).length) return poolRow
+
+  try {
+    await patchDeck(deckId, bearerToken, patch)
+  } catch (e) {
+    console.log(`deckStillExists: could not reconcile deck ${deckId}: ${e?.message}`)
+    return poolRow
+  }
+
+  const heroRef = refs.find(r => cardMap[r]?.cardType === 'HERO') ?? null
+  const faction = heroRef ? (cardMap[heroRef]?.faction ?? null) : null
+  const updated = await updateDeckSummary(poolRow.id, {
+    deckId, name: desiredName, heroRef, faction, cardQuantity: refs.length,
+  })
+  return updated ?? poolRow
 }
 
 /**
@@ -119,7 +191,8 @@ async function deckStillExists(deckId, bearerToken) {
 export async function ensureDeck(sub, poolRow, bearerToken) {
   if (poolRow.deck_id && poolRow.deck_card_quantity) {
     try {
-      if (await deckStillExists(poolRow.deck_id, bearerToken)) return poolRow
+      const reconciled = await deckStillExists(poolRow, bearerToken)
+      if (reconciled) return reconciled
       console.log(`ensureDeck: cached deck ${poolRow.deck_id} for pool ${poolRow.id} no longer exists — reminting`)
     } catch (e) {
       console.log(`ensureDeck: existence check failed for deck ${poolRow.deck_id}, trusting cache: ${e?.message}`)
