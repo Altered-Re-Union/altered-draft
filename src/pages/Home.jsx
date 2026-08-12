@@ -203,10 +203,9 @@ export default function Home() {
             </div>
           </form>
         )}
-
-        <Footer />
       </div>
       </div>
+      <Footer />
     </div>
   )
 }

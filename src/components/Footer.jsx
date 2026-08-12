@@ -6,9 +6,9 @@ import { useLang } from '../lib/i18n/i18n.jsx'
 export default function Footer() {
   const { t } = useLang()
   return (
-    <div className="mt-8 py-6 flex flex-col items-center gap-2">
-      <img src="/images/fan-content.png" alt="Altered Fan Content" className="fan-content-badge h-8 w-auto" />
-      <p className="text-xs text-faint text-center px-4">{t('footer.fanContentDisclaimer')}</p>
+    <div className="mt-8 py-4 px-4 flex flex-wrap items-center justify-end gap-2 text-right">
+      <p className="text-xs text-faint">{t('footer.fanContentDisclaimer')}</p>
+      <img src="/images/fan-content.png" alt="Altered Fan Content" className="fan-content-badge h-6 w-auto shrink-0" />
     </div>
   )
 }

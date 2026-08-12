@@ -33,7 +33,7 @@ export default {
     pickCountMany: '{{n}} picks',
   },
   topNav: {
-    alteredCore: 'Altered Core',
+    reunion: 'Re:Union',
     help: 'Help',
     feedback: 'Feedback',
   },
@@ -48,7 +48,7 @@ export default {
     toggle: 'Toggle theme',
   },
   lang: {
-    switchTo: 'Switch to {{name}}',
+    select: 'Language',
     en: 'English',
     fr: 'French',
   },

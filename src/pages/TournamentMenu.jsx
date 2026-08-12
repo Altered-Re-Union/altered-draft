@@ -84,8 +84,8 @@ export default function TournamentMenu() {
             </div>
           </>
         )}
-        <Footer />
       </div>
+      <Footer />
     </div>
   )
 }

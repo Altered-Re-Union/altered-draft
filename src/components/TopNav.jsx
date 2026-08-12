@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import ReunionButton from './ReunionButton.jsx'
 import ThemeToggle from './ThemeToggle.jsx'
 import HelpModal from './HelpModal.jsx'
-import { FEEDBACK_URL, ALTERED_CORE_URL } from '../lib/links.js'
+import { FEEDBACK_URL, REUNION_URL } from '../lib/links.js'
 import { useLang } from '../lib/i18n/i18n.jsx'
 
 // Top "menu pill" inspired by alteredcore.org's .altered-navbar: a rounded, bordered
@@ -23,8 +23,8 @@ export default function TopNav() {
         <Link to={home} className="font-display tracking-wide text-lg text-ink hover:text-accent transition-colors">
           <span className="text-accent">Altered</span> Draft
         </Link>
-        <a href={ALTERED_CORE_URL} target="_blank" rel="noopener noreferrer" className={`hidden sm:inline ${linkCls}`}>
-          {t('topNav.alteredCore')} ↗
+        <a href={REUNION_URL} target="_blank" rel="noopener noreferrer" className={`hidden sm:inline ${linkCls}`}>
+          {t('topNav.reunion')} ↗
         </a>
         <button onClick={() => setShowHelp(true)} className={linkCls}>{t('topNav.help')}</button>
         {FEEDBACK_URL && (

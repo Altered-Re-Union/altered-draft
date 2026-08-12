@@ -7,24 +7,20 @@ const FLAGS = [
   { code: 'fr', flag: '🇫🇷' },
 ]
 
-// UI language flags (EN/FR) — always visible regardless of login state, since language
+// UI language dropdown (EN/FR) — always visible regardless of login state, since language
 // isn't a Re:Union concept. Lives here (rather than duplicated per top bar) because this
 // is the one component rendered in every header that has room for it (TopNav, Sealed,
 // Results — see CLAUDE.md's theming section for where each top bar lives).
 function LangFlags() {
   const { lang, setLang, t } = useLang()
   return (
-    <span className="flex items-center gap-1">
+    <select value={lang} onChange={e => setLang(e.target.value)}
+      aria-label={t('lang.select')}
+      className="h-7 pl-2 pr-1 rounded-lg bg-surface2 hover:bg-surface3 text-ink text-sm border border-line cursor-pointer transition-colors focus:outline-none focus:ring-1 focus:ring-accent">
       {FLAGS.map(({ code, flag }) => (
-        <button key={code} onClick={() => setLang(code)}
-          title={t('lang.switchTo', { name: t(`lang.${code}`) })}
-          aria-label={t(`lang.${code}`)}
-          className={`w-7 h-7 rounded-lg flex items-center justify-center text-sm transition-colors ${
-            lang === code ? 'bg-surface3 ring-1 ring-accent' : 'bg-surface2 hover:bg-surface3 opacity-70 hover:opacity-100'}`}>
-          {flag}
-        </button>
+        <option key={code} value={code}>{flag} {t(`lang.${code}`)}</option>
       ))}
-    </span>
+    </select>
   )
 }
 
