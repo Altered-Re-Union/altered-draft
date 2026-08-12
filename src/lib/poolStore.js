@@ -24,9 +24,15 @@ function newNonce() {
   return crypto.randomUUID()
 }
 
-/** Builds the exact string fed into hashSeed() to derive a pool's seed. */
+/**
+ * Builds the exact string fed into hashSeed() to derive a pool's seed. Deliberately
+ * excludes tournament_id: the pool's card contents must stay identical before and after
+ * binding, or a player's prepared pool would silently change the moment it's bound to a
+ * real tournament. tournament_id is pure metadata (which tournament this nonce committed
+ * to) — never an input to card generation.
+ */
 export function buildPoolSeedString(sub, pool) {
-  const parts = [
+  return [
     sub,
     pool.set_code,
     String(pool.unique_count),
@@ -34,9 +40,7 @@ export function buildPoolSeedString(sub, pool) {
     String(pool.heroes_in_pool),
     String(pool.guaranteed_uniques ?? 0),
     pool.nonce,
-  ]
-  if (pool.tournament_id) parts.push(pool.tournament_id)
-  return parts.join('|')
+  ].join('|')
 }
 
 async function insertPool(sub, kind, format) {

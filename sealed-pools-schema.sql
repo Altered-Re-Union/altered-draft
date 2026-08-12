@@ -7,9 +7,12 @@
 --
 -- Card pools are never stored: a pool's contents are always the deterministic output of
 -- generateTournamentSealedPool() fed by the columns below (set_code, unique_count,
--- even_factions, heroes_in_pool, guaranteed_uniques, nonce, and tournament_id once
--- bound) — see src/lib/poolStore.js's buildPoolSeedString(). Only enough state to
--- reproduce and to lazily bind a pool is kept here.
+-- even_factions, heroes_in_pool, guaranteed_uniques, nonce) — see src/lib/poolStore.js's
+-- buildPoolSeedString(). tournament_id is deliberately NOT one of those inputs: a pool's
+-- contents must stay identical before and after binding, so a player's prepared pool
+-- doesn't change out from under them the moment a real tournament binds to it.
+-- tournament_id is pure metadata (which tournament this nonce committed to). Only enough
+-- state to reproduce and to lazily bind a pool is kept here.
 
 -- Append-only: the currently active competitive format is simply the most recent row.
 -- Changing format = INSERT a new row, never UPDATE — old pools keep referencing whatever
@@ -34,8 +37,8 @@ create table if not exists sealed_pools (
   kind text not null check (kind in ('normal', 'tournament')),
 
   -- Snapshotted from current_format at creation time (see comment above) — these, plus
-  -- nonce (and tournament_id once bound), are the only inputs the pool-composition
-  -- engine needs; the actual card list is never persisted.
+  -- nonce, are the only inputs the pool-composition engine needs (tournament_id is NOT
+  -- one of them, see comment above); the actual card list is never persisted.
   set_code text not null,
   unique_count int not null default 0,
   even_factions boolean not null default false,
@@ -113,10 +116,10 @@ create index sealed_pools_bound_tournaments
 
 -- Binding lookup: is THIS PLAYER already bound to a given tournament_id? Note this is
 -- (sub, tournament_id), NOT tournament_id alone -- the same tournament_id is shared by
--- every player in that tournament (that's the whole point: hash(sub + tournament_id + ...)
--- gives each player a different pool while all sharing one tournament identity), so many
--- different players legitimately bind to the same tournament_id. Renamed from
--- sealed_pools_one_binding_per_sub_per_seed.
+-- every player in that tournament, so many different players legitimately bind to the
+-- same tournament_id (each still gets their own pool, via their own sub + nonce -- see
+-- the "Card pools are never stored" comment above; tournament_id itself plays no part in
+-- that). Renamed from sealed_pools_one_binding_per_sub_per_seed.
 drop index if exists sealed_pools_one_binding_per_sub_per_seed;
 create unique index if not exists sealed_pools_one_binding_per_sub_per_tournament
   on sealed_pools (sub, tournament_id) where tournament_id is not null;
