@@ -502,8 +502,6 @@ export default {
     endOfBooster: "That's the last card in this booster",
     nextBooster: 'Next booster →',
     openBooster: 'Open',
-    swipeHint: 'Swipe to see the next',
-    arrowHint: 'Use the arrow keys',
   },
   poolGrid: {
     deckOnly: 'Deck only',

@@ -490,8 +490,8 @@ export default {
     guaranteedUnique: '✦ Votre unique garantie',
     openingBooster: 'Ouverture du booster…',
     previous: '← Précédent',
-    seeFullPool: 'Voir la pool complète →',
-    skipAndSeeFullPool: 'Passer et voir la pool complète',
+    seeFullPool: 'Voir le pool complet →',
+    skipAndSeeFullPool: 'Passer et voir le pool complet',
     nextBooster: 'Booster suivant →',
   },
   cardZoom: {
@@ -501,8 +501,6 @@ export default {
     endOfBooster: 'C’est la dernière carte de ce booster',
     nextBooster: 'Booster suivant →',
     openBooster: 'Ouvrir',
-    swipeHint: 'Glisse pour voir la suivante',
-    arrowHint: 'Utilise les flèches',
   },
   poolGrid: {
     deckOnly: 'Deck uniquement',

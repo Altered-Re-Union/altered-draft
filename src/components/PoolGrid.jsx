@@ -372,16 +372,18 @@ function CompactRow({ ref_, occurrences, card, deck, poolCounts, onAdd, onRemove
  * a "next booster" action instead of a dead end; `zoomCover` (`{ image, openLabel }`) gates
  * that auto-open behind a pack-cover reveal screen (see CardZoom.jsx) — it's only applied to
  * the auto-open itself, not to manual re-taps, so the unwrap ceremony plays once per booster.
+ * `onZoomSkip`/`zoomSkipLabel`, when set, replace the zoom's deck +/- controls with a single
+ * button (e.g. "skip to the full pool") for the whole time this ref list is open.
  */
-export function SimpleCardGrid({ refs, cardMap, loading, deck, poolCounts, onAdd, onRemove, autoZoom, onZoomNext, zoomNextLabel, zoomCover }) {
+export function SimpleCardGrid({ refs, cardMap, loading, deck, poolCounts, onAdd, onRemove, autoZoom, onZoomNext, zoomNextLabel, zoomCover, onZoomSkip, zoomSkipLabel }) {
   const zoom = useZoomNavigation(cardMap, deck, poolCounts, onAdd, onRemove)
   const orderedRefs = dedupeRefs(refs).map(([ref]) => ref)
   const refsKey = orderedRefs.join('|')
   const firstReady = !!cardMap[orderedRefs[0]]
   // Forwarded to every card's tap-to-zoom too (not just the auto-open), so closing the
   // full-screen viewer and reopening it by tapping a card doesn't lose the "next booster"
-  // swipe action.
-  const zoomOpts = { onNext: onZoomNext, nextLabel: zoomNextLabel }
+  // swipe action (or the skip action).
+  const zoomOpts = { onNext: onZoomNext, nextLabel: zoomNextLabel, onSkip: onZoomSkip, skipLabel: zoomSkipLabel }
 
   useEffect(() => {
     if (autoZoom && orderedRefs.length && firstReady) {

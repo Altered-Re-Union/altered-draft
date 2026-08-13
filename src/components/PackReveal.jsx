@@ -36,7 +36,7 @@ export default function PackReveal({ packs, hasBonus = false, cardMap, deck, poo
   const [ready, setReady] = useState(false)
   const packsRef = useRef(packs)
   packsRef.current = packs
-  const { t } = useLang()
+  const { t, lang } = useLang()
   const { isOpen: zoomOpen } = useCardZoom()
 
   // Escape skips the whole reveal (matches the always-visible Skip button) — but not while
@@ -80,7 +80,9 @@ export default function PackReveal({ packs, hasBonus = false, cardMap, deck, poo
   const isBonusPack = hasBonus && isLast
   // No cover art for the bonus-unique "8th booster" — it's not a real pack. Falls back to
   // straight-to-cards when the set has no pack photo yet (see BOOSTER_COVERS in assets.js).
-  const coverImage = isBonusPack ? null : boosterCoverFor(setCodeFromRef(currentPack[0]))
+  // The pack print itself is per-language (the box literally says "ENGLISH"/"FRANÇAIS"), so
+  // it follows the UI language rather than the (currently EN-only) card data language.
+  const coverImage = isBonusPack ? null : boosterCoverFor(setCodeFromRef(currentPack[0]), lang)
   const zoomCover = coverImage ? { image: coverImage, openLabel: t('cardZoom.openBooster') } : null
 
   return (
@@ -110,6 +112,8 @@ export default function PackReveal({ packs, hasBonus = false, cardMap, deck, poo
             onZoomNext={isLast ? null : () => setIndex(i => Math.min(total - 1, i + 1))}
             zoomNextLabel={t('packReveal.nextBooster')}
             zoomCover={zoomCover}
+            onZoomSkip={onClose}
+            zoomSkipLabel={isLast ? t('packReveal.seeFullPool') : t('packReveal.skipAndSeeFullPool')}
           />
         ) : (
           <div className="h-full flex flex-col items-center justify-center gap-3 text-muted">

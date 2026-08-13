@@ -34,16 +34,21 @@ export function setCodeFromRef(reference) {
   return reference?.split('_')[1] ?? null
 }
 
-// Real booster-pack photography, one per set, for the "unwrap a pack" cover screen in
-// CardZoom (see PackReveal.jsx). Bundled locally (public/boosters/<SET>.png) rather than
-// fetched from a CDN — unlike card art there's no per-set-agnostic community source for
-// this. Sets with no photo yet simply skip the cover screen (boosterCoverFor returns null).
+// Real booster-pack photography, per set AND per language (the pack print itself says
+// "ENGLISH"/"FRANÇAIS" etc.), for the "unwrap a pack" cover screen in CardZoom (see
+// PackReveal.jsx). Bundled locally (public/boosters/<SET>_<LANG>.png) rather than fetched
+// from a CDN — unlike card art there's no per-set-agnostic community source for this. Sets
+// with no photo yet simply skip the cover screen; a language with no photo for a set that
+// DOES have one falls back to EN rather than skipping (boosterCoverFor returns null only
+// when the set has nothing at all).
 export const BOOSTER_COVERS = {
-  EOLE: '/boosters/EOLE.png',
+  EOLE: { EN: '/boosters/EOLE_EN.webp', FR: '/boosters/EOLE_FR.webp' },
 }
 
-export function boosterCoverFor(setCode) {
-  return BOOSTER_COVERS[setCode] ?? null
+export function boosterCoverFor(setCode, lang = 'EN') {
+  const bySet = BOOSTER_COVERS[setCode]
+  if (!bySet) return null
+  return bySet[lang?.toUpperCase()] ?? bySet.EN ?? null
 }
 
 // Set logos and icons from CDN
