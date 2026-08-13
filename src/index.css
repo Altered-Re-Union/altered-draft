@@ -60,3 +60,115 @@
     @apply transition-transform duration-150 hover:scale-105 hover:shadow-lg hover:shadow-white/10;
   }
 }
+
+/* Holographic zoom effect — ported from simeydotme's pokemon-cards-css
+   (https://codepen.io/simeydotme/pen/abYWJdX). Pointer position always drives a 3D
+   tilt. Common (no --holo-card--* class) gets tilt only, no shine at all. Rare
+   (--holo-card--r) gets a barely-there glare as a hint of a step up. Exalted/Unique get
+   a full glare plus their own rainbow/gold sheen. JS only ever writes
+   --pointer-x/--pointer-y/--rotate-x/--rotate-y/--card-opacity; the rest is CSS. */
+/* Padding around the card that still counts as "hovering" it, so the tilt doesn't snap
+   back to flat the instant the pointer crosses the card's exact edge. */
+.holo-card-zone {
+  padding: 2.5rem;
+}
+
+.holo-card {
+  --pointer-x: 50%;
+  --pointer-y: 50%;
+  --pointer-from-center: 0;
+  --card-opacity: 0;
+  --rotate-x: 0deg;
+  --rotate-y: 0deg;
+  perspective: 900px;
+  transform-style: preserve-3d;
+}
+
+.holo-card__rotator {
+  display: grid;
+  transform: rotateY(var(--rotate-x)) rotateX(var(--rotate-y));
+  transform-style: preserve-3d;
+  transition: transform 0.4s ease-out, box-shadow 0.4s ease-out;
+  border-radius: 1rem;
+}
+
+.holo-card--ex .holo-card__rotator,
+.holo-card--u .holo-card__rotator {
+  box-shadow: 0 0 3px -1px white, 0 0 3px 1px hsl(47 100% 78% / var(--card-opacity)),
+    0 0 12px 2px hsl(175 100% 90% / var(--card-opacity));
+}
+
+.holo-card__rotator > * {
+  grid-area: 1 / 1;
+  border-radius: inherit;
+}
+
+.holo-card__shine,
+.holo-card__glare {
+  opacity: 0;
+  transition: opacity 0.4s ease-out;
+  pointer-events: none;
+}
+
+.holo-card--ex .holo-card__glare,
+.holo-card--u .holo-card__glare {
+  opacity: var(--card-opacity);
+  background-image: radial-gradient(
+    farthest-corner circle at var(--pointer-x) var(--pointer-y),
+    hsla(0, 0%, 100%, 0.8) 10%,
+    hsla(0, 0%, 100%, 0.4) 30%,
+    hsla(0, 0%, 0%, 0.3) 100%
+  );
+  mix-blend-mode: overlay;
+}
+
+/* Rare — the faintest possible glare, just enough to feel different from Common's flat tilt. */
+.holo-card--r .holo-card__glare {
+  opacity: calc(var(--card-opacity) * 0.25);
+  background-image: radial-gradient(
+    farthest-corner circle at var(--pointer-x) var(--pointer-y),
+    hsla(0, 0%, 100%, 0.6) 10%,
+    hsla(0, 0%, 100%, 0.25) 35%,
+    hsla(0, 0%, 0%, 0.15) 100%
+  );
+  mix-blend-mode: overlay;
+}
+
+/* Exalted — thin rainbow "sunpillar" foil sheen sliding diagonally under the pointer.
+   soft-light (not color-dodge, which blows out fast even at low opacity over saturated
+   HSL stops) and low opacity/saturation keep it a hint rather than a full repaint. */
+.holo-card--ex .holo-card__shine {
+  background-image: repeating-linear-gradient(
+    100deg,
+    hsl(2 100% 73%) 0%,
+    hsl(53 100% 69%) 8%,
+    hsl(93 100% 69%) 16%,
+    hsl(176 100% 76%) 24%,
+    hsl(228 100% 74%) 32%,
+    hsl(283 100% 73%) 40%,
+    hsl(2 100% 73%) 48%
+  );
+  background-size: 250% 250%;
+  background-position: var(--pointer-x) var(--pointer-y);
+  opacity: calc(var(--card-opacity) * 0.22);
+  filter: brightness(1) contrast(1) saturate(1.1);
+  mix-blend-mode: soft-light;
+}
+
+/* Unique — a gold band sliding under the pointer, with just a thin violet accent so it
+   doesn't read as flat yellow. soft-light (not color-dodge) so it stays visible without
+   blowing out — color-dodge nearly vanishes at low opacity over a dark image. */
+.holo-card--u .holo-card__shine {
+  background-image: repeating-linear-gradient(
+    65deg,
+    hsl(42 90% 58%) 0%,
+    hsl(42 90% 58%) 16%,
+    hsl(280 50% 55%) 20%,
+    hsl(42 90% 58%) 24%
+  );
+  background-size: 300% 300%;
+  background-position: var(--pointer-x) var(--pointer-y);
+  opacity: calc(var(--card-opacity) * 0.45);
+  filter: brightness(1.05) contrast(1.05) saturate(0.8);
+  mix-blend-mode: soft-light;
+}
