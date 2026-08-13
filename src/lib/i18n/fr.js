@@ -500,6 +500,9 @@ export default {
     close: 'Fermer',
     endOfBooster: 'C’est la dernière carte de ce booster',
     nextBooster: 'Booster suivant →',
+    openBooster: 'Ouvrir',
+    swipeHint: 'Glisse pour voir la suivante',
+    arrowHint: 'Utilise les flèches',
   },
   poolGrid: {
     deckOnly: 'Deck uniquement',

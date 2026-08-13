@@ -34,6 +34,18 @@ export function setCodeFromRef(reference) {
   return reference?.split('_')[1] ?? null
 }
 
+// Real booster-pack photography, one per set, for the "unwrap a pack" cover screen in
+// CardZoom (see PackReveal.jsx). Bundled locally (public/boosters/<SET>.png) rather than
+// fetched from a CDN — unlike card art there's no per-set-agnostic community source for
+// this. Sets with no photo yet simply skip the cover screen (boosterCoverFor returns null).
+export const BOOSTER_COVERS = {
+  EOLE: '/boosters/EOLE.png',
+}
+
+export function boosterCoverFor(setCode) {
+  return BOOSTER_COVERS[setCode] ?? null
+}
+
 // Set logos and icons from CDN
 export const SET_ASSETS = {
   CORE:    { icon: null,                                    logo: `${CDN}/sets_logo/LOGO%20BTG-EN.png` },

@@ -69,6 +69,26 @@ function useHoloTilt() {
   return { rotatorRef, zoneRef, onPointerMove, onPointerLeave }
 }
 
+// Coarse pointer (touch) vs fine pointer (mouse/trackpad) — picks which nav hint to show
+// ("swipe" vs "use the arrow keys"). A media query beats a screen-width breakpoint here
+// since what matters is input capability, not viewport size (a touch laptop is still coarse).
+function usePointerIsCoarse() {
+  const query = () => { try { return window.matchMedia('(pointer: coarse)').matches } catch { return false } }
+  const [coarse, setCoarse] = useState(query)
+  useEffect(() => {
+    let mq
+    try { mq = window.matchMedia('(pointer: coarse)') } catch { return }
+    const onChange = e => setCoarse(e.matches)
+    mq.addEventListener?.('change', onChange)
+    return () => mq.removeEventListener?.('change', onChange)
+  }, [])
+  return coarse
+}
+
+// How long the pack-slide-down animation runs before the cover unmounts and the card
+// underneath (already at rest) takes over — must match the CSS transition duration below.
+const OPEN_TRANSITION_MS = 550
+
 // App-wide "tap a card to see it full screen" overlay. Hover-zoom (PoolGrid) only works on
 // desktop; this is the mobile-friendly way to actually read a card — important when players
 // are discovering a new set. The modal is rendered once at the app root (see main.jsx).
@@ -87,6 +107,11 @@ function useHoloTilt() {
 // and swiping/pressing right again (or tapping its button) calls onNext(). Purely a UI hook —
 // the caller decides what "next" means (e.g. advance a booster index) and re-opens the zoom
 // itself if it wants the new content shown full screen.
+//
+// open(refs, index, { cover: { image, openLabel } }) additionally gates the FIRST card behind
+// a "pack cover" screen: the real card is already resolved and sitting in place underneath,
+// covered by the pack art; tapping the pack (or its Open button) slides the pack down to
+// reveal the card, which never itself moves.
 const CardZoomContext = createContext(null)
 const noop = () => {}
 
@@ -97,9 +122,11 @@ export function useCardZoom() {
 const SWIPE_THRESHOLD_PX = 40
 
 export function CardZoomProvider({ children }) {
-  const [state, setState] = useState(null) // { refs, index, card, controls, atEnd, onNext, nextLabel } | null
+  const [state, setState] = useState(null) // { refs, index, card, controls, atEnd, atStart, cover, onNext, nextLabel } | null
+  const [opening, setOpening] = useState(false) // mid pack-slide-down animation
   const stateRef = useRef(null)
   stateRef.current = state
+  const openTimerRef = useRef(null)
   const resolverRef = useRef(() => null)
   const { t } = useLang()
   const { rotatorRef, zoneRef, onPointerMove, onPointerLeave } = useHoloTilt()
@@ -112,18 +139,39 @@ export function CardZoomProvider({ children }) {
 
   const setResolver = useCallback(fn => {
     resolverRef.current = fn
-    setState(prev => (prev ? { ...resolveAt(prev.refs, prev.index), atEnd: prev.atEnd, onNext: prev.onNext, nextLabel: prev.nextLabel } : prev))
+    setState(prev => (prev
+      ? { ...resolveAt(prev.refs, prev.index), atEnd: prev.atEnd, atStart: prev.atStart, cover: prev.cover, onNext: prev.onNext, nextLabel: prev.nextLabel }
+      : prev))
   }, [resolveAt])
+
+  const clearOpenTimer = () => {
+    if (openTimerRef.current) { clearTimeout(openTimerRef.current); openTimerRef.current = null }
+  }
 
   const open = useCallback((refs, index, opts = {}) => {
     if (!refs?.length) return
     const next = resolveAt(refs, index)
-    if (next.card) setState({ ...next, atEnd: false, onNext: opts.onNext ?? null, nextLabel: opts.nextLabel ?? null })
+    if (!next.card) return
+    clearOpenTimer()
+    setOpening(false)
+    setState({ ...next, atEnd: false, atStart: !!opts.cover, cover: opts.cover ?? null, onNext: opts.onNext ?? null, nextLabel: opts.nextLabel ?? null })
   }, [resolveAt])
+
+  // Starts the pack-slide-down animation; the card underneath is already resolved and in
+  // place, so this is purely visual until the timer flips atStart off.
+  const openPack = useCallback(() => {
+    if (openTimerRef.current) return
+    setOpening(true)
+    openTimerRef.current = setTimeout(() => {
+      openTimerRef.current = null
+      setOpening(false)
+      setState(prev => (prev ? { ...prev, atStart: false } : prev))
+    }, OPEN_TRANSITION_MS)
+  }, [])
 
   const step = useCallback(delta => {
     setState(prev => {
-      if (!prev) return prev
+      if (!prev || prev.atStart) return prev // still behind the pack cover — nothing to step through yet
       if (delta > 0 && !prev.atEnd) {
         const index = prev.index + 1
         if (index > prev.refs.length - 1) {
@@ -148,7 +196,11 @@ export function CardZoomProvider({ children }) {
   // double-invoke under StrictMode's dev-mode double-render of updaters.
   const confirmNext = useCallback(() => { stateRef.current?.onNext?.() }, [])
 
-  const close = useCallback(() => setState(null), [])
+  const close = useCallback(() => {
+    clearOpenTimer()
+    setOpening(false)
+    setState(null)
+  }, [])
 
   // Escape closes, arrow keys navigate; lock the background from scrolling while open.
   // Plain `overflow: hidden` on body doesn't actually stop touch-scroll on iOS Safari — the
@@ -161,7 +213,11 @@ export function CardZoomProvider({ children }) {
     const onKey = e => {
       if (e.key === 'Escape') close()
       else if (e.key === 'ArrowLeft') step(-1)
-      else if (e.key === 'ArrowRight') { if (stateRef.current?.atEnd) confirmNext(); else step(1) }
+      else if (e.key === 'ArrowRight') {
+        if (stateRef.current?.atStart) openPack()
+        else if (stateRef.current?.atEnd) confirmNext()
+        else step(1)
+      }
     }
     window.addEventListener('keydown', onKey)
     const scrollY = window.scrollY
@@ -182,7 +238,7 @@ export function CardZoomProvider({ children }) {
       window.scrollTo(0, scrollY)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only presence of `state` matters here
-  }, [!!state, close, step, confirmNext])
+  }, [!!state, close, step, confirmNext, openPack])
 
   const touchStartXRef = useRef(null)
   function onTouchStart(e) { touchStartXRef.current = e.touches[0]?.clientX ?? null }
@@ -192,16 +248,20 @@ export function CardZoomProvider({ children }) {
     if (startX == null) return
     const dx = (e.changedTouches[0]?.clientX ?? startX) - startX
     if (Math.abs(dx) < SWIPE_THRESHOLD_PX) return // treat as a tap, not a swipe
+    if (stateRef.current?.atStart) { if (dx < 0) openPack(); return }
     if (dx < 0 && stateRef.current?.atEnd) { confirmNext(); return }
     step(dx < 0 ? 1 : -1)
   }
 
   const card = state?.card
   const controls = state?.controls
+  const cover = state?.cover
+  const atStart = !!state?.atStart
   const atEnd = !!state?.atEnd
-  const hasPrev = !!state && (state.index > 0 || atEnd)
-  const hasNext = !!state && !atEnd && state.index < state.refs.length - 1
+  const hasPrev = !!state && !atStart && (state.index > 0 || atEnd)
+  const hasNext = !!state && !atStart && !atEnd && state.index < state.refs.length - 1
   const showConfirmNext = atEnd && !!state?.onNext
+  const isCoarsePointer = usePointerIsCoarse()
 
   useEffect(() => { onPointerLeave() }, [card, onPointerLeave])
 
@@ -230,7 +290,38 @@ export function CardZoomProvider({ children }) {
               ›
             </button>
           )}
-          {atEnd ? (
+          {atStart ? (
+            <div className="flex flex-col items-center gap-5">
+              {/* The card sits underneath at rest — "opening" the pack just slides the art
+                  covering it down and out of the way, so the card itself never moves. */}
+              <div className="relative flex items-center justify-center">
+                {card.imagePath && (
+                  <img src={card.imagePath} alt="" aria-hidden
+                    className="max-h-[82vh] max-w-[94vw] w-auto h-auto rounded-2xl shadow-2xl select-none" />
+                )}
+                <div onClick={e => { e.stopPropagation(); openPack() }}
+                  className={`absolute inset-0 flex items-center justify-center cursor-pointer transition-transform duration-500 ease-in ${
+                    opening ? 'translate-y-[130%]' : 'translate-y-0'}`}>
+                  <div ref={zoneRef} className="holo-card-zone" onPointerMove={onPointerMove} onPointerLeave={onPointerLeave}>
+                    <div className="holo-card max-h-[82vh] max-w-[94vw]">
+                      <div ref={rotatorRef} className="holo-card__rotator">
+                        <img src={cover.image} alt={cover.openLabel ?? t('cardZoom.openBooster')}
+                          className="max-h-[82vh] max-w-[94vw] w-auto h-auto rounded-2xl shadow-2xl select-none" />
+                        <div className="holo-card__shine" />
+                        <div className="holo-card__glare" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              {!opening && (
+                <button onClick={e => { e.stopPropagation(); openPack() }}
+                  className="text-base font-bold px-6 py-3 rounded-lg bg-accent text-on-accent hover:opacity-90 transition-opacity">
+                  {cover.openLabel ?? t('cardZoom.openBooster')}
+                </button>
+              )}
+            </div>
+          ) : atEnd ? (
             <div onClick={e => e.stopPropagation()} className="flex flex-col items-center gap-4 text-center px-6">
               <div className="text-ink text-base">{t('cardZoom.endOfBooster')}</div>
               {state.onNext && (
@@ -252,6 +343,11 @@ export function CardZoomProvider({ children }) {
                   </div>
                 </div>
               </div>
+              {(hasPrev || hasNext) && (
+                <div className="text-xs text-muted">
+                  {isCoarsePointer ? t('cardZoom.swipeHint') : t('cardZoom.arrowHint')}
+                </div>
+              )}
               {controls && (
                 <div onClick={e => e.stopPropagation()}
                   className="flex items-center justify-center gap-3 bg-surface/90 rounded-full px-4 py-2 shadow-lg">

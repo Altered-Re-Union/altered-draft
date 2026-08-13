@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { SimpleCardGrid } from './PoolGrid.jsx'
 import { useCardZoom } from './CardZoom.jsx'
+import { boosterCoverFor, setCodeFromRef } from '../lib/assets.js'
 import { useLang } from '../lib/i18n/i18n.jsx'
 
 // Preload one pack's card images; resolves when they've all settled (or a per-image error).
@@ -77,6 +78,10 @@ export default function PackReveal({ packs, hasBonus = false, cardMap, deck, poo
   const total = packs.length
   const isLast = index >= total - 1
   const isBonusPack = hasBonus && isLast
+  // No cover art for the bonus-unique "8th booster" — it's not a real pack. Falls back to
+  // straight-to-cards when the set has no pack photo yet (see BOOSTER_COVERS in assets.js).
+  const coverImage = isBonusPack ? null : boosterCoverFor(setCodeFromRef(currentPack[0]))
+  const zoomCover = coverImage ? { image: coverImage, openLabel: t('cardZoom.openBooster') } : null
 
   return (
     <div className="fixed inset-0 z-50 bg-base flex flex-col">
@@ -104,6 +109,7 @@ export default function PackReveal({ packs, hasBonus = false, cardMap, deck, poo
             autoZoom
             onZoomNext={isLast ? null : () => setIndex(i => Math.min(total - 1, i + 1))}
             zoomNextLabel={t('packReveal.nextBooster')}
+            zoomCover={zoomCover}
           />
         ) : (
           <div className="h-full flex flex-col items-center justify-center gap-3 text-muted">
