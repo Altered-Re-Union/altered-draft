@@ -376,10 +376,14 @@ export function SimpleCardGrid({ refs, cardMap, loading, deck, poolCounts, onAdd
   const orderedRefs = dedupeRefs(refs).map(([ref]) => ref)
   const refsKey = orderedRefs.join('|')
   const firstReady = !!cardMap[orderedRefs[0]]
+  // Forwarded to every card's tap-to-zoom too (not just the auto-open), so closing the
+  // full-screen viewer and reopening it by tapping a card doesn't lose the "next booster"
+  // swipe action.
+  const zoomOpts = { onNext: onZoomNext, nextLabel: zoomNextLabel }
 
   useEffect(() => {
     if (autoZoom && orderedRefs.length && firstReady) {
-      zoom.open(orderedRefs, 0, { onNext: onZoomNext, nextLabel: zoomNextLabel })
+      zoom.open(orderedRefs, 0, zoomOpts)
     }
     // Fire once per booster (refsKey) — not on every render — and again if the first card
     // wasn't resolved in cardMap yet the first time this ran.
@@ -389,11 +393,11 @@ export function SimpleCardGrid({ refs, cardMap, loading, deck, poolCounts, onAdd
   return (
     <CardGridInner refs={refs} cardMap={cardMap} loading={loading}
       deck={deck} poolCounts={poolCounts} onAdd={onAdd} onRemove={onRemove}
-      zoom={zoom} orderedRefs={orderedRefs} />
+      zoom={zoom} orderedRefs={orderedRefs} zoomOpts={zoomOpts} />
   )
 }
 
-function CardGridInner({ refs, cardMap, loading, deck, poolCounts, onAdd, onRemove, zoom, orderedRefs }) {
+function CardGridInner({ refs, cardMap, loading, deck, poolCounts, onAdd, onRemove, zoom, orderedRefs, zoomOpts }) {
   const unique = dedupeRefs(refs)
 
   return (
@@ -401,13 +405,13 @@ function CardGridInner({ refs, cardMap, loading, deck, poolCounts, onAdd, onRemo
       {unique.map(([ref, occurrences]) => (
         <PoolCard key={ref} ref_={ref} occurrences={occurrences} card={cardMap[ref]}
           loading={loading} deck={deck} poolCounts={poolCounts} onAdd={onAdd} onRemove={onRemove}
-          zoom={zoom} orderedRefs={orderedRefs} />
+          zoom={zoom} orderedRefs={orderedRefs} zoomOpts={zoomOpts} />
       ))}
     </div>
   )
 }
 
-function PoolCard({ ref_, occurrences, card, loading, deck, poolCounts, onAdd, onRemove, zoom, orderedRefs }) {
+function PoolCard({ ref_, occurrences, card, loading, deck, poolCounts, onAdd, onRemove, zoom, orderedRefs, zoomOpts }) {
   const { ref, origin, onMouseEnter } = useZoomOrigin()
   const poolQty = poolCounts ? (poolCounts[ref_] ?? occurrences) : occurrences
   const inDeck = deck?.[ref_] ?? 0
@@ -426,7 +430,7 @@ function PoolCard({ ref_, occurrences, card, loading, deck, poolCounts, onAdd, o
     <div ref={ref} onMouseEnter={onMouseEnter} style={{ transformOrigin: origin }}
       className="relative flex flex-col rounded-lg border border-line bg-surface
       transition-transform duration-150 ease-out hover:scale-[1.6] hover:z-30 hover:shadow-xl hover:shadow-black/70">
-      <div onClick={() => zoom.open(orderedRefs, orderedRefs.indexOf(ref_))} className="aspect-[2/3] relative cursor-zoom-in">
+      <div onClick={() => zoom.open(orderedRefs, orderedRefs.indexOf(ref_), zoomOpts)} className="aspect-[2/3] relative cursor-zoom-in">
         {Array.from({ length: ghostLayers }).map((_, i) => (
           <div key={i} aria-hidden style={{ transform: `translate(${(ghostLayers - i) * 4}px, ${-(ghostLayers - i) * 4}px)`, zIndex: i }}
             className="absolute inset-0 rounded-t-lg overflow-hidden bg-surface2 border border-line brightness-75">
