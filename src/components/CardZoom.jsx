@@ -298,10 +298,18 @@ export function CardZoomProvider({ children }) {
                 </div>
               </div>
               {!opening && (
-                <button onClick={e => { e.stopPropagation(); openPack() }}
-                  className="text-base font-bold px-6 py-3 rounded-lg bg-accent text-on-accent hover:opacity-90 transition-opacity">
-                  {cover.openLabel ?? t('cardZoom.openBooster')}
-                </button>
+                <div className="flex flex-col items-center gap-3">
+                  <button onClick={e => { e.stopPropagation(); openPack() }}
+                    className="text-base font-bold px-6 py-3 rounded-lg bg-accent text-on-accent hover:opacity-90 transition-opacity">
+                    {cover.openLabel ?? t('cardZoom.openBooster')}
+                  </button>
+                  {state.onSkip && (
+                    <button onClick={e => { e.stopPropagation(); state.onSkip() }}
+                      className="text-sm font-semibold text-muted hover:text-ink underline underline-offset-2 transition-colors">
+                      {state.skipLabel ?? t('cardZoom.close')}
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           ) : atEnd ? (
@@ -319,34 +327,31 @@ export function CardZoomProvider({ children }) {
               <div ref={zoneRef} className="holo-card-zone" onPointerMove={onPointerMove} onPointerLeave={onPointerLeave}>
                 {/* relative: prev/next arrows anchor to the CARD's own box, not the screen
                     edge, so they stay right next to it instead of drifting far away on wide
-                    viewports where the card renders much narrower than the screen. */}
-                <div className={`holo-card relative max-h-[82vh] max-w-[94vw] ${holoClassForRarity(card.rarity)}`}>
+                    viewports where the card renders much narrower than the screen. A slightly
+                    tighter max-width (vs. the cover/atEnd screens) leaves room for the arrows
+                    to sit just outside it instead of overlapping the art. */}
+                <div className={`holo-card relative max-h-[82vh] ${(hasPrev || hasNext) ? 'max-w-[76vw]' : 'max-w-[94vw]'} ${holoClassForRarity(card.rarity)}`}>
                   <div ref={rotatorRef} className="holo-card__rotator">
                     <img src={card.imagePath} alt={card.name ?? ''}
-                      className="max-h-[82vh] max-w-[94vw] w-auto h-auto rounded-2xl shadow-2xl select-none" />
+                      className={`max-h-[82vh] w-auto h-auto rounded-2xl shadow-2xl select-none ${(hasPrev || hasNext) ? 'max-w-[76vw]' : 'max-w-[94vw]'}`} />
                     <div className="holo-card__shine" />
                     <div className="holo-card__glare" />
                   </div>
                   {hasPrev && (
                     <button onClick={e => { e.stopPropagation(); step(-1) }} aria-label={t('cardZoom.previousCard')}
-                      className="absolute left-1 sm:left-2 top-1/2 -translate-y-1/2 w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-surface/80 hover:bg-surface text-ink text-3xl leading-none flex items-center justify-center shadow-lg">
+                      className="absolute -left-9 sm:-left-11 top-1/2 -translate-y-1/2 w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-surface/80 hover:bg-surface text-ink text-xl sm:text-2xl leading-none flex items-center justify-center shadow-lg">
                       ‹
                     </button>
                   )}
                   {hasNext && (
                     <button onClick={e => { e.stopPropagation(); step(1) }} aria-label={t('cardZoom.nextCard')}
-                      className="absolute right-1 sm:right-2 top-1/2 -translate-y-1/2 w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-surface/80 hover:bg-surface text-ink text-3xl leading-none flex items-center justify-center shadow-lg">
+                      className="absolute -right-9 sm:-right-11 top-1/2 -translate-y-1/2 w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-surface/80 hover:bg-surface text-ink text-xl sm:text-2xl leading-none flex items-center justify-center shadow-lg">
                       ›
                     </button>
                   )}
                 </div>
               </div>
-              {state.onSkip ? (
-                <button onClick={e => { e.stopPropagation(); state.onSkip() }}
-                  className="text-sm font-bold px-5 py-2.5 rounded-lg bg-accent text-on-accent hover:opacity-90 transition-opacity">
-                  {state.skipLabel ?? t('cardZoom.close')}
-                </button>
-              ) : controls && (
+              {controls && (
                 <div onClick={e => e.stopPropagation()}
                   className="flex items-center justify-center gap-3 bg-surface/90 rounded-full px-4 py-2 shadow-lg">
                   <button onClick={controls.onRemove} disabled={!controls.canRemove}

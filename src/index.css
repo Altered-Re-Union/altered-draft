@@ -86,6 +86,16 @@
 
 .holo-card__rotator {
   display: grid;
+  /* Explicit (not "auto") so a stretched-to-fill child — e.g. the pack-cover image sized
+     w-full/h-full/object-cover in CardZoom's atStart screen — has a definite track to
+     resolve its percentage height against instead of the circular "auto tracks size to
+     content, content sizes to percentage-of-track" case, which browsers resolve by falling
+     back to the image's own intrinsic size (ignoring the percentage) — the exact bug that
+     left the pack image at its natural size instead of filling/masking the card underneath.
+     No-op for the normal per-card view, where the container's height is itself auto/content
+     sized (percentages against an indefinite size are already treated as auto per spec). */
+  grid-template-columns: 100%;
+  grid-template-rows: 100%;
   transform: rotateY(var(--rotate-x)) rotateX(var(--rotate-y));
   transform-style: preserve-3d;
   transition: transform 0.4s ease-out, box-shadow 0.4s ease-out;
