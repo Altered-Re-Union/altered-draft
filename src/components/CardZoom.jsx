@@ -312,12 +312,22 @@ export function CardZoomProvider({ children }) {
                 // visually covers these buttons. Promoting this block to the positioned layer
                 // too (and above via z-index) puts it back on top.
                 <div className="relative z-10 flex flex-col items-center gap-3">
+                  {cover.label && (
+                    <div className="text-center">
+                      <div className="text-sm text-ink2 tabular-nums">{cover.label}</div>
+                      {cover.sublabel && <div className="text-xs text-accent2 mt-0.5">{cover.sublabel}</div>}
+                    </div>
+                  )}
                   <button onClick={e => { e.stopPropagation(); openPack() }}
                     className="text-base font-bold px-6 py-3 rounded-lg bg-accent text-on-accent hover:opacity-90 transition-opacity">
                     {cover.openLabel ?? t('cardZoom.openBooster')}
                   </button>
                   {state.onSkip && (
-                    <button onClick={e => { e.stopPropagation(); state.onSkip() }}
+                    // onSkip dismisses whatever the CALLER's "skip" means (e.g. PackReveal's
+                    // whole pack-by-pack overlay) — that doesn't itself unmount this zoom, so
+                    // without an explicit close() here the modal is left stuck on screen,
+                    // frozen on this now-orphaned booster after the caller's UI is gone.
+                    <button onClick={e => { e.stopPropagation(); state.onSkip(); close() }}
                       className="text-sm font-semibold text-muted hover:text-ink underline underline-offset-2 transition-colors">
                       {state.skipLabel ?? t('cardZoom.close')}
                     </button>

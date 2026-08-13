@@ -83,7 +83,14 @@ export default function PackReveal({ packs, hasBonus = false, cardMap, deck, poo
   // The pack print itself is per-language (the box literally says "ENGLISH"/"FRANÇAIS"), so
   // it follows the UI language rather than the (currently EN-only) card data language.
   const coverImage = isBonusPack ? null : boosterCoverFor(setCodeFromRef(currentPack[0]), lang)
-  const zoomCover = coverImage ? { image: coverImage, openLabel: t('cardZoom.openBooster') } : null
+  // label/sublabel surface the same "Booster N/total" heading shown below — the always-open
+  // full-screen zoom otherwise covers it, per PackReveal's own "Pack heading" block.
+  const zoomCover = coverImage ? {
+    image: coverImage,
+    openLabel: t('cardZoom.openBooster'),
+    label: t('packReveal.boosterOf', { n: index + 1, total }),
+    sublabel: isBonusPack ? t('packReveal.guaranteedUnique') : null,
+  } : null
 
   return (
     <div className="fixed inset-0 z-50 bg-base flex flex-col">
