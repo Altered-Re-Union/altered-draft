@@ -499,8 +499,6 @@ export default {
     previousCard: 'Previous card',
     nextCard: 'Next card',
     close: 'Close',
-    endOfBooster: "That's the last card in this booster",
-    nextBooster: 'Next booster →',
     openBooster: 'Open',
   },
   poolGrid: {

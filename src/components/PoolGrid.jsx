@@ -368,14 +368,14 @@ function CompactRow({ ref_, occurrences, card, deck, poolCounts, onAdd, onRemove
  * Self-contained card grid (no filter/sort controls). `autoZoom` opens the full-screen swipe
  * viewer on the first card as soon as this ref list is ready, instead of requiring a tap —
  * used by PackReveal so opening a booster goes straight to the swipeable full-screen view.
- * `onZoomNext`/`zoomNextLabel` are forwarded to the zoom so swiping past the last card offers
- * a "next booster" action instead of a dead end; `zoomCover` (`{ image, openLabel }`) gates
- * that auto-open behind a pack-cover reveal screen (see CardZoom.jsx) — it's only applied to
- * the auto-open itself, not to manual re-taps, so the unwrap ceremony plays once per booster.
+ * `onZoomNext` is forwarded to the zoom so swiping (or tapping the card) past the last card
+ * calls it directly instead of a dead end; `zoomCover` (`{ image, openLabel }`) gates that
+ * auto-open behind a pack-cover reveal screen (see CardZoom.jsx) — it's only applied to the
+ * auto-open itself, not to manual re-taps, so the unwrap ceremony plays once per booster.
  * `onZoomSkip`/`zoomSkipLabel`, when set, replace the zoom's deck +/- controls with a single
  * button (e.g. "skip to the full pool") for the whole time this ref list is open.
  */
-export function SimpleCardGrid({ refs, cardMap, loading, deck, poolCounts, onAdd, onRemove, autoZoom, onZoomNext, zoomNextLabel, zoomCover, onZoomSkip, zoomSkipLabel }) {
+export function SimpleCardGrid({ refs, cardMap, loading, deck, poolCounts, onAdd, onRemove, autoZoom, onZoomNext, zoomCover, onZoomSkip, zoomSkipLabel }) {
   const zoom = useZoomNavigation(cardMap, deck, poolCounts, onAdd, onRemove)
   const orderedRefs = dedupeRefs(refs).map(([ref]) => ref)
   const refsKey = orderedRefs.join('|')
@@ -383,7 +383,7 @@ export function SimpleCardGrid({ refs, cardMap, loading, deck, poolCounts, onAdd
   // Forwarded to every card's tap-to-zoom too (not just the auto-open), so closing the
   // full-screen viewer and reopening it by tapping a card doesn't lose the "next booster"
   // swipe action (or the skip action).
-  const zoomOpts = { onNext: onZoomNext, nextLabel: zoomNextLabel, onSkip: onZoomSkip, skipLabel: zoomSkipLabel }
+  const zoomOpts = { onNext: onZoomNext, onSkip: onZoomSkip, skipLabel: zoomSkipLabel }
 
   useEffect(() => {
     if (autoZoom && orderedRefs.length && firstReady) {

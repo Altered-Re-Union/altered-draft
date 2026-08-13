@@ -86,11 +86,10 @@ const OPEN_TRANSITION_MS = 550
 // modal always shows live data instead of a snapshot frozen at open() time, and navigation
 // can resolve any ref in the list on demand.
 //
-// open(refs, index, { onNext, nextLabel }) optionally wires an edge action: swiping/pressing
-// right past the LAST card reveals a "next booster"-style screen (instead of a dead no-op),
-// and swiping/pressing right again (or tapping its button) calls onNext(). Purely a UI hook —
-// the caller decides what "next" means (e.g. advance a booster index) and re-opens the zoom
-// itself if it wants the new content shown full screen.
+// open(refs, index, { onNext }) optionally wires an edge action: swiping/pressing right (or
+// tapping the card) past the LAST card calls onNext() directly instead of a dead no-op.
+// Purely a UI hook — the caller decides what "next" means (e.g. advance a booster index) and
+// re-opens the zoom itself if it wants the new content shown full screen.
 //
 // open(refs, index, { cover: { image, openLabel } }) additionally gates the FIRST card behind
 // a "pack cover" screen: the real card is already resolved and sitting in place underneath,
@@ -109,12 +108,13 @@ const SWIPE_THRESHOLD_PX = 40
 // resolver refreshes and step()'s card-to-card navigation, so every place that rebuilds state
 // from resolveAt() re-attaches them from whatever state they're carrying forward.
 function stickyOpts(s) {
-  return { atEnd: s.atEnd, atStart: s.atStart, cover: s.cover, onNext: s.onNext, nextLabel: s.nextLabel, onSkip: s.onSkip, skipLabel: s.skipLabel }
+  return { atStart: s.atStart, cover: s.cover, onNext: s.onNext, onSkip: s.onSkip, skipLabel: s.skipLabel }
 }
 
 export function CardZoomProvider({ children }) {
-  const [state, setState] = useState(null) // { refs, index, card, controls, atEnd, atStart, cover, onNext, nextLabel, onSkip, skipLabel } | null
+  const [state, setState] = useState(null) // { refs, index, card, controls, atStart, cover, onNext, onSkip, skipLabel } | null
   const [opening, setOpening] = useState(false) // mid pack-slide-down animation
+  const [coverLoaded, setCoverLoaded] = useState(false) // pack-cover image finished loading
   const stateRef = useRef(null)
   stateRef.current = state
   const openTimerRef = useRef(null)
@@ -144,8 +144,8 @@ export function CardZoomProvider({ children }) {
     clearOpenTimer()
     setOpening(false)
     setState({
-      ...next, atEnd: false, atStart: !!opts.cover, cover: opts.cover ?? null,
-      onNext: opts.onNext ?? null, nextLabel: opts.nextLabel ?? null,
+      ...next, atStart: !!opts.cover, cover: opts.cover ?? null,
+      onNext: opts.onNext ?? null,
       onSkip: opts.onSkip ?? null, skipLabel: opts.skipLabel ?? null,
     })
   }, [resolveAt])
@@ -165,29 +165,22 @@ export function CardZoomProvider({ children }) {
   const step = useCallback(delta => {
     setState(prev => {
       if (!prev || prev.atStart) return prev // still behind the pack cover — nothing to step through yet
-      if (delta > 0 && !prev.atEnd) {
-        const index = prev.index + 1
-        if (index > prev.refs.length - 1) {
-          // Past the last card: reveal the "next booster" screen instead of a dead no-op,
-          // but only when the caller actually wired one up via open()'s onNext.
-          return prev.onNext ? { ...prev, atEnd: true } : prev
-        }
-        return { ...resolveAt(prev.refs, index), ...stickyOpts(prev), atEnd: false }
-      }
-      if (delta < 0) {
-        if (prev.atEnd) return { ...prev, atEnd: false } // step back from the reveal screen to the last card
-        const index = prev.index - 1
-        if (index < 0) return prev
-        return { ...resolveAt(prev.refs, index), ...stickyOpts(prev), atEnd: false }
-      }
-      return prev
+      const index = prev.index + delta
+      if (index < 0 || index > prev.refs.length - 1) return prev
+      return { ...resolveAt(prev.refs, index), ...stickyOpts(prev) }
     })
   }, [resolveAt])
 
-  // Confirms the "next booster" reveal screen — reads live state directly rather than via a
+  // Forward navigation past the last card calls onNext() (e.g. "go to the next booster")
+  // directly instead of a dead no-op — reads live state rather than going through step()'s
   // setState updater, since calling a caller-supplied side effect from inside one risks a
   // double-invoke under StrictMode's dev-mode double-render of updaters.
-  const confirmNext = useCallback(() => { stateRef.current?.onNext?.() }, [])
+  const advance = useCallback(delta => {
+    const prev = stateRef.current
+    if (!prev || prev.atStart) return
+    if (delta > 0 && prev.index >= prev.refs.length - 1) { prev.onNext?.(); return }
+    step(delta)
+  }, [step])
 
   const close = useCallback(() => {
     clearOpenTimer()
@@ -206,11 +199,7 @@ export function CardZoomProvider({ children }) {
     const onKey = e => {
       if (e.key === 'Escape') close()
       else if (e.key === 'ArrowLeft') step(-1)
-      else if (e.key === 'ArrowRight') {
-        if (stateRef.current?.atStart) openPack()
-        else if (stateRef.current?.atEnd) confirmNext()
-        else step(1)
-      }
+      else if (e.key === 'ArrowRight') { if (stateRef.current?.atStart) openPack(); else advance(1) }
     }
     window.addEventListener('keydown', onKey)
     const scrollY = window.scrollY
@@ -231,7 +220,7 @@ export function CardZoomProvider({ children }) {
       window.scrollTo(0, scrollY)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only presence of `state` matters here
-  }, [!!state, close, step, confirmNext, openPack])
+  }, [!!state, close, step, advance, openPack])
 
   const touchStartXRef = useRef(null)
   function onTouchStart(e) { touchStartXRef.current = e.touches[0]?.clientX ?? null }
@@ -242,20 +231,22 @@ export function CardZoomProvider({ children }) {
     const dx = (e.changedTouches[0]?.clientX ?? startX) - startX
     if (Math.abs(dx) < SWIPE_THRESHOLD_PX) return // treat as a tap, not a swipe
     if (stateRef.current?.atStart) { if (dx < 0) openPack(); return }
-    if (dx < 0 && stateRef.current?.atEnd) { confirmNext(); return }
-    step(dx < 0 ? 1 : -1)
+    if (dx < 0) advance(1); else step(-1)
   }
 
   const card = state?.card
   const controls = state?.controls
   const cover = state?.cover
   const atStart = !!state?.atStart
-  const atEnd = !!state?.atEnd
-  const hasPrev = !!state && !atStart && (state.index > 0 || atEnd)
-  const hasNext = !!state && !atStart && !atEnd && state.index < state.refs.length - 1
-  const showConfirmNext = atEnd && !!state?.onNext
+  const hasPrev = !!state && !atStart && state.index > 0
+  const hasNext = !!state && !atStart && state.index < state.refs.length - 1
 
   useEffect(() => { onPointerLeave() }, [card, onPointerLeave])
+
+  // Reset whenever a new pack cover comes in (a fresh booster, or none) — otherwise the
+  // loading spinner below would never show again after the first booster since state would
+  // stay "loaded" from a previous, different image.
+  useEffect(() => { setCoverLoaded(false) }, [cover?.image])
 
   // Memoized so it only changes reference when open/close status actually flips — NOT on
   // every card-to-card navigation or setResolver() refresh. Without this, every consumer's
@@ -271,12 +262,6 @@ export function CardZoomProvider({ children }) {
         <div onClick={close} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}
           role="dialog" aria-modal="true" style={{ touchAction: 'none' }}
           className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 cursor-zoom-out">
-          {showConfirmNext && (
-            <button onClick={e => { e.stopPropagation(); confirmNext() }} aria-label={state.nextLabel ?? t('cardZoom.nextBooster')}
-              className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-accent hover:opacity-90 text-on-accent text-2xl leading-none flex items-center justify-center shadow-lg">
-              ›
-            </button>
-          )}
           {atStart ? (
             <div className="flex flex-col items-center gap-5">
               {/* The card sits underneath at rest, sized by its own aspect ratio — "opening"
@@ -284,12 +269,14 @@ export function CardZoomProvider({ children }) {
                   player is looking at moves. The pack photo's own silhouette flares wider at
                   the top seal than the body, so a plain object-cover (sized to the card's
                   box) would either crop the flare away or leave the card peeking through at
-                  the narrower body — instead the pack renders at 120% of the card's width
+                  the narrower body — instead the pack renders at 115% of the card's width
                   (the pack's asset is pre-cropped so its narrowest point, the body, maps to
-                  100% — 120% keeps the flares fully visible and adds a safety margin against
+                  100% — 115% keeps the flares fully visible and adds a safety margin against
                   antialiased edge pixels), centered both horizontally AND vertically against
                   the card's box with no clipping, so the whole pack (including both flares)
-                  bleeds evenly past the card's edges on every side instead of being cropped. */}
+                  bleeds evenly past the card's edges on every side instead of being cropped.
+                  Until that (larger, un-preloaded) pack image finishes loading, a spinner
+                  covers the same area instead of leaving the card underneath visible. */}
               <div className="relative inline-block leading-none">
                 {card.imagePath && (
                   <img src={card.imagePath} alt="" aria-hidden
@@ -298,11 +285,12 @@ export function CardZoomProvider({ children }) {
                 <div onClick={e => { e.stopPropagation(); openPack() }}
                   className={`absolute inset-0 cursor-pointer transition-transform duration-500 ease-in ${
                     opening ? 'translate-y-[130%]' : 'translate-y-0'}`}>
-                  <div className="absolute left-1/2 top-0 flex h-full w-[120%] -translate-x-1/2 items-center">
+                  <div className="absolute left-1/2 top-0 flex h-full w-[115%] -translate-x-1/2 items-center">
                     <div ref={zoneRef} className="w-full" onPointerMove={onPointerMove} onPointerLeave={onPointerLeave}>
                       <div className="holo-card w-full">
                         <div ref={rotatorRef} className="holo-card__rotator w-full">
                           <img src={cover.image} alt={cover.openLabel ?? t('cardZoom.openBooster')}
+                            onLoad={() => setCoverLoaded(true)} onError={() => setCoverLoaded(true)}
                             className="w-full h-auto rounded-2xl shadow-2xl select-none" />
                           <div className="holo-card__shine" />
                           <div className="holo-card__glare" />
@@ -310,10 +298,20 @@ export function CardZoomProvider({ children }) {
                       </div>
                     </div>
                   </div>
+                  {!coverLoaded && (
+                    <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-surface">
+                      <div className="w-8 h-8 rounded-full border-2 border-line border-t-accent animate-spin" />
+                    </div>
+                  )}
                 </div>
               </div>
               {!opening && (
-                <div className="flex flex-col items-center gap-3">
+                // relative + z-10: the pack image bleeds past the card's box on every side
+                // (see above), and an absolutely-positioned descendant always paints above a
+                // plain in-flow sibling regardless of DOM order — without this, that overflow
+                // visually covers these buttons. Promoting this block to the positioned layer
+                // too (and above via z-index) puts it back on top.
+                <div className="relative z-10 flex flex-col items-center gap-3">
                   <button onClick={e => { e.stopPropagation(); openPack() }}
                     className="text-base font-bold px-6 py-3 rounded-lg bg-accent text-on-accent hover:opacity-90 transition-opacity">
                     {cover.openLabel ?? t('cardZoom.openBooster')}
@@ -327,25 +325,18 @@ export function CardZoomProvider({ children }) {
                 </div>
               )}
             </div>
-          ) : atEnd ? (
-            <div onClick={e => e.stopPropagation()} className="flex flex-col items-center gap-4 text-center px-6">
-              <div className="text-ink text-base">{t('cardZoom.endOfBooster')}</div>
-              {state.onNext && (
-                <button onClick={confirmNext}
-                  className="text-base font-bold px-6 py-3 rounded-lg bg-accent text-on-accent hover:opacity-90 transition-opacity">
-                  {state.nextLabel ?? t('cardZoom.nextBooster')}
-                </button>
-              )}
-            </div>
           ) : card.imagePath ? (
             <div className="flex flex-col items-center gap-3">
               <div ref={zoneRef} className="holo-card-zone" onPointerMove={onPointerMove} onPointerLeave={onPointerLeave}>
                 {/* relative: prev/next arrows anchor to the CARD's own box, not the screen
                     edge, so they stay right next to it instead of drifting far away on wide
                     viewports where the card renders much narrower than the screen. A slightly
-                    tighter max-width (vs. the cover/atEnd screens) leaves room for the arrows
-                    to sit just outside it instead of overlapping the art. */}
-                <div className={`holo-card relative max-h-[82vh] ${(hasPrev || hasNext) ? 'max-w-[76vw]' : 'max-w-[94vw]'} ${holoClassForRarity(card.rarity)}`}>
+                    tighter max-width (vs. the cover screen) leaves room for the arrows to sit
+                    just outside it instead of overlapping the art. Tapping the card itself
+                    advances forward (via advance(), same as swipe) rather than closing — only
+                    tapping outside it or the ✕ button closes the zoom. */}
+                <div onClick={e => { e.stopPropagation(); advance(1) }}
+                  className={`holo-card relative cursor-pointer max-h-[82vh] ${(hasPrev || hasNext) ? 'max-w-[76vw]' : 'max-w-[94vw]'} ${holoClassForRarity(card.rarity)}`}>
                   <div ref={rotatorRef} className="holo-card__rotator">
                     <img src={card.imagePath} alt={card.name ?? ''}
                       className={`max-h-[82vh] w-auto h-auto rounded-2xl shadow-2xl select-none ${(hasPrev || hasNext) ? 'max-w-[76vw]' : 'max-w-[94vw]'}`} />

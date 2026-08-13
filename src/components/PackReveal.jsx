@@ -110,7 +110,6 @@ export default function PackReveal({ packs, hasBonus = false, cardMap, deck, poo
             onRemove={onRemove}
             autoZoom
             onZoomNext={isLast ? null : () => setIndex(i => Math.min(total - 1, i + 1))}
-            zoomNextLabel={t('packReveal.nextBooster')}
             zoomCover={zoomCover}
             onZoomSkip={onClose}
             zoomSkipLabel={isLast ? t('packReveal.seeFullPool') : t('packReveal.skipAndSeeFullPool')}
