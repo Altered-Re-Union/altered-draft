@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react'
+import { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { useLang } from '../lib/i18n/i18n.jsx'
 
@@ -257,8 +257,15 @@ export function CardZoomProvider({ children }) {
 
   useEffect(() => { onPointerLeave() }, [card, onPointerLeave])
 
+  // Memoized so it only changes reference when open/close status actually flips — NOT on
+  // every card-to-card navigation or setResolver() refresh. Without this, every consumer's
+  // `useEffect([zoom, ...])` (e.g. useZoomNavigation's resolver registration) re-fires on
+  // every render of this provider, which itself calls setResolver → setState → re-render →
+  // new context value → effect fires again: an infinite "Maximum update depth exceeded" loop.
+  const contextValue = useMemo(() => ({ open, close, setResolver, isOpen: !!state }), [open, close, setResolver, !!state])
+
   return (
-    <CardZoomContext.Provider value={{ open, close, setResolver, isOpen: !!state }}>
+    <CardZoomContext.Provider value={contextValue}>
       {children}
       {card && createPortal(
         <div onClick={close} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}
