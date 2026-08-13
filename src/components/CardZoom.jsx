@@ -281,9 +281,15 @@ export function CardZoomProvider({ children }) {
             <div className="flex flex-col items-center gap-5">
               {/* The card sits underneath at rest, sized by its own aspect ratio — "opening"
                   the pack just slides art of that SAME size down and off, so nothing the
-                  player is looking at moves. The pack image uses object-cover (rather than
-                  its own intrinsic aspect ratio) so it fully masks the card regardless of the
-                  two images' proportions differing. */}
+                  player is looking at moves. The pack photo's own silhouette flares wider at
+                  the top seal than the body, so a plain object-cover (sized to the card's
+                  box) would either crop the flare away or leave the card peeking through at
+                  the narrower body — instead the pack renders at 120% of the card's width
+                  (the pack's asset is pre-cropped so its narrowest point, the body, maps to
+                  100% — 120% keeps the flare fully visible and adds a safety margin against
+                  antialiased edge pixels), centered so the overflow bleeds evenly past both
+                  sides, and top-anchored so the resulting extra height crops off the BOTTOM
+                  rather than eating into the top flare we're trying to keep. */}
               <div className="relative inline-block leading-none">
                 {card.imagePath && (
                   <img src={card.imagePath} alt="" aria-hidden
@@ -292,13 +298,15 @@ export function CardZoomProvider({ children }) {
                 <div onClick={e => { e.stopPropagation(); openPack() }}
                   className={`absolute inset-0 cursor-pointer transition-transform duration-500 ease-in ${
                     opening ? 'translate-y-[130%]' : 'translate-y-0'}`}>
-                  <div ref={zoneRef} className="w-full h-full" onPointerMove={onPointerMove} onPointerLeave={onPointerLeave}>
-                    <div className="holo-card w-full h-full">
-                      <div ref={rotatorRef} className="holo-card__rotator w-full h-full">
-                        <img src={cover.image} alt={cover.openLabel ?? t('cardZoom.openBooster')}
-                          className="w-full h-full object-cover rounded-2xl shadow-2xl select-none" />
-                        <div className="holo-card__shine" />
-                        <div className="holo-card__glare" />
+                  <div className="absolute left-1/2 top-0 h-full w-[120%] -translate-x-1/2 overflow-hidden rounded-2xl shadow-2xl">
+                    <div ref={zoneRef} className="w-full" onPointerMove={onPointerMove} onPointerLeave={onPointerLeave}>
+                      <div className="holo-card w-full">
+                        <div ref={rotatorRef} className="holo-card__rotator w-full">
+                          <img src={cover.image} alt={cover.openLabel ?? t('cardZoom.openBooster')}
+                            className="w-full h-auto select-none" />
+                          <div className="holo-card__shine" />
+                          <div className="holo-card__glare" />
+                        </div>
                       </div>
                     </div>
                   </div>
