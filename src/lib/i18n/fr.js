@@ -498,6 +498,8 @@ export default {
     previousCard: 'Carte précédente',
     nextCard: 'Carte suivante',
     close: 'Fermer',
+    endOfBooster: 'C’est la dernière carte de ce booster',
+    nextBooster: 'Booster suivant →',
   },
   poolGrid: {
     deckOnly: 'Deck uniquement',

@@ -364,10 +364,28 @@ function CompactRow({ ref_, occurrences, card, deck, poolCounts, onAdd, onRemove
   )
 }
 
-/** Self-contained card grid (no filter/sort controls). */
-export function SimpleCardGrid({ refs, cardMap, loading, deck, poolCounts, onAdd, onRemove }) {
+/**
+ * Self-contained card grid (no filter/sort controls). `autoZoom` opens the full-screen swipe
+ * viewer on the first card as soon as this ref list is ready, instead of requiring a tap —
+ * used by PackReveal so opening a booster goes straight to the swipeable full-screen view.
+ * `onZoomNext`/`zoomNextLabel` are forwarded to the zoom so swiping past the last card offers
+ * a "next booster" action instead of a dead end (see CardZoom.jsx).
+ */
+export function SimpleCardGrid({ refs, cardMap, loading, deck, poolCounts, onAdd, onRemove, autoZoom, onZoomNext, zoomNextLabel }) {
   const zoom = useZoomNavigation(cardMap, deck, poolCounts, onAdd, onRemove)
   const orderedRefs = dedupeRefs(refs).map(([ref]) => ref)
+  const refsKey = orderedRefs.join('|')
+  const firstReady = !!cardMap[orderedRefs[0]]
+
+  useEffect(() => {
+    if (autoZoom && orderedRefs.length && firstReady) {
+      zoom.open(orderedRefs, 0, { onNext: onZoomNext, nextLabel: zoomNextLabel })
+    }
+    // Fire once per booster (refsKey) — not on every render — and again if the first card
+    // wasn't resolved in cardMap yet the first time this ran.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoZoom, refsKey, firstReady])
+
   return (
     <CardGridInner refs={refs} cardMap={cardMap} loading={loading}
       deck={deck} poolCounts={poolCounts} onAdd={onAdd} onRemove={onRemove}

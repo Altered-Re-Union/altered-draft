@@ -71,7 +71,6 @@ export default function Draft() {
   }, [code])
 
   useEffect(() => {
-    if (needsRejoin && !me) return
     getRoom(code)
       .then(async ({ data, error }) => {
         if (error || !data) { navigate('/'); return }
@@ -108,7 +107,8 @@ export default function Draft() {
           setCardMap(maps)
         }
       })
-  }, [code, navigate, me, needsRejoin])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once per room; me/needsRejoin aren't used in the body
+  }, [code, navigate])
 
   useEffect(() => {
     return subscribeToRoom(code, state => {

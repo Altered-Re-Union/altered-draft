@@ -157,18 +157,29 @@ export async function fetchUnique(reference, lang = 'EN') {
   let card = uniqueCache[key]
   if (!card) {
     const loc = (LOCALE[lang] ?? 'en-us').slice(0, 2) // 'en','fr',… for the per-locale fields
-    try {
-      // Filter by reference (the /api/cards/<id> path expects a numeric id, not a ref).
-      const res = await fetch(`https://cards.alteredcore.org/api/cards?reference=${encodeURIComponent(reference)}`, { headers: { Accept: 'application/json' } })
-      if (!res.ok) throw new Error(`Failed to fetch unique ${reference}: ${res.status}`)
-      const raw = (await res.json()).member?.[0]
-      if (!raw) throw new Error(`Unique ${reference} not found`)
-      card = normalizeAlteredCore(raw, loc, lang)
-      uniqueCache[key] = card
-    } catch (err) {
-      // API down / not found → fall back to the bundled EN snapshot if we have one.
+    // Cold page loads fire this alongside a burst of other requests (set data, card
+    // images), so a transient failure/timeout here is common — retry a couple of times
+    // before giving up, instead of silently dropping the card until the player reloads.
+    const attempts = 3
+    let lastErr = null
+    for (let attempt = 0; attempt < attempts && !card; attempt++) {
+      try {
+        // Filter by reference (the /api/cards/<id> path expects a numeric id, not a ref).
+        const res = await fetch(`https://cards.alteredcore.org/api/cards?reference=${encodeURIComponent(reference)}`, { headers: { Accept: 'application/json' } })
+        if (!res.ok) throw new Error(`Failed to fetch unique ${reference}: ${res.status}`)
+        const raw = (await res.json()).member?.[0]
+        if (!raw) throw new Error(`Unique ${reference} not found`)
+        card = normalizeAlteredCore(raw, loc, lang)
+        uniqueCache[key] = card
+      } catch (err) {
+        lastErr = err
+        if (attempt < attempts - 1) await new Promise(r => setTimeout(r, 400 * (attempt + 1)))
+      }
+    }
+    if (!card) {
+      // API down / not found after retries → fall back to the bundled EN snapshot if we have one.
       if (snapshot) { uniqueCache[key] = snapshot; return snapshot }
-      throw err
+      throw lastErr
     }
   }
 

@@ -81,17 +81,25 @@ function useHoloTilt() {
 // — called on every render of the list that's on screen (deck/cardMap changes), so an open
 // modal always shows live data instead of a snapshot frozen at open() time, and navigation
 // can resolve any ref in the list on demand.
+//
+// open(refs, index, { onNext, nextLabel }) optionally wires an edge action: swiping/pressing
+// right past the LAST card reveals a "next booster"-style screen (instead of a dead no-op),
+// and swiping/pressing right again (or tapping its button) calls onNext(). Purely a UI hook —
+// the caller decides what "next" means (e.g. advance a booster index) and re-opens the zoom
+// itself if it wants the new content shown full screen.
 const CardZoomContext = createContext(null)
 const noop = () => {}
 
 export function useCardZoom() {
-  return useContext(CardZoomContext) ?? { open: noop, close: noop, setResolver: noop }
+  return useContext(CardZoomContext) ?? { open: noop, close: noop, setResolver: noop, isOpen: false }
 }
 
 const SWIPE_THRESHOLD_PX = 40
 
 export function CardZoomProvider({ children }) {
-  const [state, setState] = useState(null) // { refs, index, card, controls } | null
+  const [state, setState] = useState(null) // { refs, index, card, controls, atEnd, onNext, nextLabel } | null
+  const stateRef = useRef(null)
+  stateRef.current = state
   const resolverRef = useRef(() => null)
   const { t } = useLang()
   const { rotatorRef, zoneRef, onPointerMove, onPointerLeave } = useHoloTilt()
@@ -104,23 +112,41 @@ export function CardZoomProvider({ children }) {
 
   const setResolver = useCallback(fn => {
     resolverRef.current = fn
-    setState(prev => (prev ? resolveAt(prev.refs, prev.index) : prev))
+    setState(prev => (prev ? { ...resolveAt(prev.refs, prev.index), atEnd: prev.atEnd, onNext: prev.onNext, nextLabel: prev.nextLabel } : prev))
   }, [resolveAt])
 
-  const open = useCallback((refs, index) => {
+  const open = useCallback((refs, index, opts = {}) => {
     if (!refs?.length) return
     const next = resolveAt(refs, index)
-    if (next.card) setState(next)
+    if (next.card) setState({ ...next, atEnd: false, onNext: opts.onNext ?? null, nextLabel: opts.nextLabel ?? null })
   }, [resolveAt])
 
   const step = useCallback(delta => {
     setState(prev => {
       if (!prev) return prev
-      const index = prev.index + delta
-      if (index < 0 || index > prev.refs.length - 1) return prev
-      return resolveAt(prev.refs, index)
+      if (delta > 0 && !prev.atEnd) {
+        const index = prev.index + 1
+        if (index > prev.refs.length - 1) {
+          // Past the last card: reveal the "next booster" screen instead of a dead no-op,
+          // but only when the caller actually wired one up via open()'s onNext.
+          return prev.onNext ? { ...prev, atEnd: true } : prev
+        }
+        return { ...resolveAt(prev.refs, index), atEnd: false, onNext: prev.onNext, nextLabel: prev.nextLabel }
+      }
+      if (delta < 0) {
+        if (prev.atEnd) return { ...prev, atEnd: false } // step back from the reveal screen to the last card
+        const index = prev.index - 1
+        if (index < 0) return prev
+        return { ...resolveAt(prev.refs, index), atEnd: false, onNext: prev.onNext, nextLabel: prev.nextLabel }
+      }
+      return prev
     })
   }, [resolveAt])
+
+  // Confirms the "next booster" reveal screen — reads live state directly rather than via a
+  // setState updater, since calling a caller-supplied side effect from inside one risks a
+  // double-invoke under StrictMode's dev-mode double-render of updaters.
+  const confirmNext = useCallback(() => { stateRef.current?.onNext?.() }, [])
 
   const close = useCallback(() => setState(null), [])
 
@@ -135,7 +161,7 @@ export function CardZoomProvider({ children }) {
     const onKey = e => {
       if (e.key === 'Escape') close()
       else if (e.key === 'ArrowLeft') step(-1)
-      else if (e.key === 'ArrowRight') step(1)
+      else if (e.key === 'ArrowRight') { if (stateRef.current?.atEnd) confirmNext(); else step(1) }
     }
     window.addEventListener('keydown', onKey)
     const scrollY = window.scrollY
@@ -156,7 +182,7 @@ export function CardZoomProvider({ children }) {
       window.scrollTo(0, scrollY)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only presence of `state` matters here
-  }, [!!state, close, step])
+  }, [!!state, close, step, confirmNext])
 
   const touchStartXRef = useRef(null)
   function onTouchStart(e) { touchStartXRef.current = e.touches[0]?.clientX ?? null }
@@ -166,18 +192,21 @@ export function CardZoomProvider({ children }) {
     if (startX == null) return
     const dx = (e.changedTouches[0]?.clientX ?? startX) - startX
     if (Math.abs(dx) < SWIPE_THRESHOLD_PX) return // treat as a tap, not a swipe
+    if (dx < 0 && stateRef.current?.atEnd) { confirmNext(); return }
     step(dx < 0 ? 1 : -1)
   }
 
   const card = state?.card
   const controls = state?.controls
-  const hasPrev = !!state && state.index > 0
-  const hasNext = !!state && state.index < state.refs.length - 1
+  const atEnd = !!state?.atEnd
+  const hasPrev = !!state && (state.index > 0 || atEnd)
+  const hasNext = !!state && !atEnd && state.index < state.refs.length - 1
+  const showConfirmNext = atEnd && !!state?.onNext
 
   useEffect(() => { onPointerLeave() }, [card, onPointerLeave])
 
   return (
-    <CardZoomContext.Provider value={{ open, close, setResolver }}>
+    <CardZoomContext.Provider value={{ open, close, setResolver, isOpen: !!state }}>
       {children}
       {card && createPortal(
         <div onClick={close} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}
@@ -195,7 +224,23 @@ export function CardZoomProvider({ children }) {
               ›
             </button>
           )}
-          {card.imagePath ? (
+          {showConfirmNext && (
+            <button onClick={e => { e.stopPropagation(); confirmNext() }} aria-label={state.nextLabel ?? t('cardZoom.nextBooster')}
+              className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-accent hover:opacity-90 text-on-accent text-2xl leading-none flex items-center justify-center shadow-lg">
+              ›
+            </button>
+          )}
+          {atEnd ? (
+            <div onClick={e => e.stopPropagation()} className="flex flex-col items-center gap-4 text-center px-6">
+              <div className="text-ink text-base">{t('cardZoom.endOfBooster')}</div>
+              {state.onNext && (
+                <button onClick={confirmNext}
+                  className="text-base font-bold px-6 py-3 rounded-lg bg-accent text-on-accent hover:opacity-90 transition-opacity">
+                  {state.nextLabel ?? t('cardZoom.nextBooster')}
+                </button>
+              )}
+            </div>
+          ) : card.imagePath ? (
             <div className="flex flex-col items-center gap-3">
               <div ref={zoneRef} className="holo-card-zone" onPointerMove={onPointerMove} onPointerLeave={onPointerLeave}>
                 <div className={`holo-card max-h-[82vh] max-w-[94vw] ${holoClassForRarity(card.rarity)}`}>

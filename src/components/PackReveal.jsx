@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { SimpleCardGrid } from './PoolGrid.jsx'
+import { useCardZoom } from './CardZoom.jsx'
 import { useLang } from '../lib/i18n/i18n.jsx'
 
 // Preload one pack's card images; resolves when they've all settled (or a per-image error).
@@ -35,13 +36,16 @@ export default function PackReveal({ packs, hasBonus = false, cardMap, deck, poo
   const packsRef = useRef(packs)
   packsRef.current = packs
   const { t } = useLang()
+  const { isOpen: zoomOpen } = useCardZoom()
 
-  // Escape skips the whole reveal (matches the always-visible Skip button).
+  // Escape skips the whole reveal (matches the always-visible Skip button) — but not while
+  // the full-screen card zoom is open on top of it, since the zoom's own Escape handler
+  // already backs out of just the card view, and both listeners would otherwise fire together.
   useEffect(() => {
-    const onKey = e => { if (e.key === 'Escape') onClose() }
+    const onKey = e => { if (e.key === 'Escape' && !zoomOpen) onClose() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+  }, [onClose, zoomOpen])
 
   const currentPack = packs[index] ?? []
   const refsKey = currentPack.join('|')
@@ -88,7 +92,7 @@ export default function PackReveal({ packs, hasBonus = false, cardMap, deck, poo
       </div>
 
       {/* Current pack — shown only once its images are ready (buffering spinner until then) */}
-      <div className="flex-1 mx-4 mb-3 bg-surface rounded-xl border border-line overflow-hidden">
+      <div className="flex-1 min-h-0 mx-4 mb-3 bg-surface rounded-xl border border-line overflow-y-auto">
         {ready ? (
           <SimpleCardGrid
             refs={currentPack}
@@ -97,6 +101,9 @@ export default function PackReveal({ packs, hasBonus = false, cardMap, deck, poo
             poolCounts={poolCounts}
             onAdd={onAdd}
             onRemove={onRemove}
+            autoZoom
+            onZoomNext={isLast ? null : () => setIndex(i => Math.min(total - 1, i + 1))}
+            zoomNextLabel={t('packReveal.nextBooster')}
           />
         ) : (
           <div className="h-full flex flex-col items-center justify-center gap-3 text-muted">
