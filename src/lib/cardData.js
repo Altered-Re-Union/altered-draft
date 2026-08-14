@@ -97,7 +97,10 @@ const uniqueCache = {}
 // because the real unique faces no longer live on any host (Altered's S3 is locked) and the
 // community CDN only has the base rare (…_R1) — so without this, uniques render as their rare.
 // Returns null if the renderer isn't loaded / times out / the canvas is tainted; the caller then
-// keeps the _R1 fallback (no worse than before). Renders once per ref+locale (cached promise).
+// keeps the _R1 fallback (no worse than before). Renders once per ref+locale (cached promise) —
+// but a FAILED (null) render is evicted from the cache rather than kept, so a later call (a
+// remount, a retry from fetchUnique below) gets a fresh attempt instead of permanently reusing
+// a stale failure from e.g. the renderer not being defined yet on the very first try.
 const uniqueFaceCache = {}
 function renderUniqueFace(reference, lang = 'EN') {
   const loc = (LOCALE[lang] ?? 'en-us').slice(0, 2)
@@ -136,6 +139,7 @@ function renderUniqueFace(reference, lang = 'EN') {
     }
   })()
   uniqueFaceCache[key] = job
+  job.then(result => { if (!result) delete uniqueFaceCache[key] })
   return job
 }
 
@@ -161,7 +165,6 @@ export async function fetchUnique(reference, lang = 'EN') {
     // images), so a transient failure/timeout here is common — retry a couple of times
     // before giving up, instead of silently dropping the card until the player reloads.
     const attempts = 3
-    let lastErr = null
     for (let attempt = 0; attempt < attempts && !card; attempt++) {
       try {
         // Filter by reference (the /api/cards/<id> path expects a numeric id, not a ref).
@@ -171,23 +174,36 @@ export async function fetchUnique(reference, lang = 'EN') {
         if (!raw) throw new Error(`Unique ${reference} not found`)
         card = normalizeAlteredCore(raw, loc, lang)
         uniqueCache[key] = card
-      } catch (err) {
-        lastErr = err
+      } catch {
         if (attempt < attempts - 1) await new Promise(r => setTimeout(r, 400 * (attempt + 1)))
       }
     }
     if (!card) {
-      // API down / not found after retries → fall back to the bundled EN snapshot if we have one.
+      // API down / not found after retries → fall back to the bundled EN snapshot if we have
+      // one, else a synthetic card built from the reference alone (still gets the base rare's
+      // art via cardImageUrl's own _R1 fallback, and may yet get upgraded to the true face
+      // below since <altered-card> doesn't depend on this same API call) — better than leaving
+      // the caller with nothing to render (a bare ref/number placeholder) after every retry.
       if (snapshot) { uniqueCache[key] = snapshot; return snapshot }
-      throw lastErr
+      card = {
+        reference, name: reference, faction: 'XX', factionName: 'Unknown', rarity: 'U',
+        imagePath: cardImageUrl(reference, lang), cardType: '',
+        mainCost: null, recallCost: null, forestPower: null, mountainPower: null, oceanPower: null,
+      }
+      uniqueCache[key] = card
     }
   }
 
-  // Upgrade the image from the _R1 rare fallback to the true unique face (rendered once, cached).
-  // Any failure leaves the _R1 imagePath in place — no worse than before.
+  // Upgrade the image from the _R1 rare fallback to the true unique face (rendered once per
+  // successful attempt — see renderUniqueFace). A couple of retries here since the very first
+  // attempt on a cold page load can lose the race against the <altered-card> component's own
+  // script still registering; any failure after that leaves the _R1 fallback in place, no
+  // worse than before.
   if (card && isUniqueRef(reference) && !card._uniqueFace) {
-    try { const face = await renderUniqueFace(reference, lang); if (face) { card.imagePath = face; card._uniqueFace = true } }
-    catch { /* keep the _R1 fallback */ }
+    for (let attempt = 0; attempt < 2 && !card._uniqueFace; attempt++) {
+      try { const face = await renderUniqueFace(reference, lang); if (face) { card.imagePath = face; card._uniqueFace = true } }
+      catch { /* try again, or keep the _R1 fallback after the last attempt */ }
+    }
   }
   return card
 }

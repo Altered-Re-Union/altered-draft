@@ -177,7 +177,16 @@ export default function TournamentPoolView({ title, load, reset }) {
         }
         let deckId = currentPool.deck?.id
         if (deckId) {
-          await updateDeck(deckId, summary)
+          try {
+            await updateDeck(deckId, summary)
+          } catch (e) {
+            // The deck we last synced to was deleted server-side (e.g. from
+            // deckbuilder.alteredcore.org) — recreate it instead of repeating this same
+            // 404 on every future edit (syncPoolDeck below re-links the pool to the new id).
+            if (e.status !== 404) throw e
+            const created = await createDeck(summary)
+            deckId = created.id
+          }
         } else {
           const created = await createDeck(summary)
           deckId = created.id

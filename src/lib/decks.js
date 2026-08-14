@@ -22,10 +22,18 @@ function authError(status) {
 // at 20/page by default) sorted by name, and unwraps the various envelope shapes.
 // Each summary carries: id, name, format, isDraft, isPublic, createdAt… (no card list —
 // that's only on the per-deck detail endpoint).
+// Attaches `.status` to the thrown error (mirrors tournamentApi.js's `handle()`) so callers
+// can branch on e.g. a 404 (deck deleted server-side) without parsing the message string.
+function statusError(status, message) {
+  const err = new Error(message)
+  err.status = status
+  return err
+}
+
 export async function listDecks(params = {}) {
   const qs = new URLSearchParams({ itemsPerPage: '1000', 'order[name]': 'asc', ...params }).toString()
   const res = await fetch(`/api/decks?${qs}`, { headers: await authHeaders() })
-  if (!res.ok) throw new Error(authError(res.status) || `Could not load your decks (HTTP ${res.status}).`)
+  if (!res.ok) throw statusError(res.status, authError(res.status) || `Could not load your decks (HTTP ${res.status}).`)
   const data = await res.json()
   for (const key of ['member', 'hydra:member', 'items', 'decks', 'data']) {
     if (Array.isArray(data?.[key])) return data[key]
@@ -36,7 +44,7 @@ export async function listDecks(params = {}) {
 // Full deck detail (incl. deckCards) for one id.
 export async function getDeck(id) {
   const res = await fetch(`/api/decks/${encodeURIComponent(id)}`, { headers: await authHeaders() })
-  if (!res.ok) throw new Error(authError(res.status) || `Could not load that deck (HTTP ${res.status}).`)
+  if (!res.ok) throw statusError(res.status, authError(res.status) || `Could not load that deck (HTTP ${res.status}).`)
   return res.json()
 }
 
@@ -53,12 +61,15 @@ export async function createDeck({ name, deckCards, isDraft = false, format = 's
   })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
-    throw new Error(authError(res.status) || data.message || data.detail || data.error || `Save failed (HTTP ${res.status}).`)
+    throw statusError(res.status, authError(res.status) || data.message || data.detail || data.error || `Save failed (HTTP ${res.status}).`)
   }
   return data
 }
 
 // Update one of the user's decks (name/deckCards/etc). Returns the API payload.
+// Throws with `.status === 404` if the deck no longer exists (e.g. deleted from
+// deckbuilder.alteredcore.org) — callers syncing against a remembered deck id should
+// recreate rather than repeat this same failure on every future edit.
 export async function updateDeck(id, { name, deckCards, isDraft, format }) {
   const body = {}
   if (name !== undefined) body.name = String(name ?? '').slice(0, 150)
@@ -73,7 +84,7 @@ export async function updateDeck(id, { name, deckCards, isDraft, format }) {
   })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
-    throw new Error(authError(res.status) || data.message || data.detail || data.error || `Update failed (HTTP ${res.status}).`)
+    throw statusError(res.status, authError(res.status) || data.message || data.detail || data.error || `Update failed (HTTP ${res.status}).`)
   }
   return data
 }
