@@ -9,6 +9,9 @@
 // buildPoolSeedString() below.
 import crypto from 'node:crypto'
 import { query } from './db.js'
+import { buildPoolSeedString } from './poolBuilder.js'
+// Re-exported: api/_lib/tournamentPool.js and the freeze script import it from here.
+export { buildPoolSeedString }
 
 const RESET_COOLDOWN_MS = 30 * 60 * 1000
 
@@ -22,25 +25,6 @@ export async function getActiveFormat() {
 
 function newNonce() {
   return crypto.randomUUID()
-}
-
-/**
- * Builds the exact string fed into hashSeed() to derive a pool's seed. Deliberately
- * excludes tournament_id: the pool's card contents must stay identical before and after
- * binding, or a player's prepared pool would silently change the moment it's bound to a
- * real tournament. tournament_id is pure metadata (which tournament this nonce committed
- * to) — never an input to card generation.
- */
-export function buildPoolSeedString(sub, pool) {
-  return [
-    sub,
-    pool.set_code,
-    String(pool.unique_count),
-    String(pool.even_factions),
-    String(pool.heroes_in_pool),
-    String(pool.guaranteed_uniques ?? 0),
-    pool.nonce,
-  ].join('|')
 }
 
 async function insertPool(sub, kind, format) {

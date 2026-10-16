@@ -641,7 +641,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 - Produces: `buildPoolSeedString(sub, cols)` (moved here; `poolStore.js` keeps re-exporting it so `api/_lib/tournamentPool.js` is untouched for now)
 - Produces: `buildPool(sub, { config, nonce }, { fetchCards = fetchSet } = {}) → Promise<{ cards: Record<string, number>, boosters: string[][] }>` — throws on empty card data or when fewer uniques than requested could be drawn.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `src/lib/poolBuilder.test.js`:
 
@@ -735,12 +735,12 @@ describe('buildPoolSeedString', () => {
 })
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `npx vitest run src/lib/poolBuilder.test.js`
 Expected: FAIL — unresolved import `./poolBuilder.js`.
 
-- [ ] **Step 3: Implement `src/lib/poolBuilder.js`**
+- [x] **Step 3: Implement `src/lib/poolBuilder.js`**
 
 ```js
 // The ONE place a sealed pool is generated from a config (docs/tournaments/user-tournaments-spec.md
@@ -824,7 +824,7 @@ export async function buildPool(sub, { config, nonce }, { fetchCards = fetchSet 
 }
 ```
 
-- [ ] **Step 4: Point `poolStore.js` at the moved seed helper**
+- [x] **Step 4: Point `poolStore.js` at the moved seed helper**
 
 In `src/lib/poolStore.js`, delete the whole `export function buildPoolSeedString(sub, pool) { … }` block (with its doc comment) and add near the top, after the `query` import:
 
@@ -834,12 +834,12 @@ import { buildPoolSeedString } from './poolBuilder.js'
 export { buildPoolSeedString }
 ```
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 Run: `npx vitest run src/lib/poolBuilder.test.js && npm test`
 Expected: PASS, and the whole unit suite still green (nothing else referenced the removed body).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/lib/poolBuilder.js src/lib/poolBuilder.test.js src/lib/poolStore.js
