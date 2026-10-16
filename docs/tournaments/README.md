@@ -538,9 +538,14 @@ keep both sides consistent:
   renames a `Random …` deck.
 - Computes validity (`≥30`, `≤3 factions`, `≤1 hero`) and builds
   `{ name, deckCards, isDraft: !valid, format: 'sealed' }`.
-- `updateDeck(deckId)` if the pool has one, recreating with `createDeck` on a 404 (deck
-  deleted from the deckbuilder); else `createDeck`. Then `syncPoolDeck(poolId, summary)`
-  (`POST /api/tournament-pool?id=`).
+- `syncDeckToPool` (`src/lib/poolDeckSync.js`): `updateDeck(deckId)` then
+  `syncPoolDeck(poolId, summary)` (`POST /api/tournament-pool?id=`) if the pool has a deck.
+  A **new** deck (none yet, or a 404 because it was deleted from the deckbuilder) is created
+  **as a draft**, linked with `syncPoolDeck`, and only then, if valid, PATCHed to
+  `isDraft: false` — the same sequence as `ensureDeck` below. Creating an already-valid deck
+  ("Random deck": 30 cards at once) as non-draft made decks-api validate it before the link
+  existed: the deck was stored as illegal ("Could not verify your sealed pool") until a later
+  edit (fixed 2026-10-17).
 
 **Backend reconciliation** (`api/_lib/tournamentPool.js`, `ensureDeck`, on every BGA deck-list
 call):
@@ -693,6 +698,7 @@ isDraft, isPublic, user, deckCards[], stats, formatErrors, legalityDetail }`.
 | `src/lib/tournamentRules.js` | `tournamentStatus` (derived status), `validateTournamentFields` (name, description, dates, BGA link), limits. Pure, shared by API and form. |
 | `src/lib/bgaUrl.js` | `parseBgaTournamentUrl`: BGA link → canonical link + numeric id. |
 | `src/lib/tournamentStore.js` | SQL for `tournaments`: create / get / list by status / update (with the atomic "no pool" lock) / detach / delete-if-no-pools, `toTournamentJson`. |
+| `src/lib/poolDeckSync.js` | `syncDeckToPool`: the frontend deck save + pool link (new deck: draft → link → flip, §6). |
 | `src/lib/tournamentForm.js` | `tournamentFormIssues`: the form's live validation (API checks + duplicate link). |
 | `api/_lib/auth.js` | `verifySub(req)`, `verifyUser(req)` (sub, display name, realm roles, moderator flag; roles read from the token only after userinfo accepted it), `isModerator`, `bearerToken(req)`. |
 | `api/_lib/request.js` | `queryParam`, `jsonBody`: request helpers shared by Vercel and Express. |
@@ -1033,7 +1039,8 @@ the raw frames BGA sent (with `decodedEnvelope` and `userId`). altered-draft log
    happens (config missing, network error → 502).
 7. **`Invalid ` and `Random ` prefixes are literals** matched on the BGA side; never localize
    them. The base name always tracks the tournament name (no dates).
-8. **Mint random decks as `isDraft: true` first, link, then flip** — decks-api caches a failed
+8. **Create every new deck as `isDraft: true` first, link, then flip** (backend `ensureDeck` and
+   frontend `syncDeckToPool`) — decks-api caches a failed
    validation for 30 s per deck id.
 9. **PATCH to decks-api uses `application/merge-patch+json`**; `application/json` is rejected.
 10. **`heroes_in_pool = false` means every hero of the set is in `cards`**; decks-api relies

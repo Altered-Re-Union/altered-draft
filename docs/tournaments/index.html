@@ -585,7 +585,7 @@ flowchart LR
 <ul>
 <li>Runs after every deck change once the deck is non-empty. Skipped when the state is merely seeded from a load or a reset (<code>skipNextSyncRef</code>), so opening the page never renames a <code>Random …</code> deck.</li>
 <li>Computes validity and builds <code>{ name, deckCards, isDraft: !valid, format: 'sealed' }</code>.</li>
-<li><code>updateDeck(deckId)</code> if the pool has one, recreating with <code>createDeck</code> on a 404 (deck deleted from the deckbuilder); else <code>createDeck</code>. Then <code>syncPoolDeck(poolId, summary)</code>.</li>
+<li><code>syncDeckToPool</code> (<code>src/lib/poolDeckSync.js</code>): <code>updateDeck(deckId)</code> then <code>syncPoolDeck(poolId, summary)</code> (<code>POST /api/tournament-pool?id=</code>) if the pool has a deck. A <strong>new</strong> deck (none yet, or a 404 because it was deleted from the deckbuilder) is created <strong>as a draft</strong>, linked with <code>syncPoolDeck</code>, and only then, if valid, PATCHed to <code>isDraft: false</code>: the same sequence as <code>ensureDeck</code> below. Creating an already-valid deck (&quot;Random deck&quot;: 30 cards at once) as non-draft made decks-api validate it before the link existed: the deck was stored as illegal (&quot;Could not verify your sealed pool&quot;) until a later edit (fixed 2026-10-17).</li>
 </ul>
 <h3>Backend reconciliation (<code>ensureDeck</code>, on every BGA deck-list call)</h3>
 <ul>
@@ -712,6 +712,7 @@ erDiagram
 <tr><td><code>src/lib/tournamentRules.js</code></td><td><code>tournamentStatus</code> (derived status), <code>validateTournamentFields</code> (name, description, dates, BGA link), limits. Pure, shared by API and form.</td></tr>
 <tr><td><code>src/lib/bgaUrl.js</code></td><td><code>parseBgaTournamentUrl</code>: BGA link → canonical link + numeric id.</td></tr>
 <tr><td><code>src/lib/tournamentStore.js</code></td><td>SQL for <code>tournaments</code>: create / get / list by status / update (with the atomic "no pool" lock) / detach / delete-if-no-pools, <code>toTournamentJson</code>.</td></tr>
+<tr><td><code>src/lib/poolDeckSync.js</code></td><td><code>syncDeckToPool</code>: the frontend deck save + pool link (new deck: draft → link → flip, §6).</td></tr>
 <tr><td><code>src/lib/tournamentForm.js</code></td><td><code>tournamentFormIssues</code>: the form's live validation (API checks + duplicate link).</td></tr>
 <tr><td><code>api/_lib/auth.js</code></td><td><code>verifySub(req)</code>, <code>verifyUser(req)</code> (sub, display name, realm roles, moderator flag; roles read from the token only after userinfo accepted it), <code>isModerator</code>, <code>bearerToken(req)</code>.</td></tr>
 <tr><td><code>api/_lib/request.js</code></td><td><code>queryParam</code>, <code>jsonBody</code>: request helpers shared by Vercel and Express.</td></tr>
@@ -950,7 +951,7 @@ curl -s "http://localhost:8080/api/tournament-bga-decklist?tournamentId=42&amp;g
 <li><strong><code>/api/tournament-bga-decklist</code> returns the exact hydra shape</strong> of decks-api's collection endpoint; altered-bga-api relays it byte for byte.</li>
 <li><strong>A SEALED request never falls through to decks-api</strong> in altered-bga-api, whatever happens.</li>
 <li><strong><code>Invalid </code> and <code>Random </code> prefixes are literals</strong> matched on the BGA side; never localize them. The base name always tracks the tournament name (no dates).</li>
-<li><strong>Mint random decks as <code>isDraft: true</code> first, link, then flip</strong>: decks-api caches a failed validation for 30 s per deck id.</li>
+<li><strong>Create every new deck as <code>isDraft: true</code> first, link, then flip</strong> (backend <code>ensureDeck</code> and frontend <code>syncDeckToPool</code>): decks-api caches a failed validation for 30 s per deck id.</li>
 <li><strong>PATCH to decks-api uses <code>application/merge-patch+json</code></strong>.</li>
 <li><strong><code>heroes_in_pool = false</code> means every hero of the set is in <code>cards</code></strong>; decks-api relies on that instead of an "any hero" carve-out.</li>
 <li><strong>JSON imports use <code>with { type: 'json' }</code></strong> (plain Node on Docker enforces it).</li>
