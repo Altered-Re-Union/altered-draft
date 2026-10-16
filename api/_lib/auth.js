@@ -2,7 +2,9 @@
 // access token is opaque to us — we verify it against Keycloak's userinfo endpoint
 // (the same call the frontend makes in src/lib/reunion.js's fetchProfile) rather than
 // decoding it ourselves, so `sub` is only ever trusted once Keycloak vouches for it.
-const USERINFO = 'https://auth.altered.re/realms/players/protocol/openid-connect/userinfo'
+import { endpoints } from '../../src/lib/endpoints.js'
+
+const USERINFO = `${endpoints().keycloakIssuer}/protocol/openid-connect/userinfo`
 
 export function bearerToken(req) {
   const header = req.headers.authorization || req.headers.Authorization || ''

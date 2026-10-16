@@ -22,6 +22,7 @@ import tournamentPoolByDeckHandler from '../api/tournament-pool-by-deck.js'
 import roomsIndexHandler from '../api/rooms/index.js'
 import roomsItemHandler from '../api/rooms/[id].js'
 import realtimeConfigHandler from '../api/realtime-config.js'
+import configHandler from '../api/config.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const distDir = path.join(__dirname, '../dist')
@@ -68,6 +69,7 @@ app.all('/api/tournament-pool-by-deck', route(tournamentPoolByDeckHandler))
 app.all('/api/rooms', route(roomsIndexHandler))
 app.all('/api/rooms/:id', routeWithParam(roomsItemHandler, 'id'))
 app.all('/api/realtime-config', route(realtimeConfigHandler))
+app.all('/api/config', route(configHandler))
 
 app.use(express.static(distDir))
 // SPA fallback for every non-API route (mirrors vercel.json's rewrite).

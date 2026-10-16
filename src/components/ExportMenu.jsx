@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useAuth } from '../auth/AuthProvider.jsx'
 import { createDeck, toDeckCards } from '../lib/decks.js'
 import { useLang } from '../lib/i18n/i18n.jsx'
+import { endpoints } from '../lib/endpoints.js'
 
 // Where "open ↗" points after a save. A finished DECK is a legal deck (one hero), so use
 // altered.re's clean per-deck viewer (handles its own login, no raw 401). A saved POOL is
@@ -11,8 +12,8 @@ import { useLang } from '../lib/i18n/i18n.jsx'
 // incl. every hero. (Nothing is dropped on save — the decks API stores all heroes as
 // deckCards; this is purely which viewer reads them back.)
 const openUrl = (id, kind) => kind === 'pool'
-  ? `https://deckbuilder.alteredcore.org/decks/${encodeURIComponent(id)}`
-  : `https://altered.re/pages/deck?id=${encodeURIComponent(id)}`
+  ? `${endpoints().deckbuilderUrl}/decks/${encodeURIComponent(id)}`
+  : `${endpoints().reunionUrl}/pages/deck?id=${encodeURIComponent(id)}`
 
 // DDMM for saved-deck names (e.g. 1706).
 function ddmm() {

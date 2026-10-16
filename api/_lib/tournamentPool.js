@@ -6,6 +6,7 @@ import { pickDeterministicUniques } from '../../src/lib/uniqueFactionRanges.js'
 import { fetchSet, fetchUniques, isUniqueRef } from '../../src/lib/cardData.js'
 import { buildPoolSeedString, updateDeckSummary } from '../../src/lib/poolStore.js'
 import { buildRandomDeck } from '../../src/lib/randomDeck.js'
+import { endpoints } from '../../src/lib/endpoints.js'
 
 /**
  * Regenerates the deterministic pool for a sealed_pools row. Returns both the flat
@@ -77,7 +78,7 @@ async function buildCardMap(setCode, refs) {
   return map
 }
 
-const DECKS_API = 'https://decks.alteredcore.org/api/decks'
+const DECKS_API = `${endpoints().decksApiUrl}/api/decks`
 
 function toDeckCards(refs) {
   const counts = {}

@@ -7,11 +7,12 @@
 // an httpOnly cookie managed by /api/token. The browser keeps just the short-lived
 // ACCESS token in memory (below), refreshing it through the cookie when near expiry or
 // on a fresh page load. A readable `reunion_auth` hint cookie tells us a session exists.
-const ISSUER = 'https://auth.altered.re/realms/players'
-const CLIENT_ID = 'altered-draft'
+//
+// Issuer + client id come from src/lib/endpoints.js (prod by default, overridable at
+// runtime through /api/config), so the same bundle can target prod or a local Keycloak.
+import { endpoints } from './endpoints.js'
+
 const SCOPES = 'openid profile'
-const AUTHORIZE = `${ISSUER}/protocol/openid-connect/auth`
-const USERINFO = `${ISSUER}/protocol/openid-connect/userinfo`
 
 const PKCE_KEY = 'reunion_pkce'    // transient during the redirect dance
 const HINT_COOKIE = 'reunion_auth' // readable "has session" hint set by /api/token
@@ -59,11 +60,12 @@ export async function login(returnPath) {
   const verifier = randomString(64)
   const state = randomString(16)
   const challenge = await challengeFor(verifier)
+  const { keycloakIssuer, keycloakClientId } = endpoints()
   sessionStorage.setItem(PKCE_KEY, JSON.stringify({
     verifier, state, returnPath: returnPath ?? (location.pathname + location.search),
   }))
   const p = new URLSearchParams({
-    client_id: CLIENT_ID,
+    client_id: keycloakClientId,
     response_type: 'code',
     scope: SCOPES,
     redirect_uri: redirectUri(),
@@ -71,7 +73,7 @@ export async function login(returnPath) {
     code_challenge: challenge,
     code_challenge_method: 'S256',
   })
-  window.location.assign(`${AUTHORIZE}?${p.toString()}`)
+  window.location.assign(`${keycloakIssuer}/protocol/openid-connect/auth?${p.toString()}`)
 }
 
 export async function handleCallback() {
@@ -121,7 +123,7 @@ export async function fetchProfile() {
   const token = await getAccessToken()
   if (!token) return null
   try {
-    const res = await fetch(USERINFO, { headers: { Authorization: `Bearer ${token}` } })
+    const res = await fetch(`${endpoints().keycloakIssuer}/protocol/openid-connect/userinfo`, { headers: { Authorization: `Bearer ${token}` } })
     if (!res.ok) return null
     const u = await res.json()
     return { pseudo: u.pseudo || u.preferred_username || u.name || 'Player', sub: u.sub }

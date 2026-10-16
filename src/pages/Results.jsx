@@ -12,6 +12,7 @@ import DraftStats from '../components/DraftStats.jsx'
 import PoolGrid from '../components/PoolGrid.jsx'
 import { COMMUNITY_CUBES } from '../lib/cubes.js'
 import { useLang } from '../lib/i18n/i18n.jsx'
+import { REUNION_URL } from '../lib/links.js'
 
 export default function Results() {
   const { code } = useParams()
@@ -129,7 +130,7 @@ export default function Results() {
           <ReunionButton />
           <ExportMenu poolRefs={myPicks} deckRefs={deckRefs} deckIsValid={isValid}
             poolDecklist={allDecklist} deckDecklist={deckDecklist} name={code} format="Draft" />
-          <a href="https://altered.re/pages/decks" target="_blank" rel="noopener noreferrer"
+          <a href={`${REUNION_URL}/pages/decks`} target="_blank" rel="noopener noreferrer"
             className="px-3 py-1.5 bg-surface2 hover:bg-surface3 text-sm rounded-lg text-ink2 transition-colors">
             altered.re ↗
           </a>

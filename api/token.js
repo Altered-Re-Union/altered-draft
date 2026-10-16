@@ -1,16 +1,17 @@
 // Vercel serverless function: exchanges an OIDC authorization code (or refreshes) at
 // Keycloak using the CONFIDENTIAL client secret — which must never reach the browser.
-// Public config is inline; only the secret comes from env (KEYCLOAK_CLIENT_SECRET, set
-// in the Vercel project, never in git). Same-origin with the SPA, so no CORS handling.
+// Public config comes from src/lib/endpoints.js (prod defaults, env-overridable); the secret
+// only from env (KEYCLOAK_CLIENT_SECRET, set in the Vercel project, never in git). Same-origin with the SPA, so no CORS handling.
 //
 // BFF hardening: the REFRESH token is never returned to the browser — it's stored in an
 // httpOnly, Secure, SameSite=Strict cookie scoped to this endpoint, so XSS can't read it.
 // The browser only ever holds the short-lived access token (in memory). A separate,
 // non-sensitive readable cookie (`reunion_auth=1`) just hints the SPA that a session
 // exists so it knows to attempt a refresh.
-const ISSUER = 'https://auth.altered.re/realms/players'
-const CLIENT_ID = 'altered-draft'
-const TOKEN_ENDPOINT = `${ISSUER}/protocol/openid-connect/token`
+import { endpoints } from '../src/lib/endpoints.js'
+
+const { keycloakIssuer, keycloakClientId } = endpoints()
+const TOKEN_ENDPOINT = `${keycloakIssuer}/protocol/openid-connect/token`
 const RT_COOKIE = 'reunion_rt'     // httpOnly refresh token (Path=/api/token)
 const HINT_COOKIE = 'reunion_auth' // readable "has session" hint (Path=/)
 
@@ -32,7 +33,7 @@ export default async function handler(req, res) {
   }
 
   const form = new URLSearchParams()
-  form.set('client_id', CLIENT_ID)
+  form.set('client_id', keycloakClientId)
   form.set('client_secret', secret)
 
   if (body.grant === 'authorization_code') {

@@ -2,7 +2,9 @@
 // or PATCH to update one (used by the tournament sealed pages' throttled deck sync —
 // see ROADMAP.md "Set 6 preview"). Forwards the Bearer token server-side (the decks API
 // has no browser CORS).
-const BASE = 'https://decks.alteredcore.org/api/decks'
+import { endpoints } from '../../src/lib/endpoints.js'
+
+const BASE = `${endpoints().decksApiUrl}/api/decks`
 
 export default async function handler(req, res) {
   if (req.method !== 'GET' && req.method !== 'PATCH') {
