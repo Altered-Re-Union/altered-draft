@@ -1050,7 +1050,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 - Consumes: `buildPool` (Task 3), `configFromLegacyFormat`, `legacyColumnsFromConfig` (Task 2).
 - Produces: `insertPool(sub, kind, { config, tournament = null, createdBy = 'page' }) → row | null` (module-private but Task 7 reuses it); `getOrCreateNormalPool(sub, { createdBy } = {})`, `getOrCreatePreparationPool(sub, { createdBy } = {})` keep their old one-argument form working; `resetNormalPool(sub)` unchanged signature.
 
-- [ ] **Step 1: Write the failing integration tests**
+- [x] **Step 1: Write the failing integration tests**
 
 Append to `tests/integration/tournaments.test.js` (add the import at the top of the file, under the `db.js` import):
 
@@ -1101,12 +1101,12 @@ describe('legacy flows store their pools', () => {
 })
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `npm run test:integration -- tests/integration/tournaments.test.js`
 Expected: FAIL — `p.cards` is null / `created_by` undefined (the inserts don't store yet).
 
-- [ ] **Step 3: Rewrite the insert/reset paths in `src/lib/poolStore.js`**
+- [x] **Step 3: Rewrite the insert/reset paths in `src/lib/poolStore.js`**
 
 Add to the imports:
 
@@ -1219,12 +1219,12 @@ export async function getOrCreatePreparationPool(sub, { createdBy = 'page' } = {
 }
 ```
 
-- [ ] **Step 4: Run the integration tests**
+- [x] **Step 4: Run the integration tests**
 
 Run: `npm run test:integration -- tests/integration/tournaments.test.js`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/lib/poolStore.js tests/integration/tournaments.test.js

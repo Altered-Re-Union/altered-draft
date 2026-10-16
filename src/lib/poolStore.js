@@ -4,12 +4,13 @@
 // (tournament_id null) and gets bound exactly once (lazily, on first BGA lookup for a
 // given tournament), after which a fresh pending one becomes mintable again.
 //
-// No card list is ever stored: pool contents are always the deterministic output of the
-// existing generateTournamentSealedPool() engine, fed by these columns via
-// buildPoolSeedString() below.
+// Pool contents are generated once by poolBuilder.js and stored on the row (cards +
+// boosters). Rows created before storage existed keep being regenerated from their
+// snapshot columns via buildPoolSeedString() (see api/_lib/tournamentPool.js loadPool).
 import crypto from 'node:crypto'
 import { query } from './db.js'
-import { buildPoolSeedString } from './poolBuilder.js'
+import { buildPool, buildPoolSeedString } from './poolBuilder.js'
+import { configFromLegacyFormat, legacyColumnsFromConfig } from './tournamentConfig.js'
 // Re-exported: api/_lib/tournamentPool.js and the freeze script import it from here.
 export { buildPoolSeedString }
 
@@ -27,33 +28,47 @@ function newNonce() {
   return crypto.randomUUID()
 }
 
-async function insertPool(sub, kind, format) {
+/**
+ * Generates the pool FIRST (poolBuilder), then inserts it in one statement. A card-data
+ * failure throws before anything is written; a lost insert race (ON CONFLICT DO NOTHING)
+ * returns null and the caller re-selects the winner. `tournament` (a tournaments row)
+ * attaches the pool to a declared tournament: tournament_ref + tournament_id (its BGA id)
+ * + tournament_name (the altered-draft name) + bound_at are all set at creation.
+ */
+async function insertPool(sub, kind, { config, tournament = null, createdBy = 'page' }) {
   const nonce = newNonce()
+  const built = await buildPool(sub, { config, nonce })
+  const cols = legacyColumnsFromConfig(config)
   const conflictClause = kind === 'normal'
     ? "ON CONFLICT (sub) WHERE kind = 'normal' DO NOTHING"
-    : "ON CONFLICT (sub) WHERE kind = 'tournament' AND tournament_id IS NULL DO NOTHING"
+    : tournament
+      ? 'ON CONFLICT (sub, tournament_ref) WHERE tournament_ref IS NOT NULL DO NOTHING'
+      : "ON CONFLICT (sub) WHERE kind = 'tournament' AND tournament_id IS NULL DO NOTHING"
   const { rows } = await query(
-    `INSERT INTO sealed_pools (sub, kind, set_code, unique_count, even_factions, heroes_in_pool, guaranteed_uniques, nonce)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    `INSERT INTO sealed_pools
+       (sub, kind, set_code, unique_count, even_factions, heroes_in_pool, guaranteed_uniques, nonce,
+        config, cards, boosters, created_by, tournament_ref, tournament_id, tournament_name, bound_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
      ${conflictClause}
      RETURNING *`,
-    [sub, kind, format.set_code, format.unique_count, format.even_factions, format.heroes_in_pool, format.guaranteed_uniques ?? 0, nonce],
+    [
+      sub, kind, cols.set_code, cols.unique_count, cols.even_factions, cols.heroes_in_pool, cols.guaranteed_uniques, nonce,
+      JSON.stringify(config), JSON.stringify(built.cards), JSON.stringify(built.boosters), createdBy,
+      tournament?.id ?? null, tournament?.bga_tournament_id ?? null, tournament?.name ?? null, tournament ? new Date() : null,
+    ],
   )
   return rows[0] ?? null
 }
 
 /** The player's single normal-mode pool, creating it (from the active format) if absent. */
-export async function getOrCreateNormalPool(sub) {
-  const { rows } = await query(
-    "SELECT * FROM sealed_pools WHERE sub = $1 AND kind = 'normal'",
-    [sub],
-  )
+export async function getOrCreateNormalPool(sub, { createdBy = 'page' } = {}) {
+  const { rows } = await query("SELECT * FROM sealed_pools WHERE sub = $1 AND kind = 'normal'", [sub])
   if (rows[0]) return rows[0]
 
   const format = await getActiveFormat()
   if (!format) throw new Error('no active competitive format configured')
 
-  const inserted = await insertPool(sub, 'normal', format)
+  const inserted = await insertPool(sub, 'normal', { config: configFromLegacyFormat(format), createdBy })
   if (inserted) return inserted
   // Lost the insert race — someone else's concurrent request created it first.
   const retry = await query("SELECT * FROM sealed_pools WHERE sub = $1 AND kind = 'normal'", [sub])
@@ -83,21 +98,26 @@ export async function resetNormalPool(sub) {
   const format = await getActiveFormat()
   if (!format) throw new Error('no active competitive format configured')
 
+  const config = configFromLegacyFormat(format)
+  const nonce = newNonce()
+  const built = await buildPool(sub, { config, nonce })
+  const cols = legacyColumnsFromConfig(config)
   const { rows } = await query(
     `UPDATE sealed_pools
      SET nonce = $2, set_code = $3, unique_count = $4, even_factions = $5, heroes_in_pool = $6,
-         guaranteed_uniques = $7,
+         guaranteed_uniques = $7, config = $8, cards = $9, boosters = $10,
          reset_at = now(), deck_id = NULL, deck_name = NULL, deck_hero_ref = NULL,
          deck_faction = NULL, deck_card_quantity = NULL
      WHERE id = $1
      RETURNING *`,
-    [pool.id, newNonce(), format.set_code, format.unique_count, format.even_factions, format.heroes_in_pool, format.guaranteed_uniques ?? 0],
+    [pool.id, nonce, cols.set_code, cols.unique_count, cols.even_factions, cols.heroes_in_pool, cols.guaranteed_uniques,
+     JSON.stringify(config), JSON.stringify(built.cards), JSON.stringify(built.boosters)],
   )
   return { pool: rows[0], previousDeckId: pool.deck_id ?? null }
 }
 
-/** The player's single pending (not yet bound) tournament pool, creating it if absent. */
-export async function getOrCreatePreparationPool(sub) {
+/** The player's single pending (not yet bound, not attached) tournament pool, creating it if absent. */
+export async function getOrCreatePreparationPool(sub, { createdBy = 'page' } = {}) {
   const { rows } = await query(
     "SELECT * FROM sealed_pools WHERE sub = $1 AND kind = 'tournament' AND tournament_id IS NULL",
     [sub],
@@ -107,7 +127,7 @@ export async function getOrCreatePreparationPool(sub) {
   const format = await getActiveFormat()
   if (!format) throw new Error('no active competitive format configured')
 
-  const inserted = await insertPool(sub, 'tournament', format)
+  const inserted = await insertPool(sub, 'tournament', { config: configFromLegacyFormat(format), createdBy })
   if (inserted) return inserted
   const retry = await query(
     "SELECT * FROM sealed_pools WHERE sub = $1 AND kind = 'tournament' AND tournament_id IS NULL",
