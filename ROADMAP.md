@@ -396,7 +396,7 @@ adding it to the `preprod-1`/`prod-2` host manifests (manual infra step, not don
 
 ### 2. User-created sealed tournaments (Oct 2026)
 Any Re:Union account declares a sealed tournament (BGA link, dates, sealed config); players prepare a stored, one-shot pool for it and BGA's unchanged deck-list call finds it. Spec: `docs/tournaments/user-tournaments-spec.md`.
-- **Lot 1 — shipped** (branch `feat/user-tournaments`): registry + attached stored pools, 7 boosters of one set + the tournament unique knobs + ban list, BGA resolution order, public list, create/edit/cancel/close/delete, checklist page, moderators via env. Plan: `docs/tournaments/user-tournaments-lot1-plan.md`.
+- **Lot 1 — shipped** (branch `feat/user-tournaments`): registry + attached stored pools, 7 boosters of one set + the tournament unique knobs + ban list, BGA resolution order, public list, create/edit/cancel/close/delete, checklist page, moderators via env, moderator-only detach against BGA-id squatting, live form validation. Plan: `docs/tournaments/user-tournaments-lot1-plan.md`.
 - **Lot 2 — next**: full Lobby options (cubes incl. paste + Re:Union decks, multi-set, live random uniques — also lifts the FUGUE limit) through a shared "Cards" step.
 - **Lot 3 — after**: Home "Sealed set 6" block → generic "Tournaments", polish, optional purge of long-ended boosters.
 - **Open verifications:** (1) on a real multi-stage BGA tournament, the public URL's `id` must equal the `tournamentParentId` altered-bga-api forwards; (2) Re:Union to create/assign the moderator realm role (until then, the `TOURNAMENT_MODERATORS` allowlist).
