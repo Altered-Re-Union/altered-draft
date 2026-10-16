@@ -24,8 +24,8 @@ With Re:Union **account integration live and verified**, the priority shifts fro
 **polishing and validating what's deployed**. Plugin integration and open-sourcing are both **postponed**
 (the account integration already delivers the Re:Union value; being embedded on their site is now a
 nice-to-have, not a goal). Backlog ideas (draft log/replay, cube analytics) are **not being pursued**.
-Immediate work: **QA the recent batch** (`TESTING.md` checklist — the alternate formats, the lobby wizard,
-mode-driven pool size, random uniques, Winston, hover zoom), then continue UX/visual polish.
+Immediate work: **QA what shipped** against the manual regression checklist (`TESTING.md` — lobby wizard,
+card sources, pool sizes, random uniques, the draft formats, tournaments), then continue UX/visual polish.
 
 ### 1. Set 6 preview: tournament-safe sealed + `altered-draft.altered.re` hosting (Jul 2026, Re:Union proposal)
 Re:Union proposed running **online set 6 preview / prerelease SEALED events** on the tool, hosted at a
