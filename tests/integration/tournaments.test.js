@@ -488,3 +488,29 @@ describe('freeze-sealed-pools', () => {
     void stored
   })
 })
+
+describe('final review fixes', () => {
+  it('PATCH to a BGA link already used by another tournament answers 409 bga_tournament_taken, not 500', async () => {
+    const t = await mkTournament({ organizerSub: 'alice' })
+    await mkTournament({ bgaTournamentId: '31337' })
+    asUser(ALICE)
+    const res = await call(tournamentsItem, { method: 'PATCH', query: { id: t.id }, body: { bgaUrl: 'https://boardgamearena.com/tournament?id=31337' } })
+    expect(res.statusCode).toBe(409)
+    expect(res.body).toEqual({ error: 'bga_tournament_taken' })
+  })
+
+  it('renaming a tournament renames its existing pools (deck names derive from tournament_name)', async () => {
+    const t = await mkTournament({ organizerSub: 'alice', name: 'Old name' })
+    await getOrCreateTournamentPool('bob', t)
+    asUser(ALICE)
+    expect((await call(tournamentsItem, { method: 'PATCH', query: { id: t.id }, body: { name: 'New name' } })).statusCode).toBe(200)
+    expect((await getPoolForTournament('bob', t.id)).tournament_name).toBe('New name')
+  })
+
+  it('an adopted legacy pool takes the altered-draft name', async () => {
+    await bindTournamentId('alice', '6006', 'BGA stage name')
+    const t = await mkTournament({ bgaTournamentId: '6006', name: 'AD name' })
+    const p = await getOrCreateTournamentPool('alice', t)
+    expect(p.tournament_name).toBe('AD name')
+  })
+})

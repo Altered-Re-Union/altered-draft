@@ -163,8 +163,8 @@ export async function getOrCreateTournamentPool(sub, tournament, { createdBy = '
   )
   if (legacy.rows[0]) {
     const { rows } = await query(
-      'UPDATE sealed_pools SET tournament_ref = $2 WHERE id = $1 AND tournament_ref IS NULL RETURNING *',
-      [legacy.rows[0].id, tournament.id],
+      'UPDATE sealed_pools SET tournament_ref = $2, tournament_name = $3 WHERE id = $1 AND tournament_ref IS NULL RETURNING *',
+      [legacy.rows[0].id, tournament.id, tournament.name],
     )
     return rows[0] ?? getPoolForTournament(sub, tournament.id)
   }

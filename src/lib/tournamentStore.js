@@ -88,10 +88,25 @@ export async function updateTournament(id, fields, { requireUnlocked = false } =
     sets.push(`${column} = $${params.length}`)
   }
   const lock = requireUnlocked ? 'AND NOT EXISTS (SELECT 1 FROM sealed_pools WHERE tournament_ref = $1)' : ''
-  const { rows } = await query(
-    `UPDATE tournaments SET ${sets.join(', ')} WHERE id = $1 ${lock} RETURNING *`,
-    params,
-  )
+  let rows
+  try {
+    ({ rows } = await query(
+      `UPDATE tournaments SET ${sets.join(', ')} WHERE id = $1 ${lock} RETURNING *`,
+      params,
+    ))
+  } catch (e) {
+    if (e.code === '23505') {
+      const err = new Error('a tournament already exists for this BGA tournament')
+      err.code = 'bga_tournament_taken'
+      throw err
+    }
+    throw e
+  }
+  // The altered-draft name is authoritative: attached pools carry it as tournament_name,
+  // which every deck name derives from (TournamentPoolView sync, ensureDeck's reconcile).
+  if (rows[0] && Object.prototype.hasOwnProperty.call(fields, 'name')) {
+    await query('UPDATE sealed_pools SET tournament_name = $2 WHERE tournament_ref = $1', [id, rows[0].name])
+  }
   return rows[0] ?? null
 }
 

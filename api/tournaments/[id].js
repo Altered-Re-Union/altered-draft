@@ -76,7 +76,13 @@ export default async function handler(req, res) {
     if (touchesLocked && (await countPoolsForTournament(row.id)) > 0) {
       return res.status(409).json({ error: 'tournament_locked' })
     }
-    const updated = await updateTournament(row.id, fields, { requireUnlocked: touchesLocked })
+    let updated
+    try {
+      updated = await updateTournament(row.id, fields, { requireUnlocked: touchesLocked })
+    } catch (e) {
+      if (e.code === 'bga_tournament_taken') return res.status(409).json({ error: 'bga_tournament_taken' })
+      throw e
+    }
     if (!updated) return res.status(409).json({ error: 'tournament_locked' })
     return res.status(200).json(await detail(updated, user))
   }
