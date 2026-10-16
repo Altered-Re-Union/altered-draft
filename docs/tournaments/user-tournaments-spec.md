@@ -327,7 +327,7 @@ Routes (added to `App.jsx`; `/tournament/pools/:id` and the other existing route
 | Route | Page | Notes |
 | --- | --- | --- |
 | `/tournament` | `TournamentMenu.jsx` (reworked) | Public sections "Upcoming" and "Ongoing"; "Create a tournament" (login prompt if logged out); "My tournaments" (bound pools, registered ones first, with the tournament name/status); the generic "Prepare my next tournament" moved to a small block at the bottom. |
-| `/tournament/new` | `TournamentForm.jsx` | Create mode. |
+| `/tournament/new` | `TournamentForm.jsx` | Create mode. Live validation (`src/lib/tournamentForm.js` `tournamentFormIssues`, the API's own pure checks + a duplicate-link check against the public list): the submit button sits in a bar stuck to the bottom of the screen, disabled while problems remain, with the list of problems next to it (each one jumps to its field). |
 | `/tournament/t/:id` | `TournamentDetail.jsx` | Header, description, checklist, organizer panel. |
 | `/tournament/t/:id/edit` | `TournamentForm.jsx` | Edit mode; config section disabled when locked. |
 | `/tournament/t/:id/pool` | `TournamentPoolPage.jsx` | `TournamentPoolView` with `load = fetchTournamentPool(id)`, back link to the tournament. |
@@ -344,6 +344,13 @@ Routes (added to `App.jsx`; `/tournament/pools/:id` and the other existing route
   Below it, the new `TournamentUniqueFields.jsx`: steppers for uniques in boosters and
   guaranteed uniques, "even factions" checkbox (enabled when their sum ≥ 2), with the set's
   faction-range availability driving a disabled state + hint for sets without data.
+- Live validation (decided after the first recette: errors far from the submit button went
+  unnoticed): `tournamentFormIssues` runs the same pure checks as the API on every change, plus
+  a duplicate-link check against `GET /api/tournaments?status=all` (detached declarations
+  excluded). The submit button lives in a bar stuck to the bottom of the viewport; while
+  problems remain it is disabled (tooltip = the list) and the bar lists them, each one
+  scrolling to and focusing its field. Inline messages appear once a field is touched. Server
+  refusals (a link declared meanwhile, 429, …) show in the same bar.
 - Submit → `createTournament` / `updateTournament` → navigate to the tournament page.
 
 `TournamentDetail.jsx`: status pill (upcoming / ongoing / ended / cancelled), dates in the

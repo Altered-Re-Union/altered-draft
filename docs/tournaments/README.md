@@ -1096,7 +1096,7 @@ token payload only after userinfo accepted that token (`api/_lib/auth.js` `verif
 | Route | Page | Notes |
 | --- | --- | --- |
 | `/tournament` | `TournamentMenu.jsx` (reworked) | Public "Upcoming" and "Ongoing" lists; "Create a tournament" (login prompt if logged out); "My tournaments" (bound pools, with the declared tournament's status); the generic "Prepare my next tournament" moved to a small block at the bottom. |
-| `/tournament/new` | `TournamentForm.jsx` | Create mode. |
+| `/tournament/new` | `TournamentForm.jsx` | Create mode. Live validation (`src/lib/tournamentForm.js` `tournamentFormIssues`, the API's own pure checks + a duplicate-link check against the public list): the submit button sits in a bar stuck to the bottom of the screen, disabled while problems remain, with the list of problems next to it (each one jumps to its field). |
 | `/tournament/t/:id` | `TournamentDetail.jsx` | Header, description, 3-step checklist (register on BGA → open your pool → build your deck), organizer panel. |
 | `/tournament/t/:id/edit` | `TournamentForm.jsx` | Edit mode; BGA link + config disabled once a pool exists. |
 | `/tournament/t/:id/pool` | `TournamentPoolPage.jsx` | `TournamentPoolView` with `load = fetchTournamentPool(id)`, back link to the tournament. |

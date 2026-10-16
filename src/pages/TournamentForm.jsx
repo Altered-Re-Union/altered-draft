@@ -3,10 +3,10 @@ import { useNavigate, useParams, Link } from 'react-router-dom'
 import { useAuth } from '../auth/AuthProvider.jsx'
 import { useLang } from '../lib/i18n/i18n.jsx'
 import { parseBgaTournamentUrl } from '../lib/bgaUrl.js'
-import { validateTournamentFields } from '../lib/tournamentRules.js'
+import { tournamentFormIssues } from '../lib/tournamentForm.js'
 import { validateTournamentConfig } from '../lib/tournamentConfig.js'
 import { hasFactionRanges } from '../lib/uniqueFactionRanges.js'
-import { createTournament, updateTournament, getTournament } from '../lib/tournamentApi.js'
+import { createTournament, updateTournament, getTournament, listTournaments } from '../lib/tournamentApi.js'
 import TopNav from '../components/TopNav.jsx'
 import Footer from '../components/Footer.jsx'
 import SetPresetGrid from '../components/SetPresetGrid.jsx'
@@ -33,12 +33,37 @@ function defaultStart() {
   return toLocalInput(d.toISOString())
 }
 
-const FIELD_ERROR_KEYS = {
-  name: 'tournaments.errName',
-  description: 'tournaments.errDescription',
-  startsAt: 'tournaments.errStartsAt',
-  endsAt: 'tournaments.errEndsAt',
-  bgaUrl: 'tournaments.errBgaUrl',
+// Every problem is listed next to the submit button, which sits in a bar stuck to the bottom
+// of the screen: the reason the button is disabled is always in view, whatever the scroll.
+// Each listed problem jumps to its field. Inline messages appear once a field was touched.
+const FIELD_DOM_ID = {
+  name: 'tn-name', description: 'tn-desc', bgaUrl: 'tn-bga', startsAt: 'tn-start', endsAt: 'tn-end',
+  setCode: 'tn-cards', uniques: 'tn-settings',
+}
+const FIELD_LABEL_KEY = {
+  name: 'tournaments.nameLabel', description: 'tournaments.descriptionLabel', bgaUrl: 'tournaments.bgaUrlLabel',
+  startsAt: 'tournaments.startsAtLabel', endsAt: 'tournaments.endsAtLabel', setCode: 'tournaments.sectionCards',
+  uniques: 'tournaments.tournamentUniquesTitle',
+}
+
+function issueMessage({ field, code }, t) {
+  switch (field) {
+    case 'name': return t('tournaments.errName')
+    case 'description': return t('tournaments.errDescription')
+    case 'bgaUrl': return code === 'taken' ? t('tournaments.errBgaTaken') : t('tournaments.errBgaUrl')
+    case 'startsAt': return code === 'must_be_before_end' ? t('tournaments.errStartsAtBeforeEnd') : t('tournaments.errStartsAt')
+    case 'endsAt': return t('tournaments.errEndsAt')
+    case 'setCode': return t('tournaments.errSelectSet')
+    case 'uniques': return code === 'uniques.unsupportedSet' ? t('tournaments.uniquesUnsupported') : t('tournaments.errGeneric', { msg: code })
+    default: return t('tournaments.errGeneric', { msg: code })
+  }
+}
+
+function focusField(field) {
+  const el = document.getElementById(FIELD_DOM_ID[field])
+  if (!el) return
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  if (typeof el.focus === 'function') el.focus({ preventScroll: true })
 }
 
 export default function TournamentForm() {
@@ -60,9 +85,15 @@ export default function TournamentForm() {
 
   const [locked, setLocked] = useState(false)
   const [loading, setLoading] = useState(isEdit)
+  const [loadError, setLoadError] = useState('')
   const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
-  const [fieldErrors, setFieldErrors] = useState({})
+  const [serverError, setServerError] = useState('') // non-field failure of the last submit
+  const [touched, setTouched] = useState(() => new Set())
+  const [takenBgaIds, setTakenBgaIds] = useState(() => new Map()) // BGA id -> live tournament id
+
+  const touch = field => setTouched(prev => (prev.has(field) ? prev : new Set(prev).add(field)))
+  // Wraps a setter: any edit clears the last server error and marks the field touched.
+  const edit = (field, setter) => value => { setter(value); setServerError(''); touch(field) }
 
   // Edit mode: prefill from the tournament; only its organizer or a moderator may be here.
   // Logged out, wait: the page shows the Connect prompt instead (the viewer block, which
@@ -80,10 +111,23 @@ export default function TournamentForm() {
         setUniques(tn.config.uniques); setExcludeBanlist(!!tn.config.excludeBanlist)
         setLocked(!!tn.locked)
       })
-      .catch(e => { if (!cancelled) setError(e.status === 404 ? t('tournaments.notFound') : t('tournaments.errGeneric', { msg: e.message })) })
+      .catch(e => { if (!cancelled) setLoadError(e.status === 404 ? t('tournaments.notFound') : t('tournaments.errGeneric', { msg: e.message })) })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, [id, isEdit, navigate, t, user, authLoading])
+
+  // The links already declared (public list, detached ones excluded: their id is free), so
+  // a reused link is flagged as soon as it is pasted. The server still has the last word.
+  useEffect(() => {
+    let cancelled = false
+    listTournaments('all')
+      .then(({ tournaments }) => {
+        if (cancelled) return
+        setTakenBgaIds(new Map(tournaments.filter(tn => !tn.detachedAt).map(tn => [tn.bgaTournamentId, tn.id])))
+      })
+      .catch(() => { /* the server check on submit covers it */ })
+    return () => { cancelled = true }
+  }, [])
 
   const bgaParsed = useMemo(() => parseBgaTournamentUrl(bgaUrl), [bgaUrl])
   const uniqueSupport = !setCode || hasFactionRanges(setCode)
@@ -96,26 +140,25 @@ export default function TournamentForm() {
     uniques: uniqueSupport ? uniques : { inBoosters: 0, guaranteed: 0, evenFactions: false },
     excludeBanlist,
   }
+  const body = { name, description, bgaUrl, startsAt: fromLocalInput(startsAt), endsAt: fromLocalInput(endsAt) }
+  const issues = tournamentFormIssues({ body, config, isCreate: !isEdit, locked, takenBgaIds, ownId: id ?? null })
+  const fieldIssue = field => (touched.has(field) ? issues.find(i => i.field === field) : null)
+  const blocked = issues.length > 0 || saving || loading || !!loadError
 
   async function handleSubmit(e) {
     e.preventDefault()
-    setError(''); setFieldErrors({})
-    const body = { name, description, bgaUrl, startsAt: fromLocalInput(startsAt), endsAt: fromLocalInput(endsAt), config }
-
-    // Same pure checks the server runs — surfaces errors before the round-trip.
-    const fields = validateTournamentFields(body, { isCreate: !isEdit })
-    const cfg = validateTournamentConfig(config)
-    if (!fields.ok || (!locked && !cfg.ok)) {
-      setFieldErrors(fields.errors)
-      if (!locked && !cfg.ok) setError(cfg.errors.includes('source.setCode') ? t('tournaments.errSelectSet') : t('tournaments.errGeneric', { msg: cfg.errors.join(', ') }))
+    if (issues.length) { // Enter in a field: same as clicking the first listed problem
+      setTouched(new Set(issues.map(i => i.field)))
+      focusField(issues[0].field)
       return
     }
-
+    setServerError('')
     setSaving(true)
     try {
+      const cfg = validateTournamentConfig(config)
       if (isEdit) {
-        const patch = { name: body.name, description: body.description, startsAt: body.startsAt, endsAt: body.endsAt }
-        if (!locked) { patch.bgaUrl = body.bgaUrl; patch.config = cfg.config }
+        const patch = { ...body }
+        if (!locked) { patch.bgaUrl = body.bgaUrl; patch.config = cfg.config } else delete patch.bgaUrl
         await updateTournament(id, patch)
         navigate(`/tournament/t/${id}`)
       } else {
@@ -123,25 +166,30 @@ export default function TournamentForm() {
         navigate(`/tournament/t/${created.id}`)
       }
     } catch (err) {
-      if (err.status === 400 && err.data?.fields) setFieldErrors(err.data.fields)
-      else if (err.status === 409 && err.data?.error === 'bga_tournament_taken') setFieldErrors({ bgaUrl: 'taken' })
-      else if (err.status === 409 && err.data?.error === 'tournament_locked') setError(t('tournaments.errLocked'))
-      else if (err.status === 429) setError(t('tournaments.errTooMany'))
-      else setError(t('tournaments.errGeneric', { msg: err.message }))
+      if (err.status === 409 && err.data?.error === 'bga_tournament_taken' && bgaParsed) {
+        // Declared meanwhile: remember it so the live check shows it from now on.
+        setTakenBgaIds(prev => new Map(prev).set(bgaParsed.id, 'taken'))
+        touch('bgaUrl')
+        focusField('bgaUrl')
+      } else if (err.status === 400 && err.data?.fields && Object.keys(err.data.fields).length) {
+        const first = Object.keys(err.data.fields)[0]
+        setServerError(issueMessage({ field: first, code: err.data.fields[first] }, t))
+        focusField(first)
+      } else if (err.status === 409 && err.data?.error === 'tournament_locked') setServerError(t('tournaments.errLocked'))
+      else if (err.status === 429) setServerError(t('tournaments.errTooMany'))
+      else setServerError(t('tournaments.errGeneric', { msg: err.message }))
     } finally {
       setSaving(false)
     }
   }
 
-  const fieldMsg = key => {
-    const code = fieldErrors[key]
-    if (!code) return null
-    if (key === 'bgaUrl' && code === 'taken') return t('tournaments.errBgaTaken')
-    if (key === 'startsAt' && code === 'must_be_before_end') return t('tournaments.errStartsAtBeforeEnd')
-    return t(FIELD_ERROR_KEYS[key] ?? 'tournaments.errGeneric', { msg: code })
+  const inputCls = invalid => `w-full bg-surface2 border rounded-lg px-3 py-2 text-sm focus:outline-none ${invalid ? 'border-red-500 focus:border-red-400' : 'border-line focus:border-accent'}`
+  const ErrorLine = ({ field }) => {
+    const issue = fieldIssue(field)
+    return issue ? <p className="text-xs text-red-400 mt-1" role="alert">{issueMessage(issue, t)}</p> : null
   }
-  const inputCls = 'w-full bg-surface2 border border-line rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-accent'
-  const ErrorLine = ({ field }) => fieldMsg(field) ? <p className="text-xs text-red-400 mt-1">{fieldMsg(field)}</p> : null
+  const submitLabel = saving ? t('tournaments.saving') : isEdit ? t('tournaments.submitSave') : t('tournaments.submitCreate')
+  const issuesText = issues.map(i => `${t(FIELD_LABEL_KEY[i.field])} — ${issueMessage(i, t)}`)
 
   if (!authLoading && !user) {
     return (
@@ -164,48 +212,49 @@ export default function TournamentForm() {
   return (
     <div className="min-h-screen flex flex-col">
       <TopNav />
-      <form onSubmit={handleSubmit} className="max-w-2xl w-full mx-auto px-4 py-8 flex-1 space-y-6">
+      <form onSubmit={handleSubmit} noValidate className="max-w-2xl w-full mx-auto px-4 pt-8 flex-1 space-y-6">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-display">{isEdit ? t('tournaments.editTitle') : t('tournaments.createTitle')}</h1>
           <Link to={isEdit ? `/tournament/t/${id}` : '/tournament'} className="text-sm text-muted hover:text-ink">{t('lobby.back')}</Link>
         </div>
         {loading && <p className="text-muted text-sm">{t('tournaments.loading')}</p>}
-        {error && <p className="text-red-400 text-sm">{error}</p>}
+        {loadError && <p className="text-red-400 text-sm">{loadError}</p>}
 
         {/* Section 1 — the tournament */}
         <section className="bg-surface rounded-xl border border-line p-5 space-y-4">
           <h2 className="font-semibold">{t('tournaments.sectionInfo')}</h2>
           <div>
             <label className="block text-sm text-muted mb-1" htmlFor="tn-name">{t('tournaments.nameLabel')}</label>
-            <input id="tn-name" value={name} onChange={e => setName(e.target.value)} maxLength={80} className={inputCls} />
+            <input id="tn-name" value={name} onChange={e => edit('name', setName)(e.target.value)} onBlur={() => touch('name')}
+              maxLength={80} aria-invalid={!!fieldIssue('name')} className={inputCls(fieldIssue('name'))} />
             <ErrorLine field="name" />
           </div>
           <div>
             <label className="block text-sm text-muted mb-1" htmlFor="tn-desc">{t('tournaments.descriptionLabel')}</label>
-            <textarea id="tn-desc" value={description} onChange={e => setDescription(e.target.value)} rows={4} maxLength={2000} className={`${inputCls} resize-y`} />
+            <textarea id="tn-desc" value={description} onChange={e => edit('description', setDescription)(e.target.value)} onBlur={() => touch('description')}
+              rows={4} maxLength={2000} className={`${inputCls(fieldIssue('description'))} resize-y`} />
             <ErrorLine field="description" />
           </div>
           <div>
             <label className="block text-sm text-muted mb-1" htmlFor="tn-bga">{t('tournaments.bgaUrlLabel')}</label>
-            <input id="tn-bga" value={bgaUrl} onChange={e => setBgaUrl(e.target.value)} disabled={locked}
-              placeholder="https://boardgamearena.com/tournament?id=…" className={`${inputCls} font-mono disabled:opacity-60`} />
+            <input id="tn-bga" value={bgaUrl} onChange={e => edit('bgaUrl', setBgaUrl)(e.target.value)} onBlur={() => touch('bgaUrl')} disabled={locked}
+              placeholder="https://boardgamearena.com/tournament?id=…" aria-invalid={!!fieldIssue('bgaUrl')}
+              className={`${inputCls(fieldIssue('bgaUrl'))} font-mono disabled:opacity-60`} />
             <p className="text-xs text-faint mt-1">{t('tournaments.bgaUrlHint')}</p>
-            {bgaUrl.trim() && (
-              <p className={`text-xs mt-1 ${bgaParsed ? 'text-green-400' : 'text-red-400'}`}>
-                {bgaParsed ? t('tournaments.bgaIdDetected', { id: bgaParsed.id }) : t('tournaments.bgaUrlInvalid')}
-              </p>
-            )}
+            {bgaParsed && !fieldIssue('bgaUrl') && <p className="text-xs mt-1 text-green-400">{t('tournaments.bgaIdDetected', { id: bgaParsed.id })}</p>}
             <ErrorLine field="bgaUrl" />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm text-muted mb-1" htmlFor="tn-start">{t('tournaments.startsAtLabel')}</label>
-              <input id="tn-start" type="datetime-local" value={startsAt} onChange={e => setStartsAt(e.target.value)} className={inputCls} />
+              <input id="tn-start" type="datetime-local" value={startsAt} onChange={e => edit('startsAt', setStartsAt)(e.target.value)}
+                aria-invalid={!!fieldIssue('startsAt')} className={inputCls(fieldIssue('startsAt'))} />
               <ErrorLine field="startsAt" />
             </div>
             <div>
               <label className="block text-sm text-muted mb-1" htmlFor="tn-end">{t('tournaments.endsAtLabel')}</label>
-              <input id="tn-end" type="datetime-local" value={endsAt} onChange={e => setEndsAt(e.target.value)} className={inputCls} />
+              <input id="tn-end" type="datetime-local" value={endsAt} onChange={e => edit('endsAt', setEndsAt)(e.target.value)}
+                aria-invalid={!!fieldIssue('endsAt')} className={inputCls(fieldIssue('endsAt'))} />
               <ErrorLine field="endsAt" />
             </div>
           </div>
@@ -213,15 +262,16 @@ export default function TournamentForm() {
         </section>
 
         {/* Section 2 — cards */}
-        <section className="bg-surface rounded-xl border border-line p-5 space-y-4">
+        <section id="tn-cards" tabIndex={-1} className="bg-surface rounded-xl border border-line p-5 space-y-4 focus:outline-none">
           <h2 className="font-semibold">{t('tournaments.sectionCards')}</h2>
           {locked && <p className="text-xs text-accent2">{t('tournaments.lockedNotice')}</p>}
           <p className="text-sm text-muted">{t('tournaments.cardsHint')}</p>
-          <SetPresetGrid selected={setCode} onSelect={setSetCode} disabled={locked || saving} />
+          <SetPresetGrid selected={setCode} onSelect={edit('setCode', setSetCode)} disabled={locked || saving} />
+          <ErrorLine field="setCode" />
         </section>
 
         {/* Section 3 — settings */}
-        <section className="bg-surface rounded-xl border border-line p-5 space-y-6">
+        <section id="tn-settings" tabIndex={-1} className="bg-surface rounded-xl border border-line p-5 space-y-6 focus:outline-none">
           <h2 className="font-semibold">{t('tournaments.sectionSettings')}</h2>
           <fieldset disabled={locked || saving} className="space-y-6 disabled:opacity-60">
             <SettingsFields
@@ -236,10 +286,31 @@ export default function TournamentForm() {
           </fieldset>
         </section>
 
-        <button type="submit" disabled={saving || loading}
-          className="w-full py-2.5 bg-accent hover:bg-accent2 disabled:opacity-40 text-on-accent font-bold rounded-lg transition-colors">
-          {saving ? t('tournaments.saving') : isEdit ? t('tournaments.submitSave') : t('tournaments.submitCreate')}
-        </button>
+        {/* Action bar, stuck to the bottom of the viewport */}
+        <div className="sticky bottom-0 z-20 -mx-4 px-4 pt-3 pb-4 bg-base/95 backdrop-blur border-t border-line space-y-2">
+          {serverError && <p className="text-sm text-red-400" role="alert">{serverError}</p>}
+          {issues.length > 0 && !loading && (
+            <div className="text-sm">
+              <p className="text-muted mb-1">{isEdit ? t('tournaments.issuesTitleSave') : t('tournaments.issuesTitleCreate')}</p>
+              <ul className="space-y-0.5">
+                {issues.map((issue, i) => (
+                  <li key={`${issue.field}-${issue.code}`}>
+                    <button type="button" onClick={() => { touch(issue.field); focusField(issue.field) }}
+                      className={`text-left hover:underline ${touched.has(issue.field) ? 'text-red-400' : 'text-ink2'}`}>
+                      • {issuesText[i]}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <span className="block" title={issues.length ? issuesText.join('\n') : undefined}>
+            <button type="submit" disabled={blocked}
+              className="w-full py-2.5 bg-accent hover:bg-accent2 disabled:opacity-40 disabled:cursor-not-allowed text-on-accent font-bold rounded-lg transition-colors">
+              {submitLabel}
+            </button>
+          </span>
+        </div>
       </form>
       <Footer />
     </div>

@@ -59,7 +59,7 @@ link in a second tab as a 2nd player). Locally there is no Realtime: pages poll 
 ## 8. Tournaments (BGA sealed) — see `docs/tournaments/README.md`
 - [ ] **Normal pool** (`/tournament/normal`): pool + pack reveal; **Reset pool** gives a new pool, then a 30-minute cooldown.
 - [ ] **Generic preparation pool** (`/tournament/prep`, bottom of `/tournament`): one-shot pool, no reset.
-- [ ] **Declare a tournament** (`/tournament/new`, logged in): the BGA link is parsed live ("Tournament id … detected"); a reused link, a past start or a too-short name are refused; a set without unique data disables the unique steppers.
+- [ ] **Declare a tournament** (`/tournament/new`, logged in): validation is live — the BGA link is parsed as you paste it ("Tournament id … detected", or "already exists"), and the submit bar stuck to the bottom of the screen stays disabled while it lists the remaining problems (too-short name, past start, end before start, no set…), each one jumping to its field; a set without unique data disables the unique steppers.
 - [ ] **Tournament page** (`/tournament/t/:id`): public header, local-time dates, config summary; the 3-step checklist (register on BGA, remembered → open my pool → build my deck); organizer panel with pool counts by origin.
 - [ ] **Pool** (`/tournament/t/:id/pool`): one stored pool per player (same contents on every visit), deck sync to decks-api, back link to the tournament.
 - [ ] **Lifecycle**: once a pool exists, cards / settings / BGA link are locked and Delete is disabled; rename reaches the pools; Cancel closes pool creation (existing pools stay usable, the tournament stays editable) and Restore reopens; Mark as ended / Reopen (a passed end date is cleared).

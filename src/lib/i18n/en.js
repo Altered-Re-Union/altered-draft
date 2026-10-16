@@ -503,7 +503,6 @@ export default {
     bgaUrlLabel: 'BGA tournament link',
     bgaUrlHint: 'Paste the link of the MAIN tournament page (not a stage): https://boardgamearena.com/tournament?id=…',
     bgaIdDetected: 'Tournament id {{id}} detected',
-    bgaUrlInvalid: 'This is not a BGA tournament link.',
     startsAtLabel: 'Start',
     endsAtLabel: 'End (optional)',
     cardsHint: 'Each player receives 7 boosters of this set.',
@@ -526,6 +525,8 @@ export default {
     errTooMany: 'You already have 10 open tournaments. Close or cancel one first.',
     errLocked: 'Pools already exist: cards, settings and the BGA link can no longer change.',
     errGeneric: 'Something went wrong: {{msg}}',
+    issuesTitleCreate: 'Before creating the tournament:',
+    issuesTitleSave: 'Before saving:',
     errSelectSet: 'Choose a set.',
     // detail / checklist
     notFound: 'Tournament not found.',

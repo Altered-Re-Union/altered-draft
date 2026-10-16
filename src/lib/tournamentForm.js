@@ -1,0 +1,44 @@
+// Live validation of the tournament form (TournamentForm.jsx): the same pure checks the
+// API runs (tournamentRules / tournamentConfig), plus the duplicate-link check against the
+// tournaments already declared, flattened into one ordered list the page can show next to
+// the submit button. Pure: no React, no fetch.
+import { validateTournamentFields } from './tournamentRules.js'
+import { validateTournamentConfig } from './tournamentConfig.js'
+import { parseBgaTournamentUrl } from './bgaUrl.js'
+
+// Display order = order of the fields on the page.
+const FIELD_ORDER = ['name', 'description', 'bgaUrl', 'startsAt', 'endsAt', 'setCode', 'uniques']
+
+/**
+ * @param {object} p
+ * @param {object} p.body - { name, description, bgaUrl, startsAt, endsAt } as the API receives it
+ * @param {object} p.config - the config object the form would send
+ * @param {Date} [p.now]
+ * @param {boolean} p.isCreate - create mode (start must be in the future, every field required)
+ * @param {boolean} [p.locked] - pools exist: the link and the config are not sent, so not checked
+ * @param {Map<string, string>} [p.takenBgaIds] - BGA id -> id of the live tournament declaring it
+ * @param {string|null} [p.ownId] - the tournament being edited (its own link is not "taken")
+ * @returns {{ field: string, code: string }[]}
+ */
+export function tournamentFormIssues({ body, config, now = new Date(), isCreate, locked = false, takenBgaIds = null, ownId = null }) {
+  const issues = []
+  const checked = { ...body }
+  if (locked) delete checked.bgaUrl
+  const fields = validateTournamentFields(checked, { now, isCreate, current: null })
+  for (const [field, code] of Object.entries(fields.errors)) issues.push({ field, code })
+
+  if (!locked && !fields.errors.bgaUrl && takenBgaIds) {
+    const parsed = parseBgaTournamentUrl(body.bgaUrl)
+    const holder = parsed && takenBgaIds.get(parsed.id)
+    if (holder && holder !== ownId) issues.push({ field: 'bgaUrl', code: 'taken' })
+  }
+
+  if (!locked) {
+    const cfg = validateTournamentConfig(config)
+    if (cfg.errors.includes('source.setCode')) issues.push({ field: 'setCode', code: 'required' })
+    const other = cfg.errors.filter(e => e !== 'source.setCode')
+    if (other.length) issues.push({ field: 'uniques', code: other[0] })
+  }
+
+  return issues.sort((a, b) => FIELD_ORDER.indexOf(a.field) - FIELD_ORDER.indexOf(b.field))
+}

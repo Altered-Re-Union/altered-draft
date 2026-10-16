@@ -1001,7 +1001,7 @@ curl -s "http://localhost:8080/api/tournament-bga-decklist?tournamentId=42&amp;g
 <table class="wrap">
 <tr><th>Route</th><th>Page</th><th>Notes</th></tr>
 <tr><td><code>/tournament</code></td><td><code>TournamentMenu.jsx</code> (reworked)</td><td>Public "Upcoming" and "Ongoing" lists; "Create a tournament" (login prompt if logged out); "My tournaments" (bound pools, with the declared tournament's status); the generic "Prepare my next tournament" moved to a small block at the bottom.</td></tr>
-<tr><td><code>/tournament/new</code></td><td><code>TournamentForm.jsx</code></td><td>Create mode.</td></tr>
+<tr><td><code>/tournament/new</code></td><td><code>TournamentForm.jsx</code></td><td>Create mode. Live validation (<code>src/lib/tournamentForm.js</code> <code>tournamentFormIssues</code>, the API's own pure checks + a duplicate-link check against the public list): the submit button sits in a bar stuck to the bottom of the screen, disabled while problems remain, with the list of problems next to it (each one jumps to its field).</td></tr>
 <tr><td><code>/tournament/t/:id</code></td><td><code>TournamentDetail.jsx</code></td><td>Header, description, 3-step checklist (register on BGA → open your pool → build your deck), organizer panel.</td></tr>
 <tr><td><code>/tournament/t/:id/edit</code></td><td><code>TournamentForm.jsx</code></td><td>Edit mode; BGA link + config disabled once a pool exists.</td></tr>
 <tr><td><code>/tournament/t/:id/pool</code></td><td><code>TournamentPoolPage.jsx</code></td><td><code>TournamentPoolView</code> with <code>load = fetchTournamentPool(id)</code>, back link to the tournament.</td></tr>
