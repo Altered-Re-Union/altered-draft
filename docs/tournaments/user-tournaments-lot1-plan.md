@@ -1803,7 +1803,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 **Interfaces:**
 - Produces: `decodeJwtPayload(token) → object` (`{}` on any failure), `moderatorConfig(env = process.env) → { role: string|null, subs: string[] }`, `isModerator({ sub, roles }, cfg = moderatorConfig()) → boolean`, `verifyUser(req) → Promise<{ sub, name, roles: string[], isModerator: boolean } | null>`. `verifySub` and `bearerToken` unchanged.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `api/_lib/auth.test.js`:
 
@@ -1852,12 +1852,12 @@ describe('verifyUser', () => {
 })
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `npx vitest run api/_lib/auth.test.js`
 Expected: FAIL — `decodeJwtPayload` / `verifyUser` not exported.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Rewrite `api/_lib/auth.js` as:
 
@@ -1944,12 +1944,12 @@ export async function verifyUser(req) {
 }
 ```
 
-- [ ] **Step 4: Run the test**
+- [x] **Step 4: Run the test**
 
 Run: `npx vitest run api/_lib/auth.test.js && npm test`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add api/_lib/auth.js api/_lib/auth.test.js
