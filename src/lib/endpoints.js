@@ -32,7 +32,10 @@ const ENV_VARS = {
 // (api/decks/*), so its URL stays server-side.
 const PUBLIC_KEYS = ['keycloakIssuer', 'keycloakClientId', 'deckbuilderUrl', 'reunionUrl', 'cardsApiUrl', 'cdnUrl']
 
-const CONFIG_TIMEOUT_MS = 1500
+// Per attempt. Two attempts, so a cold serverless function gets a second chance before
+// we give up — a fallback is only correct on a prod deployment.
+const CONFIG_TIMEOUT_MS = 2500
+const CONFIG_ATTEMPTS = 2
 
 function merge(overrides) {
   const merged = { ...DEFAULTS }
@@ -58,12 +61,30 @@ export function publicEndpoints() {
   return Object.fromEntries(PUBLIC_KEYS.map(key => [key, current[key]]))
 }
 
-/** Browser side: loads /api/config once; falls back to prod defaults on error/timeout. */
+async function fetchConfig() {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), CONFIG_TIMEOUT_MS)
+  try {
+    const res = await fetch('/api/config', { signal: controller.signal })
+    return res.ok ? await res.json() : null
+  } catch {
+    return null
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/**
+ * Browser side: loads /api/config. If it can't be reached, falls back to prod defaults —
+ * loudly, since on a non-prod deployment the server would keep ITS configured services
+ * while the browser talks to prod (e.g. login against the wrong Keycloak).
+ */
 export async function loadEndpoints() {
-  const timeout = new Promise(resolve => setTimeout(resolve, CONFIG_TIMEOUT_MS, null))
-  const config = fetch('/api/config')
-    .then(res => (res.ok ? res.json() : null))
-    .catch(() => null)
-  current = merge(await Promise.race([config, timeout]))
+  let config = null
+  for (let attempt = 0; attempt < CONFIG_ATTEMPTS && !config; attempt++) config = await fetchConfig()
+  if (!config) {
+    console.warn('[endpoints] /api/config unavailable — falling back to PROD service URLs. On a local/preprod deployment, login, decks and cards will target prod until reload.')
+  }
+  current = merge(config)
   return current
 }

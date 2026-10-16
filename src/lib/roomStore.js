@@ -83,8 +83,9 @@ export async function updateRoomIfVersion(code, state, expectedVersion) {
  * Subscribes to live updates for a room. `onUpdate(state)` fires on every change;
  * `onStatusChange('subscribed' | 'error')` mirrors the old CHANNEL_ERROR/CLOSED/SUBSCRIBED
  * system events (used to drive the "reconnecting…" banner). Returns an unsubscribe fn.
- * See src/lib/realtime.js for the actual transport (self-hosted or Supabase-hosted).
+ * See src/lib/realtime.js for the actual transport (self-hosted or Supabase-hosted, or
+ * polling through getRoom when no Realtime is configured).
  */
 export function subscribeToRoom(code, onUpdate, onStatusChange) {
-  return subscribeToRoomRealtime(code, onUpdate, onStatusChange)
+  return subscribeToRoomRealtime(code, onUpdate, onStatusChange, getRoom)
 }

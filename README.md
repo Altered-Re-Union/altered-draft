@@ -62,7 +62,7 @@ Login is strictly additive: logged out, `user` is `null` and everything works an
 
 ## Running locally
 
-**Prerequisites:** Docker, GNU make, and Node **22** (pinned in `.nvmrc` — `nvm use`; the Makefile picks nvm's Node 22 by itself if you have it).
+**Prerequisites:** Docker, GNU make, and Node **≥ 20.6** — **22** recommended (pinned in `.nvmrc`, same as the Docker image; `nvm use`, and the Makefile picks nvm's Node 22 by itself if you have it).
 
 ```bash
 make dev        # → http://localhost:5173

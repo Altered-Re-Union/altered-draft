@@ -10,17 +10,16 @@ function jsonResponse(body) {
   return { ok: true, status: 200, json: async () => body }
 }
 
-describe('subscribeToRoomRealtime without a Realtime config (polling fallback)', () => {
+// Serves room states in order, then keeps repeating the last one.
+function roomFetcher(states) {
+  return vi.fn(async () => ({ data: { state: states.length > 1 ? states.shift() : states[0] } }))
+}
+
+describe('subscribeToRoomRealtime polling fallback', () => {
   const originalFetch = global.fetch
-  let roomStates
 
   beforeEach(() => {
     vi.useFakeTimers()
-    roomStates = []
-    global.fetch = vi.fn(async url => {
-      if (url === '/api/realtime-config') return jsonResponse({ url: '', anonKey: '' })
-      return jsonResponse({ state: roomStates.length > 1 ? roomStates.shift() : roomStates[0] })
-    })
   })
 
   afterEach(() => {
@@ -28,37 +27,63 @@ describe('subscribeToRoomRealtime without a Realtime config (polling fallback)',
     global.fetch = originalFetch
   })
 
-  it('reports subscribed, then only changed states', async () => {
-    const subscribe = await loadSubscribe()
-    roomStates = [{ phase: 'lobby' }, { phase: 'lobby' }, { phase: 'sealed' }]
-    const onUpdate = vi.fn()
-    const onStatus = vi.fn()
+  describe('when Realtime is not configured', () => {
+    beforeEach(() => {
+      global.fetch = vi.fn(async () => jsonResponse({ url: '', anonKey: '' }))
+    })
 
-    const unsubscribe = subscribe('ABCD', onUpdate, onStatus)
-    await vi.advanceTimersByTimeAsync(0)
-    expect(onStatus).toHaveBeenCalledWith('subscribed')
-    expect(onUpdate).not.toHaveBeenCalled() // first read is the baseline
+    it('reports subscribed, the first read, then only changed states', async () => {
+      const subscribe = await loadSubscribe()
+      const fetchRoom = roomFetcher([{ phase: 'lobby' }, { phase: 'lobby' }, { phase: 'sealed' }])
+      const onUpdate = vi.fn()
+      const onStatus = vi.fn()
 
-    await vi.advanceTimersByTimeAsync(1500) // unchanged
-    expect(onUpdate).not.toHaveBeenCalled()
+      const unsubscribe = subscribe('ABCD', onUpdate, onStatus, fetchRoom)
+      await vi.advanceTimersByTimeAsync(0)
+      expect(onStatus).toHaveBeenCalledWith('subscribed')
+      // The first read is reported too, so a change made before polling started isn't lost.
+      expect(onUpdate).toHaveBeenNthCalledWith(1, { phase: 'lobby' })
 
-    await vi.advanceTimersByTimeAsync(1500) // lobby -> sealed
-    expect(onUpdate).toHaveBeenCalledTimes(1)
-    expect(onUpdate).toHaveBeenCalledWith({ phase: 'sealed' })
-    expect(global.fetch).toHaveBeenCalledWith('/api/rooms/ABCD')
+      await vi.advanceTimersByTimeAsync(1500) // unchanged
+      expect(onUpdate).toHaveBeenCalledTimes(1)
 
-    unsubscribe()
+      await vi.advanceTimersByTimeAsync(1500) // lobby -> sealed
+      expect(onUpdate).toHaveBeenCalledTimes(2)
+      expect(onUpdate).toHaveBeenLastCalledWith({ phase: 'sealed' })
+      expect(fetchRoom).toHaveBeenCalledWith('ABCD')
+
+      unsubscribe()
+    })
+
+    it('stops polling once unsubscribed', async () => {
+      const subscribe = await loadSubscribe()
+      const fetchRoom = roomFetcher([{ phase: 'lobby' }])
+      const unsubscribe = subscribe('ABCD', vi.fn(), undefined, fetchRoom)
+      await vi.advanceTimersByTimeAsync(0)
+      unsubscribe()
+
+      const calls = fetchRoom.mock.calls.length
+      await vi.advanceTimersByTimeAsync(10_000)
+      expect(fetchRoom.mock.calls.length).toBe(calls)
+    })
   })
 
-  it('stops polling once unsubscribed', async () => {
-    const subscribe = await loadSubscribe()
-    roomStates = [{ phase: 'lobby' }]
-    const unsubscribe = subscribe('ABCD', vi.fn())
-    await vi.advanceTimersByTimeAsync(0)
-    unsubscribe()
+  describe('when the Realtime config request fails', () => {
+    it('polls meanwhile and retries the config instead of caching the failure', async () => {
+      global.fetch = vi.fn(async () => { throw new Error('network down') })
+      const subscribe = await loadSubscribe()
+      const fetchRoom = roomFetcher([{ phase: 'lobby' }])
+      const onUpdate = vi.fn()
 
-    const calls = global.fetch.mock.calls.length
-    await vi.advanceTimersByTimeAsync(10_000)
-    expect(global.fetch.mock.calls.length).toBe(calls)
+      const unsubscribe = subscribe('ABCD', onUpdate, undefined, fetchRoom)
+      await vi.advanceTimersByTimeAsync(0)
+      expect(onUpdate).toHaveBeenCalledWith({ phase: 'lobby' })
+      expect(global.fetch).toHaveBeenCalledTimes(1)
+
+      await vi.advanceTimersByTimeAsync(15_000)
+      expect(global.fetch).toHaveBeenCalledTimes(2) // config retried, not memoized
+
+      unsubscribe()
+    })
   })
 })
