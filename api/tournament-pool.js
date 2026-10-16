@@ -4,7 +4,7 @@
 // ROADMAP.md "Set 6 preview".
 import { verifySub } from './_lib/auth.js'
 import { getPoolById, updateDeckSummary, countGamesPlayed } from '../src/lib/poolStore.js'
-import { regeneratePool, poolResponse } from './_lib/tournamentPool.js'
+import { loadPool, poolResponse } from './_lib/tournamentPool.js'
 
 export default async function handler(req, res) {
   const sub = await verifySub(req)
@@ -17,7 +17,7 @@ export default async function handler(req, res) {
   if (!pool) return res.status(404).json({ error: 'not_found' })
 
   if (req.method === 'GET') {
-    const { counts, boosters } = await regeneratePool(sub, pool)
+    const { counts, boosters } = await loadPool(sub, pool)
     const gamesPlayed = await countGamesPlayed(pool.id)
     return res.status(200).json(poolResponse(pool, counts, boosters, gamesPlayed))
   }
@@ -32,7 +32,7 @@ export default async function handler(req, res) {
       cardQuantity: body.cardQuantity,
     })
     // Include boosters so the frontend's `pool` state keeps its pack view after a deck sync.
-    const { counts, boosters } = await regeneratePool(sub, updated)
+    const { counts, boosters } = await loadPool(sub, updated)
     const gamesPlayed = await countGamesPlayed(updated.id)
     return res.status(200).json(poolResponse(updated, counts, boosters, gamesPlayed))
   }

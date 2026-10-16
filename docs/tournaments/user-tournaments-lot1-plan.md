@@ -867,7 +867,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 - Produces (SQL): table `tournaments`; `sealed_pools.tournament_ref uuid`, `config jsonb`, `cards jsonb`, `boosters jsonb`, `created_by text`; unique index `sealed_pools_one_per_sub_per_tournament_ref`.
 - Produces: `loadPool(sub, poolRow) → Promise<{ counts, boosters }>` (stored or regenerated), `loadPoolCounts(sub, poolRow) → Promise<counts>`, `regeneratePool(sub, poolRow)` (legacy-only, kept for the freeze script), `poolResponse(poolRow, counts, boosters, gamesPlayed, extra = {})`.
 
-- [ ] **Step 1: Append the DDL to `sealed-pools-schema.sql`**
+- [x] **Step 1: Append the DDL to `sealed-pools-schema.sql`**
 
 ```sql
 -- ---------------------------------------------------------------------------------
@@ -909,7 +909,7 @@ create unique index if not exists sealed_pools_one_per_sub_per_tournament_ref
   on sealed_pools (sub, tournament_ref) where tournament_ref is not null;
 ```
 
-- [ ] **Step 2: Mount the schema in the test Postgres**
+- [x] **Step 2: Mount the schema in the test Postgres**
 
 In `docker-compose.test.yml`, under `volumes:` of `postgres-test`, add after the existing line:
 
@@ -919,7 +919,7 @@ In `docker-compose.test.yml`, under `volumes:` of `postgres-test`, add after the
 
 Also update the file's header comment: "just the draft_rooms table" → "the draft_rooms, sealed_pools and tournaments tables these tests exercise".
 
-- [ ] **Step 3: Write the failing integration test (schema smoke)**
+- [x] **Step 3: Write the failing integration test (schema smoke)**
 
 `tests/integration/tournaments.test.js`:
 
@@ -962,12 +962,12 @@ describe('schema', () => {
 })
 ```
 
-- [ ] **Step 4: Run it to verify it fails**
+- [x] **Step 4: Run it to verify it fails**
 
 Run: `npm run test:integration -- tests/integration/tournaments.test.js`
 Expected: the container starts; FAIL on the schema assertions until Steps 1–2 are in place (if you did them first, it passes — that's fine, go on).
 
-- [ ] **Step 5: Rewrite the generation part of `api/_lib/tournamentPool.js`**
+- [x] **Step 5: Rewrite the generation part of `api/_lib/tournamentPool.js`**
 
 Replace the imports and the `regeneratePool` / `regeneratePoolCounts` functions with:
 
@@ -1010,7 +1010,7 @@ Change `poolResponse`'s signature to `export function poolResponse(poolRow, card
     ...(extra.tournament ? { tournament: extra.tournament } : {}),
 ```
 
-- [ ] **Step 6: Switch every call site to `loadPool` / `loadPoolCounts`**
+- [x] **Step 6: Switch every call site to `loadPool` / `loadPoolCounts`**
 
 - `api/tournament-normal-pool.js`: import `loadPool` instead of `regeneratePool`; both `regeneratePool(` calls → `loadPool(`.
 - `api/tournament-prep-pool.js`: same (one call).
@@ -1020,12 +1020,12 @@ Change `poolResponse`'s signature to `export function poolResponse(poolRow, card
 
 Then: `grep -rn "regeneratePool" api/ server/ scripts/ src/` must show only `api/_lib/tournamentPool.js` (definition + `loadPool`).
 
-- [ ] **Step 7: Run unit + integration suites**
+- [x] **Step 7: Run unit + integration suites**
 
 Run: `npm test && npm run test:integration`
 Expected: PASS. (`rooms.test.js` still passes with the extra schema mounted.)
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add sealed-pools-schema.sql docker-compose.test.yml api/_lib/tournamentPool.js api/tournament-normal-pool.js api/tournament-prep-pool.js api/tournament-pool.js api/tournament-pool-counts.js api/tournament-pool-by-deck.js tests/integration/tournaments.test.js

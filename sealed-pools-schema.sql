@@ -154,3 +154,41 @@ where not exists (select 1 from current_format);
 -- deliberately, when rolling the new format out:
 --   insert into current_format (type, set_code, unique_count, even_factions, heroes_in_pool, guaranteed_uniques)
 --   values ('sealed', 'EOLE', 1, false, false, 1);
+
+-- ---------------------------------------------------------------------------------
+-- User-created tournaments (docs/tournaments/user-tournaments-spec.md §4).
+-- ---------------------------------------------------------------------------------
+create table if not exists tournaments (
+  id                uuid primary key default gen_random_uuid(),
+  name              text not null,
+  description       text not null default '',
+  format            text not null default 'sealed' check (format in ('sealed')),
+  bga_url           text not null,
+  bga_tournament_id text not null,
+  starts_at         timestamptz not null,
+  ends_at           timestamptz,
+  organizer_sub     text not null,
+  organizer_name    text not null,
+  config            jsonb not null,
+  cancelled_at      timestamptz,
+  ended_at          timestamptz,
+  created_at        timestamptz not null default now(),
+  updated_at        timestamptz not null default now()
+);
+-- One altered-draft tournament per BGA tournament, cancelled ones included (a cancelled
+-- tournament's pools still answer BGA for that id; reuse = restore it).
+create unique index if not exists tournaments_bga_tournament_id on tournaments (bga_tournament_id);
+create index if not exists tournaments_organizer on tournaments (organizer_sub);
+create index if not exists tournaments_starts_at on tournaments (starts_at);
+
+-- Pools attached to a declared tournament, and stored pool contents (every pool created
+-- after this migration stores what it generated; older rows keep being regenerated until
+-- scripts/freeze-sealed-pools.mjs stores them too).
+alter table sealed_pools add column if not exists tournament_ref uuid references tournaments(id);
+alter table sealed_pools add column if not exists config jsonb;
+alter table sealed_pools add column if not exists cards jsonb;
+alter table sealed_pools add column if not exists boosters jsonb;
+alter table sealed_pools add column if not exists created_by text;
+update sealed_pools set created_by = 'legacy' where created_by is null;
+create unique index if not exists sealed_pools_one_per_sub_per_tournament_ref
+  on sealed_pools (sub, tournament_ref) where tournament_ref is not null;

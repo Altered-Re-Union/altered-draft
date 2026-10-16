@@ -11,7 +11,7 @@
 // the deck through decks-api's generic save endpoint).
 import { verifySub } from './_lib/auth.js'
 import { getOrCreateNormalPool, bindTournamentId } from '../src/lib/poolStore.js'
-import { regeneratePoolCounts } from './_lib/tournamentPool.js'
+import { loadPoolCounts } from './_lib/tournamentPool.js'
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -28,6 +28,6 @@ export default async function handler(req, res) {
     ? await bindTournamentId(sub, tournamentId)
     : await getOrCreateNormalPool(sub)
 
-  const cards = await regeneratePoolCounts(sub, pool)
+  const cards = await loadPoolCounts(sub, pool)
   return res.status(200).json({ id: pool.id, cards })
 }
