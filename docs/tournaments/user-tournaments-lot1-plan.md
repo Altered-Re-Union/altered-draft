@@ -2494,7 +2494,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 **Interfaces:**
 - Produces: `GET /api/tournament-bound-pools` items gain `tournament: { id, name, startsAt, status } | null`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add `import boundPools from '../../api/tournament-bound-pools.js'` next to the other handler imports, then append:
 
@@ -2517,12 +2517,12 @@ describe('GET /api/tournament-bound-pools', () => {
 })
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `npm run test:integration -- tests/integration/tournaments.test.js -t bound-pools`
 Expected: FAIL — `tournament` is undefined on the items.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `api/tournament-bound-pools.js`, import `tournamentStatus` from `../src/lib/tournamentRules.js` and change the mapped item to:
 
@@ -2550,12 +2550,12 @@ In `api/tournament-bound-pools.js`, import `tournamentStatus` from `../src/lib/t
 
 In `api/tournament-bga-decklist.js`, change `await getOrCreateNormalPool(sub)` to `await getOrCreateNormalPool(sub, { createdBy: 'bga' })` and update the header comment's first paragraph to mention: "`tournamentId` of a tournament declared on altered-draft resolves to (or creates) the player's pool for THAT tournament; other ids bind the legacy pending pool."
 
-- [ ] **Step 4: Run the suites**
+- [x] **Step 4: Run the suites**
 
 Run: `npm test && npm run test:integration`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add api/tournament-bound-pools.js api/tournament-bga-decklist.js tests/integration/tournaments.test.js

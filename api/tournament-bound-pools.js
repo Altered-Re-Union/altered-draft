@@ -4,6 +4,7 @@
 // a specific pool's full card list.
 import { verifySub } from './_lib/auth.js'
 import { listBoundTournamentPools, countGamesPlayed } from '../src/lib/poolStore.js'
+import { tournamentStatus } from '../src/lib/tournamentRules.js'
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -22,6 +23,14 @@ export default async function handler(req, res) {
     tournamentName: p.tournament_name,
     boundAt: p.bound_at,
     gamesPlayed: await countGamesPlayed(p.id),
+    tournament: p.tournament_ref
+      ? {
+          id: p.tournament_ref,
+          name: p.t_name,
+          startsAt: p.t_starts_at,
+          status: tournamentStatus({ starts_at: p.t_starts_at, ends_at: p.t_ends_at, cancelled_at: p.t_cancelled_at, ended_at: p.t_ended_at }),
+        }
+      : null,
     deck: p.deck_id
       ? { id: p.deck_id, name: p.deck_name, cardQuantity: p.deck_card_quantity }
       : null,

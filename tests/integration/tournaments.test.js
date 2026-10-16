@@ -50,6 +50,7 @@ import { verifyUser } from '../../api/_lib/auth.js'
 import tournamentsIndex from '../../api/tournaments/index.js'
 import tournamentsItem from '../../api/tournaments/[id].js'
 import tournamentPoolFor from '../../api/tournaments/[id]/pool.js'
+import boundPools from '../../api/tournament-bound-pools.js'
 
 function mockRes() {
   const res = {
@@ -446,5 +447,22 @@ describe('GET /api/tournaments/:id/pool', () => {
     expect(refused.statusCode).toBe(409)
     expect(refused.body).toEqual({ error: 'tournament_closed', status: 'cancelled' })
     expect((await call(tournamentPoolFor, { query: { id: '00000000-0000-0000-0000-000000000000' } })).statusCode).toBe(404)
+  })
+})
+
+describe('GET /api/tournament-bound-pools', () => {
+  it('carries the tournament block for declared pools and null for legacy-bound ones', async () => {
+    const t = await mkTournament({ name: 'Declared' })
+    asUser(ALICE)
+    await getOrCreateTournamentPool('alice', t)
+    await bindTournamentId('alice', '5005', 'Legacy one')
+    verifyUser.mockImplementation(async () => ALICE)
+    const { verifySub } = await import('../../api/_lib/auth.js')
+    verifySub.mockResolvedValue('alice')
+    const res = await call(boundPools)
+    expect(res.statusCode).toBe(200)
+    const byName = Object.fromEntries(res.body.pools.map(p => [p.tournamentName, p]))
+    expect(byName['Declared'].tournament).toMatchObject({ id: t.id, name: 'Declared', status: 'upcoming' })
+    expect(byName['Legacy one'].tournament).toBeNull()
   })
 })
