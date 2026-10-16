@@ -3241,7 +3241,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 
 > No component test harness; verified by build + the manual checklist in Step 4.
 
-- [ ] **Step 1: Create `src/pages/TournamentForm.jsx`**
+- [x] **Step 1: Create `src/pages/TournamentForm.jsx`**
 
 ```jsx
 import { useEffect, useMemo, useState } from 'react'
@@ -3514,7 +3514,7 @@ Add the routes after `/tournament/pools/:id`:
 
 (Until Task 17 lands, create the two page files as one-line placeholders returning `null` so the build passes — and replace them in Task 17. If you do Task 17 first, skip this.)
 
-- [ ] **Step 3: Build**
+- [x] **Step 3: Build**
 
 Run: `npm run build`
 Expected: success.
@@ -3527,7 +3527,7 @@ Expected: success.
 3. Set the start to yesterday → "The start must be a valid date in the future." without a request (network tab idle).
 4. Pick Neverending Journey → the unique steppers are disabled with the "No unique data…" hint; submitting succeeds with 0 uniques.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/pages/TournamentForm.jsx src/App.jsx

@@ -10,6 +10,7 @@ import TournamentNormal from './pages/TournamentNormal.jsx'
 import TournamentPrep from './pages/TournamentPrep.jsx'
 import TournamentBoundDetail from './pages/TournamentBoundDetail.jsx'
 import EditDeckRedirect from './pages/EditDeckRedirect.jsx'
+import TournamentForm from './pages/TournamentForm.jsx'
 
 export default function App() {
   return (
@@ -24,6 +25,8 @@ export default function App() {
       <Route path="/tournament/normal" element={<TournamentNormal />} />
       <Route path="/tournament/prep" element={<TournamentPrep />} />
       <Route path="/tournament/pools/:id" element={<TournamentBoundDetail />} />
+      <Route path="/tournament/new" element={<TournamentForm />} />
+      <Route path="/tournament/t/:id/edit" element={<TournamentForm />} />
       <Route path="/edit/deck/:deckId" element={<EditDeckRedirect />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
