@@ -3887,7 +3887,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 
 > No component test harness; verified by build + Step 3.
 
-- [ ] **Step 1: Rewrite `src/pages/TournamentMenu.jsx`**
+- [x] **Step 1: Rewrite `src/pages/TournamentMenu.jsx`**
 
 ```jsx
 import { useState, useEffect } from 'react'
@@ -4043,7 +4043,7 @@ export default function TournamentMenu() {
 }
 ```
 
-- [ ] **Step 2: Build**
+- [x] **Step 2: Build**
 
 Run: `npm run build`
 Expected: success.
@@ -4054,7 +4054,7 @@ Expected: success.
 2. As `alice`: the card shows "✓ Your pool is ready"; "My tournaments" lists "Test cup" with its pill and the "Change my deck" link going to `/tournament/t/<id>/pool`; the legacy "Prepare my next tournament" button sits at the bottom in a small block.
 3. Edit the tournament's start to yesterday (as organizer) → it moves to the "Ongoing tournaments" section.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/pages/TournamentMenu.jsx
