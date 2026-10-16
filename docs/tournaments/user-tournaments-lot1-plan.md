@@ -100,7 +100,7 @@ Test helpers for handlers (`mockRes`, `call`) are copied from `tests/integration
 - Produces: `validateTournamentFields(body, { now, isCreate, current }) → { ok, errors: Record<string,string>, values: { name?, description?, startsAt?: Date, endsAt?: Date|null, bgaUrl?, bgaTournamentId? } }`
 - Produces: constants `NAME_MIN = 3`, `NAME_MAX = 80`, `DESCRIPTION_MAX = 2000`, `MAX_OPEN_TOURNAMENTS = 10`, `OPEN_STATUSES = ['upcoming', 'ongoing']`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `src/lib/bgaUrl.test.js`:
 
@@ -207,12 +207,12 @@ describe('validateTournamentFields (patch)', () => {
 })
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `npx vitest run src/lib/bgaUrl.test.js src/lib/tournamentRules.test.js`
 Expected: FAIL — "Failed to resolve import ./bgaUrl.js" / "./tournamentRules.js".
 
-- [ ] **Step 3: Implement `src/lib/bgaUrl.js`**
+- [x] **Step 3: Implement `src/lib/bgaUrl.js`**
 
 ```js
 // A BGA tournament link as pasted by an organizer, reduced to its tournament id. Only
@@ -240,7 +240,7 @@ export function parseBgaTournamentUrl(input) {
 }
 ```
 
-- [ ] **Step 4: Implement `src/lib/tournamentRules.js`**
+- [x] **Step 4: Implement `src/lib/tournamentRules.js`**
 
 ```js
 // Pure rules for user-created tournaments (docs/tournaments/user-tournaments-spec.md §3.2, §9).
@@ -337,12 +337,12 @@ export function validateTournamentFields(body, { now = new Date(), isCreate = fa
 }
 ```
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 Run: `npx vitest run src/lib/bgaUrl.test.js src/lib/tournamentRules.test.js`
 Expected: PASS (all tests green).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/lib/bgaUrl.js src/lib/bgaUrl.test.js src/lib/tournamentRules.js src/lib/tournamentRules.test.js
