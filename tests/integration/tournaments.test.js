@@ -565,3 +565,19 @@ describe('detach (moderators) and other follow-ups', () => {
     expect((await listBoundTournamentPools('alice')).map(p => p.tournament_name)).toEqual(['Declared', 'Legacy bound later'])
   })
 })
+
+describe('GET /api/tournaments?bgaId= (form duplicate-link check)', () => {
+  it('returns the live declaration of that BGA id whatever its status, and nothing for a free or detached id', async () => {
+    const t = await mkTournament({ bgaTournamentId: '424201', name: 'Declared' })
+    await updateTournament(t.id, { cancelledAt: new Date() })
+    const old = await mkTournament({ bgaTournamentId: '424202' })
+    await query('UPDATE tournaments SET detached_at = now() WHERE id = $1', [old.id])
+    verifyUser.mockResolvedValue(null)
+    const taken = await call(tournamentsIndex, { query: { bgaId: '424201' }, auth: false })
+    expect(taken.statusCode).toBe(200)
+    expect(taken.body.tournaments.map(x => [x.id, x.name, x.status])).toEqual([[t.id, 'Declared', 'cancelled']])
+    expect((await call(tournamentsIndex, { query: { bgaId: '424202' }, auth: false })).body.tournaments).toEqual([])
+    expect((await call(tournamentsIndex, { query: { bgaId: '999' }, auth: false })).body.tournaments).toEqual([])
+    expect((await call(tournamentsIndex, { query: { bgaId: 'abc' }, auth: false })).statusCode).toBe(400)
+  })
+})

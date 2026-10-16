@@ -6,7 +6,7 @@ import { parseBgaTournamentUrl } from '../lib/bgaUrl.js'
 import { tournamentFormIssues } from '../lib/tournamentForm.js'
 import { validateTournamentConfig } from '../lib/tournamentConfig.js'
 import { hasFactionRanges } from '../lib/uniqueFactionRanges.js'
-import { createTournament, updateTournament, getTournament, listTournaments } from '../lib/tournamentApi.js'
+import { createTournament, updateTournament, getTournament, findTournamentByBgaId } from '../lib/tournamentApi.js'
 import TopNav from '../components/TopNav.jsx'
 import Footer from '../components/Footer.jsx'
 import SetPresetGrid from '../components/SetPresetGrid.jsx'
@@ -101,10 +101,15 @@ export default function TournamentForm() {
   useEffect(() => {
     if (!isEdit || authLoading || !user) return
     let cancelled = false
+    let redirected = false
     getTournament(id)
       .then(tn => {
         if (cancelled) return
-        if (tn.detachedAt || (!tn.viewer?.isOrganizer && !tn.viewer?.isModerator)) { navigate(`/tournament/t/${id}`, { replace: true }); return }
+        if (tn.detachedAt || (!tn.viewer?.isOrganizer && !tn.viewer?.isModerator)) {
+          redirected = true // stay on the loading screen: the form is never rendered for them
+          navigate(`/tournament/t/${id}`, { replace: true })
+          return
+        }
         setName(tn.name); setDescription(tn.description); setBgaUrl(tn.bgaUrl)
         setStartsAt(toLocalInput(tn.startsAt)); setEndsAt(toLocalInput(tn.endsAt))
         setSetCode(tn.config.source.setCode); setHeroes(tn.config.heroes)
@@ -112,22 +117,32 @@ export default function TournamentForm() {
         setLocked(!!tn.locked)
       })
       .catch(e => { if (!cancelled) setLoadError(e.status === 404 ? t('tournaments.notFound') : t('tournaments.errGeneric', { msg: e.message })) })
-      .finally(() => { if (!cancelled) setLoading(false) })
+      .finally(() => { if (!cancelled && !redirected) setLoading(false) })
     return () => { cancelled = true }
   }, [id, isEdit, navigate, t, user, authLoading])
 
-  // The links already declared (public list, detached ones excluded: their id is free), so
-  // a reused link is flagged as soon as it is pasted. The server still has the last word.
+  // Is the pasted link already declared? One targeted lookup per BGA id, debounced while
+  // typing (GET /api/tournaments?bgaId=). The server's unique index + 409 on submit stay the
+  // real guard, for a tournament declared between this check and the submit.
+  const bgaParsedId = parseBgaTournamentUrl(bgaUrl)?.id ?? null
   useEffect(() => {
+    if (!bgaParsedId || locked) return
     let cancelled = false
-    listTournaments('all')
-      .then(({ tournaments }) => {
-        if (cancelled) return
-        setTakenBgaIds(new Map(tournaments.filter(tn => !tn.detachedAt).map(tn => [tn.bgaTournamentId, tn.id])))
-      })
-      .catch(() => { /* the server check on submit covers it */ })
-    return () => { cancelled = true }
-  }, [])
+    const timer = setTimeout(() => {
+      findTournamentByBgaId(bgaParsedId)
+        .then(holder => {
+          if (cancelled) return
+          setTakenBgaIds(prev => {
+            const next = new Map(prev)
+            if (holder) next.set(bgaParsedId, holder.id)
+            else next.delete(bgaParsedId)
+            return next
+          })
+        })
+        .catch(() => { /* the server check on submit covers it */ })
+    }, 350)
+    return () => { cancelled = true; clearTimeout(timer) }
+  }, [bgaParsedId, locked])
 
   const bgaParsed = useMemo(() => parseBgaTournamentUrl(bgaUrl), [bgaUrl])
   const uniqueSupport = !setCode || hasFactionRanges(setCode)
@@ -209,6 +224,23 @@ export default function TournamentForm() {
     )
   }
 
+  // Edit mode: nothing of the form shows until the API said this viewer may edit (the
+  // viewer block of GET /api/tournaments/:id); a stranger goes straight to the tournament
+  // page. The PATCH is refused server-side anyway (403).
+  if (isEdit && (authLoading || loading || loadError)) {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <TopNav />
+        <div className="max-w-2xl w-full mx-auto px-4 py-8 flex-1">
+          {loadError
+            ? <p className="text-red-400 text-sm">{loadError}</p>
+            : <p className="text-muted text-sm">{t('tournaments.loading')}</p>}
+        </div>
+        <Footer />
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen flex flex-col">
       <TopNav />
@@ -217,8 +249,6 @@ export default function TournamentForm() {
           <h1 className="text-2xl font-display">{isEdit ? t('tournaments.editTitle') : t('tournaments.createTitle')}</h1>
           <Link to={isEdit ? `/tournament/t/${id}` : '/tournament'} className="text-sm text-muted hover:text-ink">{t('lobby.back')}</Link>
         </div>
-        {loading && <p className="text-muted text-sm">{t('tournaments.loading')}</p>}
-        {loadError && <p className="text-red-400 text-sm">{loadError}</p>}
 
         {/* Section 1 — the tournament */}
         <section className="bg-surface rounded-xl border border-line p-5 space-y-4">

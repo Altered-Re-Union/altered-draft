@@ -1187,7 +1187,7 @@ migration — from then on no pool depends on the upstream set file's order. Ide
 
 | Endpoint | Method | Auth | Purpose |
 | --- | --- | --- | --- |
-| `/api/tournaments` | GET | none (optional bearer) | List. `?status=upcoming\|ongoing\|open\|all` (`open` = upcoming + ongoing, the default), ordered by `starts_at`. With a bearer: each item carries `viewer.hasPool` / `viewer.poolId`. |
+| `/api/tournaments` | GET | none (optional bearer) | List. `?status=upcoming\|ongoing\|open\|all` (`open` = upcoming + ongoing, the default), ordered by `starts_at`. `?bgaId=<numeric id>` instead returns the live (not detached) declaration of that BGA tournament whatever its status, 0 or 1 item: the form's duplicate-link check. With a bearer: each item carries `viewer.hasPool` / `viewer.poolId`. |
 | `/api/tournaments` | POST | required | Create. Enforces spec §9 (10 open tournaments per account, moderators exempt). Returns the tournament. |
 | `/api/tournaments/:id` | GET | none (optional bearer) | Detail + `poolCount`, `locked`, `poolsByOrigin` (organizer/moderator only), `viewer` (bearer only). |
 | `/api/tournaments/:id` | PATCH | organizer / moderator | Partial update: `name`, `description`, `startsAt`, `endsAt`, `bgaUrl` (unlocked only), `config` (unlocked only, atomic), `action: cancel\|restore\|close\|reopen\|detach` (`detach` moderator only, §14.5). 409 `tournament_locked` when a locked field is sent, `tournament_detached` on a detached tournament, `bga_tournament_taken` when the new link is already declared. |
@@ -1206,9 +1206,9 @@ token payload only after userinfo accepted that token (`api/_lib/auth.js` `verif
 | Route | Page | Notes |
 | --- | --- | --- |
 | `/tournament` | `TournamentMenu.jsx` (reworked) | Public "Upcoming" and "Ongoing" lists; "Create a tournament" (login prompt if logged out); "My tournaments" (bound pools, with the declared tournament's status); the generic "Prepare my next tournament" moved to a small block at the bottom. |
-| `/tournament/new` | `TournamentForm.jsx` | Create mode. Live validation (`src/lib/tournamentForm.js` `tournamentFormIssues`, the API's own pure checks + a duplicate-link check against the public list): the submit button sits in a bar stuck to the bottom of the screen, disabled while problems remain, with the list of problems next to it (each one jumps to its field). |
+| `/tournament/new` | `TournamentForm.jsx` | Create mode. Live validation (`src/lib/tournamentForm.js` `tournamentFormIssues`, the API's own pure checks + a duplicate-link lookup, `GET /api/tournaments?bgaId=`, debounced while typing; the unique index + 409 on submit stay the real guard): the submit button sits in a bar stuck to the bottom of the screen, disabled while problems remain, with the list of problems next to it (each one jumps to its field). |
 | `/tournament/t/:id` | `TournamentDetail.jsx` | Header, description, 3-step checklist (register on BGA → open your pool → build your deck), organizer panel. |
-| `/tournament/t/:id/edit` | `TournamentForm.jsx` | Edit mode; BGA link + config disabled once a pool exists. |
+| `/tournament/t/:id/edit` | `TournamentForm.jsx` | Edit mode; BGA link + config disabled once a pool exists. Nothing of the form renders until `GET /api/tournaments/:id` (its `viewer` block) says the viewer may edit; anyone else goes straight to the tournament page (the PATCH is refused server-side anyway, 403). |
 | `/tournament/t/:id/pool` | `TournamentPoolPage.jsx` | `TournamentPoolView` with `load = fetchTournamentPool(id)`, back link to the tournament. |
 
 Status is derived, never stored: `detached` (detached_at) > `cancelled` (cancelled_at) > `ended`
@@ -1229,7 +1229,7 @@ is free again (`tournaments_bga_tournament_id_live` is partial on `detached_at I
 `getTournamentByBgaId` skips detached rows, so the next BGA call for that id goes to the real
 organizer's declaration (or the legacy pending pool). The detached row stays as a read-only
 trace (status `detached`, any PATCH → 409 `tournament_detached`, DELETE still allowed); the
-decks already saved on decks-api are left orphaned and the players start over.
+decks already saved on decks-api are left orphaned and the players start over. The confirmation re-reads the pool count at click time and states it.
 
 ---
 

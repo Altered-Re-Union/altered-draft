@@ -4,7 +4,7 @@ import { verifyUser, bearerToken } from '../_lib/auth.js'
 import { jsonBody, queryParam } from '../_lib/request.js'
 import { validateTournamentFields, MAX_OPEN_TOURNAMENTS } from '../../src/lib/tournamentRules.js'
 import { validateTournamentConfig } from '../../src/lib/tournamentConfig.js'
-import { listTournaments, createTournament, countOpenTournaments, toTournamentJson } from '../../src/lib/tournamentStore.js'
+import { listTournaments, createTournament, countOpenTournaments, getTournamentByBgaId, toTournamentJson } from '../../src/lib/tournamentStore.js'
 import { countPoolsByTournament, poolSummariesForTournaments } from '../../src/lib/poolStore.js'
 
 const STATUSES = ['open', 'upcoming', 'ongoing', 'all']
@@ -16,9 +16,14 @@ async function optionalUser(req) {
 
 export default async function handler(req, res) {
   if (req.method === 'GET') {
+    // ?bgaId=<numeric BGA id>: the live declaration of that BGA tournament, whatever its
+    // status (0 or 1 item). The form's duplicate-link check asks for just that, instead of
+    // loading every tournament; the unique index + 409 on POST/PATCH stay the real guard.
+    const bgaId = queryParam(req, 'bgaId')
+    if (bgaId && !/^\d+$/.test(bgaId)) return res.status(400).json({ error: 'invalid_request', fields: { bgaId: 'invalid_bga_id' } })
     const status = queryParam(req, 'status') || 'open'
-    if (!STATUSES.includes(status)) return res.status(400).json({ error: 'invalid_request', fields: { status: 'unknown_status' } })
-    const rows = await listTournaments(status)
+    if (!bgaId && !STATUSES.includes(status)) return res.status(400).json({ error: 'invalid_request', fields: { status: 'unknown_status' } })
+    const rows = bgaId ? [await getTournamentByBgaId(bgaId)].filter(Boolean) : await listTournaments(status)
     const ids = rows.map(r => r.id)
     const user = await optionalUser(req)
     const [counts, mine] = await Promise.all([

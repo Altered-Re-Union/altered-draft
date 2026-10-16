@@ -55,7 +55,14 @@ export default function TournamentDetail() {
   }
 
   async function handleDetach() {
-    if (!window.confirm(t('tournaments.detachConfirm', { n: tournament.poolCount ?? 0 }))) return
+    // Count the pools at click time, not at page load: players may have opened one since.
+    let poolCount = tournament.poolCount ?? 0
+    try {
+      const fresh = await getTournament(id)
+      setTournament(fresh)
+      poolCount = fresh.poolCount ?? 0
+    } catch { /* keep the loaded count */ }
+    if (!window.confirm(tc('tournaments.detachConfirm', poolCount))) return
     await act('detach')
   }
 

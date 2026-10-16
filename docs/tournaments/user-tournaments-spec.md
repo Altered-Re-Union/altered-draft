@@ -295,7 +295,7 @@ files are mounted in `server/index.js` exactly like the existing ones.
 
 | Endpoint | Method | Auth | Purpose |
 | --- | --- | --- | --- |
-| `/api/tournaments` | GET | none (optional bearer) | List. `?status=upcoming\|ongoing\|open\|all` (`open` = upcoming + ongoing, the default), ordered by `starts_at`. With a bearer: each item carries `viewer.hasPool` / `viewer.poolId`. |
+| `/api/tournaments` | GET | none (optional bearer) | List. `?status=upcoming\|ongoing\|open\|all` (`open` = upcoming + ongoing, the default), ordered by `starts_at`. `?bgaId=<numeric id>` instead returns the live (not detached) declaration of that BGA tournament whatever its status, 0 or 1 item: the form's duplicate-link check. With a bearer: each item carries `viewer.hasPool` / `viewer.poolId`. |
 | `/api/tournaments` | POST | required | Create. Enforces §9. Returns the tournament. |
 | `/api/tournaments/:id` | GET | none (optional bearer) | Detail + `poolCount`, `locked`, `poolsByOrigin` (organizer/moderator only), `viewer` (bearer only: `isOrganizer`, `isModerator`, `hasPool`, `poolId`, deck summary). |
 | `/api/tournaments/:id` | PATCH | organizer / moderator | Partial update: `name`, `description`, `startsAt`, `endsAt`, `bgaUrl` (unlocked only), `config` (unlocked only, atomic `WHERE NOT EXISTS (pool)`), `action: cancel\|restore\|close\|reopen\|detach` (`detach` moderator only). 409 `tournament_locked` when a locked field is sent, 409 `tournament_detached` on a detached tournament, 409 `bga_tournament_taken` when the new link is already declared. |
@@ -327,9 +327,9 @@ Routes (added to `App.jsx`; `/tournament/pools/:id` and the other existing route
 | Route | Page | Notes |
 | --- | --- | --- |
 | `/tournament` | `TournamentMenu.jsx` (reworked) | Public sections "Upcoming" and "Ongoing"; "Create a tournament" (login prompt if logged out); "My tournaments" (bound pools, registered ones first, with the tournament name/status); the generic "Prepare my next tournament" moved to a small block at the bottom. |
-| `/tournament/new` | `TournamentForm.jsx` | Create mode. Live validation (`src/lib/tournamentForm.js` `tournamentFormIssues`, the API's own pure checks + a duplicate-link check against the public list): the submit button sits in a bar stuck to the bottom of the screen, disabled while problems remain, with the list of problems next to it (each one jumps to its field). |
+| `/tournament/new` | `TournamentForm.jsx` | Create mode. Live validation (`src/lib/tournamentForm.js` `tournamentFormIssues`, the API's own pure checks + a duplicate-link lookup, `GET /api/tournaments?bgaId=`, debounced while typing; the unique index + 409 on submit stay the real guard): the submit button sits in a bar stuck to the bottom of the screen, disabled while problems remain, with the list of problems next to it (each one jumps to its field). |
 | `/tournament/t/:id` | `TournamentDetail.jsx` | Header, description, checklist, organizer panel. |
-| `/tournament/t/:id/edit` | `TournamentForm.jsx` | Edit mode; config section disabled when locked. |
+| `/tournament/t/:id/edit` | `TournamentForm.jsx` | Edit mode; config section disabled when locked. Nothing of the form renders until `GET /api/tournaments/:id` (its `viewer` block) says the viewer may edit; anyone else goes straight to the tournament page (the PATCH is refused server-side anyway, 403). |
 | `/tournament/t/:id/pool` | `TournamentPoolPage.jsx` | `TournamentPoolView` with `load = fetchTournamentPool(id)`, back link to the tournament. |
 
 `TournamentForm.jsx` composition (lot 1):
@@ -346,8 +346,9 @@ Routes (added to `App.jsx`; `/tournament/pools/:id` and the other existing route
   faction-range availability driving a disabled state + hint for sets without data.
 - Live validation (decided after the first recette: errors far from the submit button went
   unnoticed): `tournamentFormIssues` runs the same pure checks as the API on every change, plus
-  a duplicate-link check against `GET /api/tournaments?status=all` (detached declarations
-  excluded). The submit button lives in a bar stuck to the bottom of the viewport; while
+  a targeted duplicate-link lookup, `GET /api/tournaments?bgaId=` (one request per typed
+  BGA id, debounced 350 ms; detached declarations excluded). The server's unique index + 409
+  on submit stay the real guard (a tournament declared between the check and the submit). The submit button lives in a bar stuck to the bottom of the viewport; while
   problems remain it is disabled (tooltip = the list) and the bar lists them, each one
   scrolling to and focusing its field. Inline messages appear once a field is touched. Server
   refusals (a link declared meanwhile, 429, …) show in the same bar.
