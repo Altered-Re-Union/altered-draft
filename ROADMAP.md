@@ -394,7 +394,14 @@ URL/key it's pointed at).
 **receipt-required** workflow in BGA; provisioning the `altered-draft` Scaleway Project (`pulumi up`) and
 adding it to the `preprod-1`/`prod-2` host manifests (manual infra step, not done by Claude — see "✅ Built").
 
-### 2. Re:Union (Altered Reunion) account integration — core SHIPPED; site-plugin thread POSTPONED
+### 2. User-created sealed tournaments (Oct 2026)
+Any Re:Union account declares a sealed tournament (BGA link, dates, sealed config); players prepare a stored, one-shot pool for it and BGA's unchanged deck-list call finds it. Spec: `docs/tournaments/user-tournaments-spec.md`.
+- **Lot 1 — shipped** (branch `feat/user-tournaments`): registry + attached stored pools, 7 boosters of one set + the tournament unique knobs + ban list, BGA resolution order, public list, create/edit/cancel/close/delete, checklist page, moderators via env. Plan: `docs/tournaments/user-tournaments-lot1-plan.md`.
+- **Lot 2 — next**: full Lobby options (cubes incl. paste + Re:Union decks, multi-set, live random uniques — also lifts the FUGUE limit) through a shared "Cards" step.
+- **Lot 3 — after**: Home "Sealed set 6" block → generic "Tournaments", polish, optional purge of long-ended boosters.
+- **Open verifications:** (1) on a real multi-stage BGA tournament, the public URL's `id` must equal the `tournamentParentId` altered-bga-api forwards; (2) Re:Union to create/assign the moderator realm role (until then, the `TOURNAMENT_MODERATORS` allowlist).
+
+### 3. Re:Union (Altered Reunion) account integration — core SHIPPED; site-plugin thread POSTPONED
 Connect the app to the **official Re:Union identity** so logged-in users can push their
 drafted deck straight into their account. This does NOT mean building our own accounts
 (see Dropped) — Re:Union owns the identity layer (Keycloak), DB, and auth; we're a client.
@@ -556,7 +563,7 @@ it. Verify-on-deploy is sufficient. Kept below for reference only if a future sc
   to ship its own. Card-fetch stays isolated in `cardData.js` so swapping later would be a small
   adapter change if it ever becomes worthwhile.
 
-### 3. Uniques — dying-API dependency REMOVED ✅ (bundling now just an offline hedge)
+### 4. Uniques — dying-API dependency REMOVED ✅ (bundling now just an offline hedge)
 **✅ Shipped (June 2026):** `fetchUnique` was the last live caller of the retiring
 `api.altered.gg` (hit for any non-bundled unique or non-EN locale). Repointed it to
 **`cards.alteredcore.org/api/cards?reference=<ref>`** — the durable community API that resolves
@@ -622,7 +629,7 @@ Prioritise refs from the community cubes people are actually pasting. Needs Node
   superseded if Re:Union ships its own card-data + image API (1🔴), but that's not guaranteed.
 - Possible enhancement: accept a pasted list of unique refs and snapshot them on demand.
 
-### 4. Import Marcus' cube (data-only) — ON HOLD until functionality feedback (user's call, Jun 2026)
+### 5. Import Marcus' cube (data-only) — ON HOLD until functionality feedback (user's call, Jun 2026)
 A cube by a game designer (MarcusK, engaged on Discord). Add it the manual way, like LuigiNico's.
 **On hold:** new cubes wait until there's user feedback on the recently-shipped functionality
 (free-hero pool, full boosters, Re:Union save, etc.) — no point importing more cubes before the

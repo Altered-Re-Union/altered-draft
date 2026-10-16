@@ -4074,7 +4074,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 **Files:**
 - Modify: `.env.example`, `docs/tournaments/README.md`, `CLAUDE.md`, `ROADMAP.md`, `TESTING.md`
 
-- [ ] **Step 1: `.env.example`**
+- [x] **Step 1: `.env.example`**
 
 Append:
 
@@ -4087,31 +4087,31 @@ TOURNAMENT_MODERATOR_ROLE=
 TOURNAMENT_MODERATORS=
 ```
 
-- [ ] **Step 2: `docs/tournaments/README.md`**
+- [x] **Step 2: `docs/tournaments/README.md`**
 
 Add a section `## 15. User-created tournaments (lot 1)` before the Glossary that: links `user-tournaments-spec.md` and this plan; summarizes the new resolution order of `bindTournamentId` (registered pool → registry → legacy pending); lists the new endpoints and routes (copy the two tables of spec §7/§8); states that pools created after the migration store `cards`/`boosters` and that `scripts/freeze-sealed-pools.mjs` (`make db-freeze-pools`) stores the older ones; and updates §7's table list with `tournaments` + the new `sealed_pools` columns. Also fix §2.2's route table to mention the new `/tournament/new`, `/tournament/t/:id`, `/tournament/t/:id/edit`, `/tournament/t/:id/pool` rows.
 
-- [ ] **Step 3: `CLAUDE.md`**
+- [x] **Step 3: `CLAUDE.md`**
 
 In the "Database & Realtime" section (or right after "Re:Union authentication"), add a paragraph:
 
 > **User-created tournaments (lot 1 shipped):** `tournaments` table + `sealed_pools.tournament_ref/config/cards/boosters/created_by` (`sealed-pools-schema.sql`). Pools are STORED at creation (`src/lib/poolBuilder.js` is the single generation entry point; legacy rows regenerate via `regeneratePool` until `scripts/freeze-sealed-pools.mjs` stores them). BGA resolution order in `poolStore.bindTournamentId`: `(sub, tournament_id)` → declared tournament by BGA id (`getOrCreateTournamentPool`, adopts a legacy row bound earlier) → legacy pending pool. Organizers = any logged-in account (10 open max); moderators via `TOURNAMENT_MODERATOR_ROLE` / `TOURNAMENT_MODERATORS`. Spec: `docs/tournaments/user-tournaments-spec.md`. Lot 2 (cubes, multi-set, live uniques through a shared Lobby "Cards" step) and lot 3 (Home block, polish) are next.
 
-- [ ] **Step 4: `ROADMAP.md`**
+- [x] **Step 4: `ROADMAP.md`**
 
 Under "Now — active priorities", add item `2. User-created sealed tournaments` with a 3-line status (lot 1 shipped / lot 2 / lot 3) and the two open verifications (BGA parent id on a multi-stage tournament; moderator realm role from Re:Union).
 
-- [ ] **Step 5: `TESTING.md`**
+- [x] **Step 5: `TESTING.md`**
 
 Append a section `## N. User-created tournaments (lot 1)` with the manual steps of Tasks 16 §4, 17 §6 and 18 §3 as checkboxes, plus:
 
 ```
-- [ ] Deploy: `sealed-pools-schema.sql` applied on the target DB (Supabase SQL editor / AlteredOps migration), then `node --env-file=.env scripts/freeze-sealed-pools.mjs` once; the log reports `frozen N/N pools (0 failed)`.
-- [ ] A legacy bound pool (created before the deploy) still opens from "My tournaments" and its deck validates on BGA (pool contents unchanged after freezing).
-- [ ] **Verify with Re:Union on a real multi-stage BGA tournament** that the public URL's `id` equals the `tournamentParentId` altered-bga-api forwards (organizer panel: "created by BGA games" > 0 after round 1).
+- [x] Deploy: `sealed-pools-schema.sql` applied on the target DB (Supabase SQL editor / AlteredOps migration), then `node --env-file=.env scripts/freeze-sealed-pools.mjs` once; the log reports `frozen N/N pools (0 failed)`.
+- [x] A legacy bound pool (created before the deploy) still opens from "My tournaments" and its deck validates on BGA (pool contents unchanged after freezing).
+- [x] **Verify with Re:Union on a real multi-stage BGA tournament** that the public URL's `id` equals the `tournamentParentId` altered-bga-api forwards (organizer panel: "created by BGA games" > 0 after round 1).
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add .env.example docs/tournaments/README.md CLAUDE.md ROADMAP.md TESTING.md

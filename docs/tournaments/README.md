@@ -23,7 +23,8 @@ Table of contents
 11. [Local development and testing](#11-local-development-and-testing)
 12. [Invariants, pitfalls, and how to extend](#12-invariants-pitfalls-and-how-to-extend)
 13. [History and design decisions](#13-history-and-design-decisions)
-14. [Glossary](#14-glossary)
+14. [User-created tournaments (lot 1)](#14-user-created-tournaments-lot-1)
+15. [Glossary](#15-glossary)
 
 ---
 
@@ -84,13 +85,18 @@ a "tournament ended" signal, automated cleanup of old pools.
 
 ### 2.2 Pages in altered-draft
 
-All tournament pages require a Re:Union login. Logged-out visitors get a "Connect"
-button that returns them to the same page after login.
+All tournament pages require a Re:Union login, except the public list of declared tournaments
+(`/tournament`) and a tournament's page (`/tournament/t/:id`). Logged-out visitors get a
+"Connect" button that returns them to the same page after login.
 
 | Route | Page component | What the player sees |
 | --- | --- | --- |
 | `/` | `Home.jsx` | A **"Sealed set 6"** block with two image buttons: **Tournaments** (→ `/tournament`) and **Normal mode** (→ `/tournament/normal`). |
-| `/tournament` | `TournamentMenu.jsx` | A notice linking to the BGA tournament list (game id 1909 = Altered), the **"Prepare my next tournament"** button (→ `/tournament/prep`), and **"My ongoing tournaments"**: every bound tournament pool, most recent first, with the tournament name, bind date, deck name and card count, and a **"Change my deck"** link (→ `/tournament/pools/:id`). |
+| `/tournament` | `TournamentMenu.jsx` | A notice linking to the BGA tournament list (game id 1909 = Altered); the public **"Upcoming"** / **"Ongoing"** lists of declared tournaments and a **"Create a tournament"** button (§14); **"My tournaments"**: every bound tournament pool, most recent first, with the tournament name (and the declared tournament's status), deck name and card count, and a **"Change my deck"** link (→ `/tournament/t/:id/pool` for a declared tournament, `/tournament/pools/:id` otherwise); the generic **"Prepare my next tournament"** button (→ `/tournament/prep`) in a small block at the bottom. |
+| `/tournament/new` | `TournamentForm.jsx` | Declare a tournament (§14). |
+| `/tournament/t/:id` | `TournamentDetail.jsx` | A declared tournament: description, dates, 3-step checklist, organizer panel (§14). Public. |
+| `/tournament/t/:id/edit` | `TournamentForm.jsx` | Edit a declared tournament (organizer / moderator). |
+| `/tournament/t/:id/pool` | `TournamentPoolPage.jsx` → `TournamentPoolView` | The player's pool for a declared tournament (get-or-create). |
 | `/tournament/prep` | `TournamentPrep.jsx` → `TournamentPoolView` | The player's single *pending* tournament pool. **No reset button**: this is the one-shot commitment. |
 | `/tournament/normal` | `TournamentNormal.jsx` → `TournamentPoolView` | The player's single casual pool (for non-tournament BGA sealed games). Has a **"Reset pool"** button with a **30-minute cooldown** (live countdown). |
 | `/tournament/pools/:id` | `TournamentBoundDetail.jsx` → `TournamentPoolView` | One bound tournament pool, to edit the deck between games. Title = the tournament name. |
@@ -527,6 +533,11 @@ erDiagram
     boolean heroes_in_pool "snapshot"
     int guaranteed_uniques "snapshot"
     text nonce "random uuid, part of the seed"
+    uuid tournament_ref FK "declared tournament (§14)"
+    jsonb config "config snapshot (§14)"
+    jsonb cards "stored pool { ref: count } (§14)"
+    jsonb boosters "stored boosters string[][] (§14)"
+    text created_by "page | bga | legacy"
     text tournament_id "null = pending; set once"
     text tournament_name "informative, refreshable"
     timestamptz bound_at
@@ -538,6 +549,23 @@ erDiagram
     int deck_card_quantity
     timestamptz created_at
   }
+  tournaments {
+    uuid id PK
+    text name
+    text description
+    text format "sealed"
+    text bga_url "canonical link"
+    text bga_tournament_id "unique"
+    timestamptz starts_at
+    timestamptz ends_at "optional"
+    text organizer_sub
+    text organizer_name
+    jsonb config
+    timestamptz cancelled_at
+    timestamptz ended_at "manual close"
+    timestamptz created_at
+    timestamptz updated_at
+  }
   sealed_pool_games {
     uuid pool_id PK,FK
     text game_id PK "BGA gameId"
@@ -545,6 +573,7 @@ erDiagram
   }
   current_format ||..o{ sealed_pools : "snapshotted at insert (no FK)"
   sealed_pools ||--o{ sealed_pool_games : "games played"
+  tournaments ||--o{ sealed_pools : "attached pools (tournament_ref)"
 ```
 
 Indexes and what they enforce:
@@ -555,6 +584,8 @@ Indexes and what they enforce:
 | `sealed_pools_one_pending_tournament_per_sub` | unique `(sub) WHERE kind = 'tournament' AND tournament_id IS NULL` | **One-shot commitment**: one pending pool per player. |
 | `sealed_pools_one_binding_per_sub_per_tournament` | unique `(sub, tournament_id) WHERE tournament_id IS NOT NULL` | One pool per player per tournament (many players share a tournament id). |
 | `sealed_pools_bound_tournaments` | `(sub, bound_at DESC) WHERE kind = 'tournament' AND tournament_id IS NOT NULL` | "My ongoing tournaments" listing. |
+| `sealed_pools_one_per_sub_per_tournament_ref` | unique `(sub, tournament_ref) WHERE tournament_ref IS NOT NULL` | One pool per player per declared tournament (§14). |
+| `tournaments_bga_tournament_id` | unique `(bga_tournament_id)` | One declared tournament per BGA tournament, cancelled ones included. |
 | `sealed_pool_games` PK | `(pool_id, game_id)` | Games-played dedup. |
 
 Conventions:
@@ -1003,13 +1034,85 @@ flags; a normal-pool reset deletes the deck to keep decks-api caching simple; on
 
 ---
 
-## 14. Glossary
+## 14. User-created tournaments (lot 1)
+
+Any logged-in Re:Union account can now **declare a sealed tournament** (name, description,
+mandatory BGA link, start, optional end, sealed configuration) instead of a developer
+changing `current_format`. Design: [`user-tournaments-spec.md`](user-tournaments-spec.md);
+implementation plan: [`user-tournaments-lot1-plan.md`](user-tournaments-lot1-plan.md). Lot 1
+covers `source.type = 'set'` only (7 boosters of one visible set, heroes in boosters or free
+choice, exact uniques inside boosters, guaranteed uniques outside, even factions, ban list).
+
+### 14.1 Stored pools
+
+Every pool created after the lot-1 migration **stores what it generated** (`sealed_pools.cards`
+= `{ ref: count }`, `boosters` = `string[][]`, `config` = the config snapshot,
+`created_by` = `'page' | 'bga' | 'legacy'`). `src/lib/poolBuilder.js` (`buildPool`) is the
+single generation entry point (same deterministic output as §4 for a legacy config, plus
+`excludeBanlist`); generation runs **before** the `INSERT … ON CONFLICT DO NOTHING RETURNING *`,
+so a card-data failure writes nothing. Reads go through `loadPool(sub, row)`
+(`api/_lib/tournamentPool.js`): stored contents when `row.cards` is set, else §4's
+regeneration (legacy rows). `scripts/freeze-sealed-pools.mjs` (`make db-freeze-pools`, or
+`node --env-file=.env scripts/freeze-sealed-pools.mjs`) stores the older rows once after the
+migration — from then on no pool depends on the upstream set file's order. Idempotent.
+
+### 14.2 BGA resolution order
+
+`poolStore.bindTournamentId(sub, bgaId, bgaName)`, called by `/api/tournament-bga-decklist` and
+`/api/tournament-pool-counts`, now resolves in this order:
+
+1. **The player's row for `(sub, tournament_id = bgaId)`** → returned. Legacy-bound rows still
+   get `tournament_name` refreshed from BGA; pools of a declared tournament keep the
+   altered-draft name.
+2. **A declared tournament with `bga_tournament_id = bgaId`** (whatever its status) →
+   `getOrCreateTournamentPool(sub, tournament, { createdBy: 'bga' })`: the player's attached
+   pool, else a legacy pool already bound to that BGA id (adopted, never replaced), else a new
+   stored pool from the tournament's config. Registered pools are created **pre-bound**
+   (`tournament_id` = the BGA id, `bound_at` = creation), so step 1 finds them afterwards.
+   Races on either unique index re-select the winner's row.
+3. **Otherwise** → the legacy pending preparation pool is bound, exactly as in §5.
+
+### 14.3 Endpoints
+
+| Endpoint | Method | Auth | Purpose |
+| --- | --- | --- | --- |
+| `/api/tournaments` | GET | none (optional bearer) | List. `?status=upcoming\|ongoing\|open\|all` (`open` = upcoming + ongoing, the default), ordered by `starts_at`. With a bearer: each item carries `viewer.hasPool` / `viewer.poolId`. |
+| `/api/tournaments` | POST | required | Create. Enforces spec §9 (10 open tournaments per account, moderators exempt). Returns the tournament. |
+| `/api/tournaments/:id` | GET | none (optional bearer) | Detail + `poolCount`, `locked`, `poolsByOrigin` (organizer/moderator only), `viewer` (bearer only). |
+| `/api/tournaments/:id` | PATCH | organizer / moderator | Partial update: `name`, `description`, `startsAt`, `endsAt`, `bgaUrl` (unlocked only), `config` (unlocked only, atomic), `action: cancel\|restore\|close\|reopen`. 409 `tournament_locked` when a locked field is sent. |
+| `/api/tournaments/:id` | DELETE | organizer / moderator | 409 `tournament_has_pools` unless zero pools. |
+| `/api/tournaments/:id/pool` | GET | required | Get-or-create the caller's pool (`createdBy: 'page'`). 409 `tournament_closed` when cancelled/ended **and** no pool exists yet. |
+| `/api/tournament-bound-pools` | GET | required | Unchanged shape + `tournament: { id, name, startsAt, status } \| null` per pool. |
+| `/api/tournament-bga-decklist`, `/api/tournament-pool-counts`, `/api/tournament-pool-by-deck`, `/api/tournament-pool` | — | — | **Unchanged contracts.** Internally they go through §14.2 / `loadPool`. |
+
+A public GET carrying an expired bearer gets the anonymous view, never a 401. Moderators: the
+access token's `realm_access.roles` contains `TOURNAMENT_MODERATOR_ROLE`, or the `sub` is in
+`TOURNAMENT_MODERATORS` (both optional env vars, see `.env.example`); roles are read from the
+token payload only after userinfo accepted that token (`api/_lib/auth.js` `verifyUser`).
+
+### 14.4 Routes
+
+| Route | Page | Notes |
+| --- | --- | --- |
+| `/tournament` | `TournamentMenu.jsx` (reworked) | Public "Upcoming" and "Ongoing" lists; "Create a tournament" (login prompt if logged out); "My tournaments" (bound pools, with the declared tournament's status); the generic "Prepare my next tournament" moved to a small block at the bottom. |
+| `/tournament/new` | `TournamentForm.jsx` | Create mode. |
+| `/tournament/t/:id` | `TournamentDetail.jsx` | Header, description, 3-step checklist (register on BGA → open your pool → build your deck), organizer panel. |
+| `/tournament/t/:id/edit` | `TournamentForm.jsx` | Edit mode; BGA link + config disabled once a pool exists. |
+| `/tournament/t/:id/pool` | `TournamentPoolPage.jsx` | `TournamentPoolView` with `load = fetchTournamentPool(id)`, back link to the tournament. |
+
+Status is derived, never stored: `cancelled` (cancelled_at) > `ended` (ended_at, or ends_at
+reached) > `ongoing` (starts_at reached) > `upcoming`. Cancelled and ended tournaments stay
+editable; only pool existence locks the BGA link and the config.
+
+---
+
+## 15. Glossary
 
 | Term | Meaning |
 | --- | --- |
 | **sub** | Keycloak subject (user id). The owner key of every pool. |
 | **nonce** | Random UUID minted once per pool; the only secret-ish input of the seed. |
-| **pool** | A player's sealed card pool. Never stored, always regenerated. |
+| **pool** | A player's sealed card pool. Stored on the row at creation since lot 1 (§14.1); older rows are regenerated until frozen. |
 | **normal pool** | The single casual pool per player (`kind = normal`), resettable with a cooldown. |
 | **pending / preparation pool** | A `kind = tournament` pool with `tournament_id IS NULL`. At most one per player. |
 | **bound pool** | A tournament pool with `tournament_id` set; immutable. |

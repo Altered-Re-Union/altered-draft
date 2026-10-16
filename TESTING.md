@@ -63,6 +63,35 @@ room link in a second tab as a 2nd player). Tick as you go.
 - [ ] **Re:Union**: connect, load a deck as a cube, **save pool + deck** still work.
 - [ ] **Mobile** (narrow window): wizard, draft pack grid, and the Winston board are usable.
 
+## 9. User-created tournaments (lot 1)
+Local: `make dev` (+ altered-dev-environment for login, users `alice` / `bob`). Apply the schema first (`make db-migrate`).
+
+**Form (`/tournament/new`)**
+- [ ] As `alice`: name "Test cup", paste `https://fr.boardgamearena.com/tournament/?id=123456` → green "Tournament id 123456 detected". Pick Skybound Odyssey, leave uniques 1/1, submit → redirect to `/tournament/t/<id>`; `curl -s localhost:8080/api/tournaments | jq '.tournaments[0] | {name, bgaTournamentId, status}'` shows the row.
+- [ ] Submit again with the same link in a new form → "A tournament already exists for this BGA link." under the link field.
+- [ ] Start set to yesterday → "The start must be a valid date in the future." without a request (network tab idle).
+- [ ] Pick Neverending Journey → the unique steppers are disabled with the "No unique data…" hint; submitting succeeds with 0 uniques.
+
+**Tournament page (`/tournament/t/:id`)**
+- [ ] Logged out: header, dates in your timezone, summary line; step 2 shows "Connect to prepare your pool"; no organizer panel.
+- [ ] As `alice` (organizer): organizer panel with "0 from this site · 0 created by BGA games", Delete enabled.
+- [ ] "Open my pool" → `/tournament/t/<id>/pool`: the pack reveal shows 7 boosters + the guaranteed unique; title "Test cup"; the back link returns to the tournament page where step 2 is ticked and the panel reads "1 from this site"; Delete is disabled with the tooltip.
+- [ ] As `bob` in another browser → "Open my pool" → a different pool; `alice`'s page shows "2 pools prepared".
+- [ ] As `alice`: Edit → Cards/Settings and the BGA link are disabled with the locked notice; renaming works. Cancel → pill "Cancelled", step 2 for a third account shows "Pool creation is closed"; the organizer panel and Edit stay available while cancelled (rename works); Restore brings it back.
+- [ ] BGA path: `curl -s "http://localhost:8080/api/tournament-bga-decklist?tournamentId=123456&tournamentName=X&gameId=g1" -H "Authorization: Bearer $TOKEN"` for an account without a pool → one `hydra:member` named "Random Test cup"; the organizer panel shows "1 created by BGA games"; that account's "My tournaments" lists "Test cup".
+
+**Menu (`/tournament`)**
+- [ ] Logged out: "Upcoming tournaments" shows the "Test cup" card (status pill, local start time, summary, organizer, pool count); Create sends to login; "My tournaments" is replaced by the Connect box.
+- [ ] As `alice`: the card shows "✓ Your pool is ready"; "My tournaments" lists "Test cup" with its pill and "Change my deck" → `/tournament/t/<id>/pool`; "Prepare my next tournament" sits at the bottom in a small block.
+- [ ] Edit the start to yesterday (as organizer) → the card moves to "Ongoing tournaments".
+
+**Regression / deploy**
+- [ ] Lobby → Sealed → Cards: the set grid looks and toggles as before (select, click again to deselect, Next disabled until a set is chosen); Sealed settings still show the card-language row.
+- [ ] Deploy: `sealed-pools-schema.sql` applied on the target DB (Supabase SQL editor / AlteredOps migration), then `node --env-file=.env scripts/freeze-sealed-pools.mjs` once; the log reports `frozen N/N pools (0 failed)`.
+- [ ] A legacy bound pool (created before the deploy) still opens from "My tournaments" and its deck validates on BGA (pool contents unchanged after freezing).
+- [ ] **Verify with Re:Union on a real multi-stage BGA tournament** that the public URL's `id` equals the `tournamentParentId` altered-bga-api forwards (organizer panel: "created by BGA games" > 0 after round 1).
+- [ ] Vercel preview: the nested route `api/tournaments/[id]/pool.js` answers (only exercised through Express in the tests).
+
 ---
 
 ### Notes / things to watch — RESOLVED (fixed/verified, no need to re-check)
