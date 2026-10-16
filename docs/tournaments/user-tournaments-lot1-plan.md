@@ -2793,7 +2793,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 
 > No component test harness in the repo. Verified by `npm run build` and the manual check below.
 
-- [ ] **Step 1: Create `src/components/SetPresetGrid.jsx`**
+- [x] **Step 1: Create `src/components/SetPresetGrid.jsx`**
 
 ```jsx
 import { SETS } from '../lib/cardData.js'
@@ -2838,7 +2838,7 @@ export default function SetPresetGrid({ selected, onSelect, disabled = false }) 
 }
 ```
 
-- [ ] **Step 2: Use it in the Lobby**
+- [x] **Step 2: Use it in the Lobby**
 
 In `src/pages/Lobby.jsx`, replace the whole `<div className="grid grid-cols-1 sm:grid-cols-2 gap-3"> … </div>` block inside the PRESETS TAB (keep the hint `<p>` above it) with:
 
@@ -2853,7 +2853,7 @@ Add `import SetPresetGrid from '../components/SetPresetGrid.jsx'` next to the ot
 Run: `npm run build`, then `make dev`, create a room, choose Sealed → Cards.
 Expected: the set grid looks and toggles exactly as before (select, click again to deselect, "Next" disabled until a set is chosen).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/components/SetPresetGrid.jsx src/pages/Lobby.jsx
