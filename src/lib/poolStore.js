@@ -11,6 +11,7 @@ import crypto from 'node:crypto'
 import { query } from './db.js'
 import { buildPool, buildPoolSeedString } from './poolBuilder.js'
 import { configFromLegacyFormat, legacyColumnsFromConfig } from './tournamentConfig.js'
+import { getTournamentByBgaId } from './tournamentStore.js'
 // Re-exported: api/_lib/tournamentPool.js and the freeze script import it from here.
 export { buildPoolSeedString }
 
@@ -136,6 +137,47 @@ export async function getOrCreatePreparationPool(sub, { createdBy = 'page' } = {
   return retry.rows[0]
 }
 
+/** The caller's pool for a declared tournament, owner-scoped. */
+export async function getPoolForTournament(sub, tournamentId) {
+  const { rows } = await query('SELECT * FROM sealed_pools WHERE sub = $1 AND tournament_ref = $2', [sub, tournamentId])
+  return rows[0] ?? null
+}
+
+/**
+ * Get-or-create the player's pool for a declared tournament (spec §6). Order:
+ *  1. an existing attached pool;
+ *  2. a LEGACY pool already bound to the tournament's BGA id (the tournament was declared
+ *     after BGA started binding) — adopted, never replaced: its deck is already in play;
+ *  3. a fresh stored pool from the tournament's config.
+ * Two unique indexes guard creation ((sub, tournament_ref) and (sub, tournament_id)); a
+ * race can surface as ON CONFLICT DO NOTHING or as a 23505 from the other index. Both
+ * mean "someone else's row won" — re-select it.
+ */
+export async function getOrCreateTournamentPool(sub, tournament, { createdBy = 'page' } = {}) {
+  const existing = await getPoolForTournament(sub, tournament.id)
+  if (existing) return existing
+
+  const legacy = await query(
+    "SELECT * FROM sealed_pools WHERE sub = $1 AND kind = 'tournament' AND tournament_ref IS NULL AND tournament_id = $2",
+    [sub, tournament.bga_tournament_id],
+  )
+  if (legacy.rows[0]) {
+    const { rows } = await query(
+      'UPDATE sealed_pools SET tournament_ref = $2 WHERE id = $1 AND tournament_ref IS NULL RETURNING *',
+      [legacy.rows[0].id, tournament.id],
+    )
+    return rows[0] ?? getPoolForTournament(sub, tournament.id)
+  }
+
+  try {
+    const inserted = await insertPool(sub, 'tournament', { config: tournament.config, tournament, createdBy })
+    if (inserted) return inserted
+  } catch (e) {
+    if (e.code !== '23505') throw e
+  }
+  return getPoolForTournament(sub, tournament.id)
+}
+
 /**
  * Binds `tournamentId` to the player's currently-pending preparation pool (first call for
  * a given (sub, tournamentId) pair only — idempotent on repeat calls, which is the normal
@@ -150,7 +192,9 @@ export async function bindTournamentId(sub, tournamentId, tournamentName) {
     [sub, tournamentId],
   )
   if (already.rows[0]) {
-    if (tournamentName) {
+    // Pools of a DECLARED tournament keep the altered-draft name; only legacy-bound rows
+    // take BGA's (informative) name, refreshed on every call as before.
+    if (tournamentName && !already.rows[0].tournament_ref) {
       const { rows } = await query(
         'UPDATE sealed_pools SET tournament_name = $2 WHERE id = $1 RETURNING *',
         [already.rows[0].id, tournamentName],
@@ -160,7 +204,12 @@ export async function bindTournamentId(sub, tournamentId, tournamentName) {
     return already.rows[0]
   }
 
-  const pending = await getOrCreatePreparationPool(sub)
+  // A declared tournament for this BGA id (whatever its status — if BGA is playing it,
+  // every player must get the same config) creates the player's pool from ITS config.
+  const tournament = await getTournamentByBgaId(tournamentId)
+  if (tournament) return getOrCreateTournamentPool(sub, tournament, { createdBy: 'bga' })
+
+  const pending = await getOrCreatePreparationPool(sub, { createdBy: 'bga' })
 
   const { rows } = await query(
     `UPDATE sealed_pools SET tournament_id = $2, tournament_name = $3, bound_at = now()
@@ -178,12 +227,16 @@ export async function bindTournamentId(sub, tournamentId, tournamentName) {
   return retry.rows[0]
 }
 
-/** Every bound tournament pool for a player, most recent first. */
+/** Every bound tournament pool for a player (legacy-bound and declared), most recent first. */
 export async function listBoundTournamentPools(sub) {
   const { rows } = await query(
-    `SELECT * FROM sealed_pools
-     WHERE sub = $1 AND kind = 'tournament' AND tournament_id IS NOT NULL
-     ORDER BY bound_at DESC`,
+    `SELECT p.*,
+            t.name AS t_name, t.starts_at AS t_starts_at, t.ends_at AS t_ends_at,
+            t.cancelled_at AS t_cancelled_at, t.ended_at AS t_ended_at
+     FROM sealed_pools p
+     LEFT JOIN tournaments t ON t.id = p.tournament_ref
+     WHERE p.sub = $1 AND p.kind = 'tournament' AND p.tournament_id IS NOT NULL
+     ORDER BY p.bound_at DESC`,
     [sub],
   )
   return rows
@@ -241,4 +294,35 @@ export async function updateDeckSummary(poolId, { deckId, name, heroRef, faction
     [poolId, deckId, name ?? null, heroRef ?? null, faction ?? null, cardQuantity ?? null],
   )
   return rows[0] ?? null
+}
+
+/** Pool count per tournament id, for the public list. Missing ids are absent (treat as 0). */
+export async function countPoolsByTournament(ids) {
+  if (!ids.length) return {}
+  const { rows } = await query(
+    'SELECT tournament_ref, count(*)::int AS count FROM sealed_pools WHERE tournament_ref = ANY($1) GROUP BY tournament_ref',
+    [ids],
+  )
+  return Object.fromEntries(rows.map(r => [r.tournament_ref, r.count]))
+}
+
+/** How a tournament's pools were created — 'bga' = minted by a BGA deck-list call. */
+export async function countPoolsByOrigin(tournamentId) {
+  const { rows } = await query(
+    'SELECT created_by, count(*)::int AS count FROM sealed_pools WHERE tournament_ref = $1 GROUP BY created_by',
+    [tournamentId],
+  )
+  const out = { page: 0, bga: 0, legacy: 0 }
+  for (const r of rows) out[r.created_by ?? 'legacy'] = (out[r.created_by ?? 'legacy'] ?? 0) + r.count
+  return out
+}
+
+/** The caller's pools for several tournaments at once (list view): id + deck summary. */
+export async function poolSummariesForTournaments(sub, ids) {
+  if (!ids.length) return {}
+  const { rows } = await query(
+    'SELECT id, tournament_ref, deck_name, deck_card_quantity FROM sealed_pools WHERE sub = $1 AND tournament_ref = ANY($2)',
+    [sub, ids],
+  )
+  return Object.fromEntries(rows.map(r => [r.tournament_ref, { id: r.id, deckName: r.deck_name, deckCardQuantity: r.deck_card_quantity }]))
 }

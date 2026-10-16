@@ -3,7 +3,11 @@
 // buildPool returns a tiny fixed pool, which is all the SQL paths need.
 import { describe, it, expect, beforeEach, afterAll, vi } from 'vitest'
 import { query, getPool } from '../../src/lib/db.js'
-import { getOrCreateNormalPool, resetNormalPool, getOrCreatePreparationPool } from '../../src/lib/poolStore.js'
+import {
+  getOrCreateNormalPool, resetNormalPool, getOrCreatePreparationPool,
+  getOrCreateTournamentPool, getPoolForTournament, bindTournamentId, listBoundTournamentPools,
+  countPoolsByTournament, countPoolsByOrigin, poolSummariesForTournaments,
+} from '../../src/lib/poolStore.js'
 import {
   createTournament, getTournament, getTournamentByBgaId, listTournaments, countOpenTournaments,
   updateTournament, countPoolsForTournament, deleteTournamentIfNoPools, toTournamentJson,
@@ -165,5 +169,86 @@ describe('tournamentStore', () => {
     })
     expect(typeof json.startsAt).toBe('string')
     expect(json).not.toHaveProperty('organizerSub')
+  })
+})
+
+describe('tournament pools', () => {
+  it('creates a stored pool from the tournament config, attached and pre-bound to the BGA id', async () => {
+    const t = await mkTournament({ bgaTournamentId: '1001', name: 'AD name' })
+    const p = await getOrCreateTournamentPool('alice', t, { createdBy: 'page' })
+    expect(p.tournament_ref).toBe(t.id)
+    expect(p.tournament_id).toBe('1001')
+    expect(p.tournament_name).toBe('AD name')
+    expect(p.bound_at).toBeInstanceOf(Date)
+    expect(p.config.source.setCode).toBe('CYCLONE')
+    expect(p.cards['ALT_CYCLONE_B_AX_01_C']).toBe(2)
+    expect(p.created_by).toBe('page')
+    expect((await getOrCreateTournamentPool('alice', t)).id).toBe(p.id)
+    expect((await getPoolForTournament('alice', t.id)).id).toBe(p.id)
+    expect(await getPoolForTournament('bob', t.id)).toBeNull()
+  })
+
+  it('does not consume the generic pending pool, and keeps it mintable', async () => {
+    const t = await mkTournament()
+    await getOrCreateTournamentPool('alice', t)
+    const pending = await getOrCreatePreparationPool('alice')
+    expect(pending.tournament_ref).toBeNull()
+    expect(pending.tournament_id).toBeNull()
+  })
+
+  it('BGA path: a known BGA id creates from the tournament config and keeps the altered-draft name', async () => {
+    const t = await mkTournament({ bgaTournamentId: '2002', name: 'AD name' })
+    const p = await bindTournamentId('alice', '2002', 'BGA name - Stage 2')
+    expect(p.tournament_ref).toBe(t.id)
+    expect(p.tournament_name).toBe('AD name')
+    expect(p.created_by).toBe('bga')
+    const again = await bindTournamentId('alice', '2002', 'BGA name - Stage 3')
+    expect(again.id).toBe(p.id)
+    expect(again.tournament_name).toBe('AD name')
+  })
+
+  it('BGA path: an unknown BGA id still binds the legacy pending pool and takes the BGA name', async () => {
+    const pending = await getOrCreatePreparationPool('alice')
+    const bound = await bindTournamentId('alice', '3003', 'Some BGA tournament')
+    expect(bound.id).toBe(pending.id)
+    expect(bound.tournament_id).toBe('3003')
+    expect(bound.tournament_ref).toBeNull()
+    expect(bound.tournament_name).toBe('Some BGA tournament')
+  })
+
+  it('adopts a legacy pool already bound to the BGA id when the tournament is declared later', async () => {
+    const legacy = await bindTournamentId('alice', '4004', 'Early bird')
+    const t = await mkTournament({ bgaTournamentId: '4004' })
+    const p = await getOrCreateTournamentPool('alice', t)
+    expect(p.id).toBe(legacy.id)
+    expect(p.tournament_ref).toBe(t.id)
+    expect(await countPoolsByTournament([t.id])).toEqual({ [t.id]: 1 })
+  })
+
+  it('absorbs concurrent creations: one row, every caller gets it', async () => {
+    const t = await mkTournament()
+    const results = await Promise.all([
+      getOrCreateTournamentPool('alice', t, { createdBy: 'page' }),
+      getOrCreateTournamentPool('alice', t, { createdBy: 'bga' }),
+      getOrCreateTournamentPool('alice', t, { createdBy: 'page' }),
+      bindTournamentId('alice', t.bga_tournament_id, 'x'),
+    ])
+    const ids = new Set(results.map(r => r.id))
+    expect(ids.size).toBe(1)
+    const { rows } = await query('SELECT count(*)::int AS n FROM sealed_pools WHERE sub = $1', ['alice'])
+    expect(rows[0].n).toBe(1)
+  })
+
+  it('counts by origin, lists the player\'s pools per tournament, and joins the tournament into bound pools', async () => {
+    const t = await mkTournament({ name: 'Joined' })
+    await getOrCreateTournamentPool('alice', t, { createdBy: 'page' })
+    await getOrCreateTournamentPool('bob', t, { createdBy: 'bga' })
+    expect(await countPoolsByOrigin(t.id)).toEqual({ page: 1, bga: 1, legacy: 0 })
+    const mine = await poolSummariesForTournaments('alice', [t.id])
+    expect(mine[t.id]).toMatchObject({ deckName: null, deckCardQuantity: null })
+    const bound = await listBoundTournamentPools('alice')
+    expect(bound).toHaveLength(1)
+    expect(bound[0].t_name).toBe('Joined')
+    expect(bound[0].t_starts_at).toBeInstanceOf(Date)
   })
 })

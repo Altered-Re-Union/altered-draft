@@ -1533,7 +1533,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
   - `listBoundTournamentPools(sub) → rows` with extra `t_name, t_starts_at, t_ends_at, t_cancelled_at, t_ended_at` columns (LEFT JOIN)
   - `countPoolsByTournament(ids) → Record<id, number>`, `countPoolsByOrigin(tournamentId) → { page, bga, legacy }`, `poolSummariesForTournaments(sub, ids) → Record<tournamentId, { id, deckName, deckCardQuantity }>`
 
-- [ ] **Step 1: Write the failing integration tests**
+- [x] **Step 1: Write the failing integration tests**
 
 Add to the poolStore import line of `tests/integration/tournaments.test.js`:
 
@@ -1630,12 +1630,12 @@ describe('tournament pools', () => {
 })
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `npm run test:integration -- tests/integration/tournaments.test.js`
 Expected: FAIL — `getOrCreateTournamentPool` is not exported.
 
-- [ ] **Step 3: Implement in `src/lib/poolStore.js`**
+- [x] **Step 3: Implement in `src/lib/poolStore.js`**
 
 Add the import:
 
@@ -1773,12 +1773,12 @@ export async function poolSummariesForTournaments(sub, ids) {
 }
 ```
 
-- [ ] **Step 4: Run the integration tests**
+- [x] **Step 4: Run the integration tests**
 
 Run: `npm run test:integration -- tests/integration/tournaments.test.js`
 Expected: PASS, including the concurrency test (run it three times: `for i in 1 2 3; do npm run test:integration -- tests/integration/tournaments.test.js -t concurrent || break; done`).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/lib/poolStore.js tests/integration/tournaments.test.js
