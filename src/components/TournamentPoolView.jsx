@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { Link } from 'react-router-dom'
 import { fetchSet, fetchUniques, isUniqueRef } from '../lib/cardData.js'
 import { createDeck, updateDeck, toDeckCards, getDeck, deckCardsToRefs } from '../lib/decks.js'
 import { syncPoolDeck } from '../lib/tournamentApi.js'
@@ -38,7 +39,7 @@ function revealKey(pool) {
  * a deck is created in the background via decks-api and kept in sync on every
  * add/remove, throttled to one call per 2s.
  */
-export default function TournamentPoolView({ title, load, reset }) {
+export default function TournamentPoolView({ title, load, reset, backTo = null }) {
   const { t } = useLang()
   const [pool, setPool] = useState(null)
   const [cardMap, setCardMap] = useState({})
@@ -285,6 +286,11 @@ export default function TournamentPoolView({ title, load, reset }) {
         />
       )}
       <div className="w-full px-4 py-4 flex-1 flex flex-col">
+        {backTo && (
+          <Link to={backTo.to} className="text-xs text-muted hover:text-ink transition-colors mb-2 inline-block">
+            ← {backTo.label}
+          </Link>
+        )}
         <div className="flex items-center gap-3 mb-3 flex-wrap">
           <h1 className="text-xl font-display">{pool?.tournamentName || title}</h1>
           {loading ? (

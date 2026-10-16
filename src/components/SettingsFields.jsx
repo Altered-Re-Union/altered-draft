@@ -8,6 +8,7 @@ const LANGS = ['EN', 'FR', 'ES', 'DE', 'IT']
 export default function SettingsFields({
   mode = 'draft', draftFormat,
   lang, setLang,
+  showLang = true,
   heroMode, setHeroMode,
   heroCount = 3, setHeroCount, maxHeroes = 1, heroPoolSize = 0,
   timerEnabled, setTimerEnabled, timerSeconds, setTimerSeconds,
@@ -42,20 +43,22 @@ export default function SettingsFields({
 
   return (
     <div className="space-y-6">
-      {/* Card language */}
-      <div>
-        <label className="block text-sm text-muted mb-2">{t('settingsFields.cardLanguage')}</label>
-        <div className="flex gap-2 flex-wrap">
-          {LANGS.map(l => (
-            <button key={l} onClick={() => setLang(l)}
-              className={`px-3 py-1 rounded text-sm font-mono transition-colors ${lang === l
-                ? 'bg-accent text-on-accent font-bold'
-                : 'bg-surface2 hover:bg-surface3 text-ink2'}`}>
-              {l}
-            </button>
-          ))}
+      {/* Card language — hidden for tournaments (refs are language-independent) */}
+      {showLang && (
+        <div>
+          <label className="block text-sm text-muted mb-2">{t('settingsFields.cardLanguage')}</label>
+          <div className="flex gap-2 flex-wrap">
+            {LANGS.map(l => (
+              <button key={l} onClick={() => setLang(l)}
+                className={`px-3 py-1 rounded text-sm font-mono transition-colors ${lang === l
+                  ? 'bg-accent text-on-accent font-bold'
+                  : 'bg-surface2 hover:bg-surface3 text-ink2'}`}>
+                {l}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Heroes */}
       <div>

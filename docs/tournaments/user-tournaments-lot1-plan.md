@@ -2878,7 +2878,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 
 > No component test harness; verified by build + the manual checks of Tasks 16–17.
 
-- [ ] **Step 1: `showLang` in `SettingsFields.jsx`**
+- [x] **Step 1: `showLang` in `SettingsFields.jsx`**
 
 Add `showLang = true,` to the destructured props (after `lang, setLang,`) and wrap the "Card language" block:
 
@@ -2901,7 +2901,7 @@ Add `showLang = true,` to the destructured props (after `lang, setLang,`) and wr
       )}
 ```
 
-- [ ] **Step 2: Create `src/components/TournamentUniqueFields.jsx`**
+- [x] **Step 2: Create `src/components/TournamentUniqueFields.jsx`**
 
 ```jsx
 import { useLang } from '../lib/i18n/i18n.jsx'
@@ -2954,7 +2954,7 @@ export default function TournamentUniqueFields({ uniques, onChange, uniqueSuppor
 }
 ```
 
-- [ ] **Step 3: `backTo` in `TournamentPoolView.jsx`**
+- [x] **Step 3: `backTo` in `TournamentPoolView.jsx`**
 
 Change the signature to `export default function TournamentPoolView({ title, load, reset, backTo = null })` and, inside the returned JSX, insert right before `<div className="flex items-center gap-3 mb-3 flex-wrap">`:
 
@@ -2973,7 +2973,7 @@ and add `import { Link } from 'react-router-dom'` at the top.
 Run: `npm run build`
 Expected: success. Open `make dev` → a room's Sealed settings step still shows the language row (default `showLang`).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/components/SettingsFields.jsx src/components/TournamentUniqueFields.jsx src/components/TournamentPoolView.jsx
