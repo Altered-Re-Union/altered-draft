@@ -1976,7 +1976,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 - Consumes: Tasks 1, 2, 4, 6, 7, 8.
 - Produces: the endpoints of spec §7 (`GET/POST /api/tournaments`, `GET/PATCH/DELETE /api/tournaments/:id`, `GET /api/tournaments/:id/pool`); `queryParam(req, name) → string`, `jsonBody(req) → object`.
 
-- [ ] **Step 1: Write the failing integration tests**
+- [x] **Step 1: Write the failing integration tests**
 
 At the top of `tests/integration/tournaments.test.js`, add the auth mock next to the poolBuilder mock, and the handler imports:
 
@@ -2182,12 +2182,12 @@ describe('GET /api/tournaments/:id/pool', () => {
 })
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `npm run test:integration -- tests/integration/tournaments.test.js`
 Expected: FAIL — unresolved `api/tournaments/*` imports.
 
-- [ ] **Step 3: Create `api/_lib/request.js`**
+- [x] **Step 3: Create `api/_lib/request.js`**
 
 ```js
 // Small request helpers shared by handlers that run both as Vercel functions and inside
@@ -2213,7 +2213,7 @@ export function jsonBody(req) {
 }
 ```
 
-- [ ] **Step 4: Create `api/tournaments/index.js`**
+- [x] **Step 4: Create `api/tournaments/index.js`**
 
 ```js
 // User-created tournaments: public list (GET, bearer optional) and creation (POST).
@@ -2300,7 +2300,7 @@ export default async function handler(req, res) {
 }
 ```
 
-- [ ] **Step 5: Create `api/tournaments/[id].js`**
+- [x] **Step 5: Create `api/tournaments/[id].js`**
 
 ```js
 // One declared tournament: public detail (GET, bearer optional), organizer/moderator
@@ -2398,7 +2398,7 @@ export default async function handler(req, res) {
 }
 ```
 
-- [ ] **Step 6: Create `api/tournaments/[id]/pool.js`**
+- [x] **Step 6: Create `api/tournaments/[id]/pool.js`**
 
 ```js
 // The caller's pool for a declared tournament: get-or-create (spec §3.2, §6, §7).
@@ -2436,7 +2436,7 @@ export default async function handler(req, res) {
 }
 ```
 
-- [ ] **Step 7: Mount in `server/index.js`**
+- [x] **Step 7: Mount in `server/index.js`**
 
 Add the imports:
 
@@ -2454,12 +2454,12 @@ app.all('/api/tournaments/:id', routeWithParam(tournamentsItemHandler, 'id'))
 app.all('/api/tournaments/:id/pool', routeWithParam(tournamentPoolForHandler, 'id'))
 ```
 
-- [ ] **Step 8: Run both suites**
+- [x] **Step 8: Run both suites**
 
 Run: `npm test && npm run test:integration`
 Expected: PASS.
 
-- [ ] **Step 9: Smoke-test the Express mounts locally**
+- [x] **Step 9: Smoke-test the Express mounts locally**
 
 Run: `make dev` (needs Docker + the sibling dev env for a real token). Then:
 
@@ -2469,7 +2469,7 @@ curl -s http://localhost:8080/api/tournaments | head -c 200
 
 Expected: `{"tournaments":[]}` (or your dev rows). A `405` from `curl -X PUT http://localhost:8080/api/tournaments/x` confirms the `:id` mount.
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add api/_lib/request.js api/tournaments server/index.js tests/integration/tournaments.test.js
