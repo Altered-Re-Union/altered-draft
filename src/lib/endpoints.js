@@ -52,7 +52,17 @@ function fromEnv(env) {
 
 let current = typeof process !== 'undefined' && process.env ? fromEnv(process.env) : { ...DEFAULTS }
 
+// Server side the env IS the config; in the browser it's only known once loadEndpoints()
+// resolved. Reading it earlier means a module evaluated too soon (e.g. statically
+// imported by main.jsx) and froze the prod defaults — warn once, in the console.
+let loaded = typeof window === 'undefined'
+let warnedEarlyRead = false
+
 export function endpoints() {
+  if (!loaded && !warnedEarlyRead) {
+    warnedEarlyRead = true
+    console.warn('[endpoints] read before /api/config was loaded — prod defaults may get frozen into module-level constants. Is a module that uses endpoints() statically imported by main.jsx? Import it after loadEndpoints() instead.')
+  }
   return current
 }
 
@@ -86,5 +96,6 @@ export async function loadEndpoints() {
     console.warn('[endpoints] /api/config unavailable — falling back to PROD service URLs. On a local/preprod deployment, login, decks and cards will target prod until reload.')
   }
   current = merge(config)
+  loaded = true
   return current
 }

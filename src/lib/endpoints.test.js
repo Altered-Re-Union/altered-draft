@@ -40,6 +40,37 @@ describe('endpoints', () => {
     expect(publicEndpoints().cardsApiUrl).toBe('http://localhost:8889')
   })
 
+  it('warns once in the browser when read before /api/config is loaded, not after', async () => {
+    vi.stubGlobal('window', {})
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      const { endpoints, loadEndpoints } = await loadWithEnv({})
+      endpoints()
+      endpoints()
+      expect(warn).toHaveBeenCalledTimes(1)
+      expect(warn.mock.calls[0][0]).toMatch(/read before \/api\/config was loaded/)
+
+      vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({}) })))
+      await loadEndpoints()
+      warn.mockClear()
+      endpoints()
+      expect(warn).not.toHaveBeenCalled()
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  it('never warns server side', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      const { endpoints } = await loadWithEnv({})
+      endpoints()
+      expect(warn).not.toHaveBeenCalled()
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
   it('loadEndpoints applies /api/config and falls back to prod when it fails', async () => {
     const { loadEndpoints, endpoints } = await loadWithEnv({})
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ reunionUrl: 'http://localhost:18181' }) })))
