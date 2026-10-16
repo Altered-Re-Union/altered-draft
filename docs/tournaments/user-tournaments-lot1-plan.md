@@ -1257,7 +1257,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
   - `deleteTournamentIfNoPools(id) → 'deleted' | 'has_pools' | 'not_found'`.
   - `toTournamentJson(row, extras = {}) → object` (spec §7 shape without `viewer`/`poolCount`, which the handlers add through `extras`).
 
-- [ ] **Step 1: Write the failing integration tests**
+- [x] **Step 1: Write the failing integration tests**
 
 Append to the top imports of `tests/integration/tournaments.test.js`:
 
@@ -1359,12 +1359,12 @@ describe('tournamentStore', () => {
 })
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `npm run test:integration -- tests/integration/tournaments.test.js`
 Expected: FAIL — unresolved import `tournamentStore.js`.
 
-- [ ] **Step 3: Implement `src/lib/tournamentStore.js`**
+- [x] **Step 3: Implement `src/lib/tournamentStore.js`**
 
 ```js
 // Data access for user-created tournaments (docs/tournaments/user-tournaments-spec.md §4, §7).
@@ -1499,12 +1499,12 @@ export function toTournamentJson(row, extras = {}) {
 }
 ```
 
-- [ ] **Step 4: Run the integration tests**
+- [x] **Step 4: Run the integration tests**
 
 Run: `npm run test:integration -- tests/integration/tournaments.test.js`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/lib/tournamentStore.js tests/integration/tournaments.test.js
