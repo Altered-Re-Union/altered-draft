@@ -2686,7 +2686,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 
 > No unit test: the module is a thin fetch wrapper and the repo has no DOM/fetch test harness. Verified by the pages (Tasks 16–18) against `make dev`.
 
-- [ ] **Step 1: Add the functions**
+- [x] **Step 1: Add the functions**
 
 Add after `authHeaders`:
 
@@ -2766,12 +2766,12 @@ export async function fetchTournamentPool(id) {
 }
 ```
 
-- [ ] **Step 2: Build**
+- [x] **Step 2: Build**
 
 Run: `npm run build`
 Expected: vite build succeeds (no import errors).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/lib/tournamentApi.js
