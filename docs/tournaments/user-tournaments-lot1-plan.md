@@ -3493,7 +3493,7 @@ export default function TournamentForm() {
 
 `SettingsFields` is rendered without `lang`/`setLang`/timer props: they are only read inside the hidden language block and the draft-only timer block, so leaving them undefined is safe (`mode="sealed"` hides the timer).
 
-- [ ] **Step 2: Routes in `src/App.jsx`**
+- [x] **Step 2: Routes in `src/App.jsx`**
 
 Add the imports:
 
@@ -3552,7 +3552,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 
 > No component test harness; verified by build + the manual checklist in Step 6.
 
-- [ ] **Step 1: Create `src/components/TournamentBits.jsx`**
+- [x] **Step 1: Create `src/components/TournamentBits.jsx`**
 
 ```jsx
 import { SETS } from '../lib/cardData.js'
@@ -3594,7 +3594,7 @@ export function summarizeConfig(config, t, tc) {
 }
 ```
 
-- [ ] **Step 2: Create `src/components/TournamentChecklist.jsx`**
+- [x] **Step 2: Create `src/components/TournamentChecklist.jsx`**
 
 ```jsx
 import { useEffect, useState } from 'react'
@@ -3685,7 +3685,7 @@ export default function TournamentChecklist({ tournament, viewer, user, onLogin,
 }
 ```
 
-- [ ] **Step 3: Create `src/pages/TournamentDetail.jsx`**
+- [x] **Step 3: Create `src/pages/TournamentDetail.jsx`**
 
 ```jsx
 import { useCallback, useEffect, useState } from 'react'
@@ -3826,7 +3826,7 @@ export default function TournamentDetail() {
 }
 ```
 
-- [ ] **Step 4: Create `src/pages/TournamentPoolPage.jsx`**
+- [x] **Step 4: Create `src/pages/TournamentPoolPage.jsx`**
 
 ```jsx
 import { useCallback } from 'react'
@@ -3852,7 +3852,7 @@ export default function TournamentPoolPage() {
 }
 ```
 
-- [ ] **Step 5: Build**
+- [x] **Step 5: Build**
 
 Run: `npm run build`
 Expected: success (remove the Task 16 placeholders if you created them).
@@ -3866,7 +3866,7 @@ Expected: success (remove the Task 16 placeholders if you created them).
 5. As `alice`: Edit → the Cards/Settings sections and the BGA link are disabled with the locked notice; renaming works. Cancel → status pill "Cancelled", step 2 for a third account shows "Pool creation is closed"; the organizer panel and Edit are still available while cancelled (rename works); Restore brings it back.
 6. BGA path: `curl -s "http://localhost:8080/api/tournament-bga-decklist?tournamentId=123456&tournamentName=X&gameId=g1" -H "Authorization: Bearer $TOKEN_OF_CAROL"` (a third account, no pool yet) → one `hydra:member` named "Random Test cup"; the organizer panel now shows "1 created by BGA games"; carol's `/tournament` "My tournaments" lists "Test cup".
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/components/TournamentBits.jsx src/components/TournamentChecklist.jsx src/pages/TournamentDetail.jsx src/pages/TournamentPoolPage.jsx
