@@ -1,11 +1,12 @@
 // One declared tournament: public detail (GET, bearer optional), organizer/moderator
-// edits (PATCH) and hard delete when no pool exists (DELETE). Spec §3.2 / §7.
+// edits (PATCH, incl. the moderator-only `detach` action) and hard delete when no pool
+// exists (DELETE). Spec §3.2 / §7.
 import { verifyUser, bearerToken } from '../_lib/auth.js'
 import { jsonBody } from '../_lib/request.js'
 import { validateTournamentFields } from '../../src/lib/tournamentRules.js'
 import { validateTournamentConfig } from '../../src/lib/tournamentConfig.js'
 import {
-  getTournament, updateTournament, countPoolsForTournament, deleteTournamentIfNoPools, toTournamentJson,
+  getTournament, updateTournament, countPoolsForTournament, deleteTournamentIfNoPools, detachTournament, toTournamentJson,
 } from '../../src/lib/tournamentStore.js'
 import { getPoolForTournament, countPoolsByOrigin } from '../../src/lib/poolStore.js'
 
@@ -55,10 +56,25 @@ export default async function handler(req, res) {
     const body = jsonBody(req)
     const fields = {}
 
+    // A detached declaration is a frozen trace: nothing can be edited or re-attached.
+    if (row.detached_at) return res.status(409).json({ error: 'tournament_detached' })
+
+    if (body.action === 'detach') {
+      if (!user.isModerator) return res.status(403).json({ error: 'forbidden' })
+      const detached = await detachTournament(row.id)
+      if (!detached) return res.status(409).json({ error: 'tournament_detached' })
+      return res.status(200).json(await detail(detached, user))
+    }
+
     if (body.action !== undefined) {
       const action = ACTIONS[body.action]
       if (!action) return res.status(400).json({ error: 'invalid_request', fields: { action: 'unknown_action' } })
       for (const [key, value] of Object.entries(action)) fields[key] = value()
+      // Reopening a tournament whose end date has passed would leave it "ended": the
+      // reached end date goes too (a future one is kept).
+      if (body.action === 'reopen' && row.ends_at && new Date(row.ends_at) <= new Date() && body.endsAt === undefined) {
+        fields.endsAt = null
+      }
     }
 
     const validated = validateTournamentFields(body, { current: row })

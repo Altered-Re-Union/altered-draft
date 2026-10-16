@@ -70,3 +70,12 @@ describe('legacy format <-> config', () => {
     expect(configFromLegacyFormat({ ...row, guaranteed_uniques: undefined }).uniques.guaranteed).toBe(0)
   })
 })
+
+describe('validateTournamentConfig evenFactions', () => {
+  it('drops evenFactions when fewer than 2 uniques are drawn (it only means something from 2 on)', () => {
+    const one = validateTournamentConfig({ ...valid, uniques: { inBoosters: 1, guaranteed: 0, evenFactions: true } })
+    expect(one.config.uniques.evenFactions).toBe(false)
+    const two = validateTournamentConfig({ ...valid, uniques: { inBoosters: 1, guaranteed: 1, evenFactions: true } })
+    expect(two.config.uniques.evenFactions).toBe(true)
+  })
+})

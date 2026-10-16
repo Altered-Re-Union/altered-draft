@@ -175,9 +175,15 @@ create table if not exists tournaments (
   created_at        timestamptz not null default now(),
   updated_at        timestamptz not null default now()
 );
--- One altered-draft tournament per BGA tournament, cancelled ones included (a cancelled
--- tournament's pools still answer BGA for that id; reuse = restore it).
-create unique index if not exists tournaments_bga_tournament_id on tournaments (bga_tournament_id);
+-- A moderator can DETACH a declaration (someone declared a BGA tournament they don't
+-- organize): its pools are deleted and its BGA id is freed for a new declaration.
+alter table tournaments add column if not exists detached_at timestamptz;
+-- One live altered-draft tournament per BGA tournament, cancelled ones included (a cancelled
+-- tournament's pools still answer BGA for that id; reuse = restore it). Detached ones don't
+-- count: they no longer answer BGA at all.
+drop index if exists tournaments_bga_tournament_id;
+create unique index if not exists tournaments_bga_tournament_id_live
+  on tournaments (bga_tournament_id) where detached_at is null;
 create index if not exists tournaments_organizer on tournaments (organizer_sub);
 create index if not exists tournaments_starts_at on tournaments (starts_at);
 

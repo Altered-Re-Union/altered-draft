@@ -11,10 +11,12 @@ export const OPEN_STATUSES = ['upcoming', 'ongoing']
 const pick = (row, snake, camel) => row?.[snake] ?? row?.[camel] ?? null
 
 /**
- * Derived status (never stored): cancelled > ended (manual close, or ends_at reached)
- * > ongoing (starts_at reached) > upcoming. Accepts DB rows (snake_case) and API JSON.
+ * Derived status (never stored): detached (a moderator took the BGA id back) > cancelled
+ * > ended (manual close, or ends_at reached) > ongoing (starts_at reached) > upcoming.
+ * Accepts DB rows (snake_case) and API JSON.
  */
 export function tournamentStatus(row, now = new Date()) {
+  if (pick(row, 'detached_at', 'detachedAt')) return 'detached'
   if (pick(row, 'cancelled_at', 'cancelledAt')) return 'cancelled'
   if (pick(row, 'ended_at', 'endedAt')) return 'ended'
   const endsAt = pick(row, 'ends_at', 'endsAt')

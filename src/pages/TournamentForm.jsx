@@ -65,13 +65,15 @@ export default function TournamentForm() {
   const [fieldErrors, setFieldErrors] = useState({})
 
   // Edit mode: prefill from the tournament; only its organizer or a moderator may be here.
+  // Logged out, wait: the page shows the Connect prompt instead (the viewer block, which
+  // says who may edit, only comes with a bearer).
   useEffect(() => {
-    if (!isEdit) return
+    if (!isEdit || authLoading || !user) return
     let cancelled = false
     getTournament(id)
       .then(tn => {
         if (cancelled) return
-        if (!tn.viewer?.isOrganizer && !tn.viewer?.isModerator) { navigate(`/tournament/t/${id}`, { replace: true }); return }
+        if (tn.detachedAt || (!tn.viewer?.isOrganizer && !tn.viewer?.isModerator)) { navigate(`/tournament/t/${id}`, { replace: true }); return }
         setName(tn.name); setDescription(tn.description); setBgaUrl(tn.bgaUrl)
         setStartsAt(toLocalInput(tn.startsAt)); setEndsAt(toLocalInput(tn.endsAt))
         setSetCode(tn.config.source.setCode); setHeroes(tn.config.heroes)
@@ -81,7 +83,7 @@ export default function TournamentForm() {
       .catch(e => { if (!cancelled) setError(e.status === 404 ? t('tournaments.notFound') : t('tournaments.errGeneric', { msg: e.message })) })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [id, isEdit, navigate, t, user])
+  }, [id, isEdit, navigate, t, user, authLoading])
 
   const bgaParsed = useMemo(() => parseBgaTournamentUrl(bgaUrl), [bgaUrl])
   const uniqueSupport = !setCode || hasFactionRanges(setCode)

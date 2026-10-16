@@ -208,7 +208,8 @@
     <li><a href="#s11"><span class="num">11</span>Local dev &amp; testing</a></li>
     <li><a href="#s12"><span class="num">12</span>Invariants &amp; recipes</a></li>
     <li><a href="#s13"><span class="num">13</span>History</a></li>
-    <li><a href="#s14"><span class="num">14</span>Glossary</a></li>
+    <li><a href="#s14"><span class="num">14</span>User-created tournaments</a></li>
+    <li><a href="#s15"><span class="num">15</span>Glossary</a></li>
   </ol>
 </nav>
 
@@ -261,11 +262,15 @@
 </table>
 
 <h3>2.2 Pages in altered-draft</h3>
-<p>All tournament pages require a Re:Union login. Logged-out visitors get a "Connect" button that returns them to the same page after login.</p>
+<p>All tournament pages require a Re:Union login, except the public list of declared tournaments (<code>/tournament</code>) and a tournament's page (<code>/tournament/t/:id</code>). Logged-out visitors get a "Connect" button that returns them to the same page after login.</p>
 <table class="wrap">
 <tr><th>Route</th><th>Component</th><th>What the player sees</th></tr>
 <tr><td><code>/</code></td><td><code>Home.jsx</code></td><td>A <strong>"Sealed set 6"</strong> block with two image buttons: <strong>Tournaments</strong> → <code>/tournament</code> and <strong>Normal mode</strong> → <code>/tournament/normal</code>.</td></tr>
-<tr><td><code>/tournament</code></td><td><code>TournamentMenu.jsx</code></td><td>A notice linking to the BGA tournament list (game id 1909 = Altered), the <strong>"Prepare my next tournament"</strong> button (→ <code>/tournament/prep</code>), and <strong>"My ongoing tournaments"</strong>: every bound pool, most recent first, with tournament name, bind date, deck name and card count, and a <strong>"Change my deck"</strong> link (→ <code>/tournament/pools/:id</code>).</td></tr>
+<tr><td><code>/tournament</code></td><td><code>TournamentMenu.jsx</code></td><td>A notice linking to the BGA tournament list (game id 1909 = Altered); the public <strong>"Upcoming"</strong> / <strong>"Ongoing"</strong> lists of declared tournaments and a <strong>"Create a tournament"</strong> button (<a href="#s14">§14</a>); <strong>"My tournaments"</strong>: every bound tournament pool, declared tournaments first then most recent first, with the tournament name (and the declared tournament's status), deck name and card count, and a <strong>"Change my deck"</strong> link (→ <code>/tournament/t/:id/pool</code> for a declared tournament, <code>/tournament/pools/:id</code> otherwise); the generic <strong>"Prepare my next tournament"</strong> button (→ <code>/tournament/prep</code>) in a small block at the bottom.</td></tr>
+<tr><td><code>/tournament/new</code></td><td><code>TournamentForm.jsx</code></td><td>Declare a tournament (<a href="#s14">§14</a>).</td></tr>
+<tr><td><code>/tournament/t/:id</code></td><td><code>TournamentDetail.jsx</code></td><td>A declared tournament: description, dates, 3-step checklist, organizer panel (<a href="#s14">§14</a>). Public.</td></tr>
+<tr><td><code>/tournament/t/:id/edit</code></td><td><code>TournamentForm.jsx</code></td><td>Edit a declared tournament (organizer / moderator).</td></tr>
+<tr><td><code>/tournament/t/:id/pool</code></td><td><code>TournamentPoolPage.jsx</code> → <code>TournamentPoolView</code></td><td>The player's pool for a declared tournament (get-or-create).</td></tr>
 <tr><td><code>/tournament/prep</code></td><td><code>TournamentPrep.jsx</code> → <code>TournamentPoolView</code></td><td>The player's single <em>pending</em> tournament pool. <strong>No reset button</strong>: the one-shot commitment.</td></tr>
 <tr><td><code>/tournament/normal</code></td><td><code>TournamentNormal.jsx</code> → <code>TournamentPoolView</code></td><td>The single casual pool (non-tournament BGA sealed games). <strong>"Reset pool"</strong> with a <strong>30-minute cooldown</strong> and a live countdown.</td></tr>
 <tr><td><code>/tournament/pools/:id</code></td><td><code>TournamentBoundDetail.jsx</code> → <code>TournamentPoolView</code></td><td>One bound tournament pool, to edit the deck between games. Title = tournament name.</td></tr>
@@ -611,6 +616,11 @@ erDiagram
     boolean heroes_in_pool "snapshot"
     int guaranteed_uniques "snapshot"
     text nonce "random uuid, part of the seed"
+    uuid tournament_ref FK "declared tournament (§14)"
+    jsonb config "config snapshot (§14)"
+    jsonb cards "stored pool { ref: count } (§14)"
+    jsonb boosters "stored boosters string[][] (§14)"
+    text created_by "page | bga | legacy"
     text tournament_id "null = pending; set once"
     text tournament_name "informative, refreshable"
     timestamptz bound_at
@@ -622,6 +632,24 @@ erDiagram
     int deck_card_quantity
     timestamptz created_at
   }
+  tournaments {
+    uuid id PK
+    text name
+    text description
+    text format "sealed"
+    text bga_url "canonical link"
+    text bga_tournament_id "unique"
+    timestamptz starts_at
+    timestamptz ends_at "optional"
+    text organizer_sub
+    text organizer_name
+    jsonb config
+    timestamptz cancelled_at
+    timestamptz ended_at "manual close"
+    timestamptz detached_at "moderator detach, frees the BGA id"
+    timestamptz created_at
+    timestamptz updated_at
+  }
   sealed_pool_games {
     uuid pool_id PK,FK
     text game_id PK "BGA gameId"
@@ -629,6 +657,7 @@ erDiagram
   }
   current_format ||..o{ sealed_pools : "snapshotted at insert (no FK)"
   sealed_pools ||--o{ sealed_pool_games : "games played"
+  tournaments ||--o{ sealed_pools : "attached pools (tournament_ref)"
 </script>
 <div class="render"></div><pre class="fallback"></pre>
 </figure>
@@ -638,6 +667,8 @@ erDiagram
 <tr><td><code>sealed_pools_one_pending_tournament_per_sub</code></td><td>unique <code>(sub) WHERE kind = 'tournament' AND tournament_id IS NULL</code></td><td><strong>One-shot commitment</strong>: one pending pool per player.</td></tr>
 <tr><td><code>sealed_pools_one_binding_per_sub_per_tournament</code></td><td>unique <code>(sub, tournament_id) WHERE tournament_id IS NOT NULL</code></td><td>One pool per player per tournament.</td></tr>
 <tr><td><code>sealed_pools_bound_tournaments</code></td><td><code>(sub, bound_at DESC) WHERE kind = 'tournament' AND tournament_id IS NOT NULL</code></td><td>"My ongoing tournaments" listing.</td></tr>
+<tr><td><code>sealed_pools_one_per_sub_per_tournament_ref</code></td><td>unique <code>(sub, tournament_ref) WHERE tournament_ref IS NOT NULL</code></td><td>One pool per player per declared tournament (<a href="#s14">§14</a>).</td></tr>
+<tr><td><code>tournaments_bga_tournament_id_live</code></td><td>unique <code>(bga_tournament_id) WHERE detached_at IS NULL</code></td><td>One live declaration per BGA tournament, cancelled ones included; a detached one frees the id (<a href="#s14">§14.5</a>).</td></tr>
 <tr><td><code>sealed_pool_games</code> PK</td><td><code>(pool_id, game_id)</code></td><td>Games-played dedup.</td></tr>
 </table>
 <ul>
@@ -938,11 +969,56 @@ curl -s "http://localhost:8080/api/tournament-bga-decklist?tournamentId=42&amp;g
 
 <!-- ───────────────────────── 14 ───────────────────────── -->
 <section id="s14">
-<h2>14. Glossary</h2>
+<h2>14. User-created tournaments (lot 1)</h2>
+<p>Any logged-in Re:Union account can now <strong>declare a sealed tournament</strong> (name, description, mandatory BGA link, start, optional end, sealed configuration) instead of a developer changing <code>current_format</code>. Design: <a href="user-tournaments-spec.md"><code>user-tournaments-spec.md</code></a>; implementation plan: <a href="user-tournaments-lot1-plan.md"><code>user-tournaments-lot1-plan.md</code></a>. Lot 1 covers <code>source.type = 'set'</code> only (7 boosters of one visible set, heroes in boosters or free choice, exact uniques inside boosters, guaranteed uniques outside, even factions, ban list).</p>
+
+<h3>14.1 Stored pools</h3>
+<p>Every pool created after the lot-1 migration <strong>stores what it generated</strong> (<code>sealed_pools.cards</code> = <code>{ ref: count }</code>, <code>boosters</code> = <code>string[][]</code>, <code>config</code> = the config snapshot, <code>created_by</code> = <code>'page' | 'bga' | 'legacy'</code>). <code>src/lib/poolBuilder.js</code> (<code>buildPool</code>) is the single generation entry point (same deterministic output as <a href="#s4">§4</a> for a legacy config, plus <code>excludeBanlist</code>); generation runs <strong>before</strong> the <code>INSERT … ON CONFLICT DO NOTHING RETURNING *</code>, so a card-data failure writes nothing. Reads go through <code>loadPool(sub, row)</code> (<code>api/_lib/tournamentPool.js</code>): stored contents when <code>row.cards</code> is set, else <a href="#s4">§4</a>'s regeneration (legacy rows). <code>scripts/freeze-sealed-pools.mjs</code> (<code>make db-freeze-pools</code>, or <code>node --env-file=.env scripts/freeze-sealed-pools.mjs</code>) stores the older rows once after the migration — from then on no pool depends on the upstream set file's order. Idempotent.</p>
+
+<h3>14.2 BGA resolution order</h3>
+<p><code>poolStore.bindTournamentId(sub, bgaId, bgaName)</code>, called by <code>/api/tournament-bga-decklist</code> and <code>/api/tournament-pool-counts</code>, now resolves in this order:</p>
+<ol>
+<li><strong>The player's row for <code>(sub, tournament_id = bgaId)</code></strong> → returned. Legacy-bound rows still get <code>tournament_name</code> refreshed from BGA; pools of a declared tournament keep the altered-draft name.</li>
+<li><strong>A declared tournament with <code>bga_tournament_id = bgaId</code></strong> (whatever its status, detached excepted) → <code>getOrCreateTournamentPool(sub, tournament, { createdBy: 'bga' })</code>: the player's attached pool, else a legacy pool already bound to that BGA id (adopted, never replaced), else a new stored pool from the tournament's config. Registered pools are created <strong>pre-bound</strong> (<code>tournament_id</code> = the BGA id, <code>bound_at</code> = creation), so step 1 finds them afterwards. Races on either unique index re-select the winner's row.</li>
+<li><strong>Otherwise</strong> → the legacy pending preparation pool is bound, exactly as in <a href="#s5">§5</a>.</li>
+</ol>
+
+<h3>14.3 Endpoints</h3>
+<table class="wrap">
+<tr><th>Endpoint</th><th>Method</th><th>Auth</th><th>Purpose</th></tr>
+<tr><td><code>/api/tournaments</code></td><td>GET</td><td>none (optional bearer)</td><td>List. <code>?status=upcoming|ongoing|open|all</code> (<code>open</code> = upcoming + ongoing, the default), ordered by <code>starts_at</code>. With a bearer: each item carries <code>viewer.hasPool</code> / <code>viewer.poolId</code>.</td></tr>
+<tr><td><code>/api/tournaments</code></td><td>POST</td><td>required</td><td>Create. Enforces spec §9 (10 open tournaments per account, moderators exempt). Returns the tournament.</td></tr>
+<tr><td><code>/api/tournaments/:id</code></td><td>GET</td><td>none (optional bearer)</td><td>Detail + <code>poolCount</code>, <code>locked</code>, <code>poolsByOrigin</code> (organizer/moderator only), <code>viewer</code> (bearer only).</td></tr>
+<tr><td><code>/api/tournaments/:id</code></td><td>PATCH</td><td>organizer / moderator</td><td>Partial update: <code>name</code>, <code>description</code>, <code>startsAt</code>, <code>endsAt</code>, <code>bgaUrl</code> (unlocked only), <code>config</code> (unlocked only, atomic), <code>action: cancel|restore|close|reopen|detach</code> (<code>detach</code> moderator only, <a href="#s14">§14.5</a>). 409 <code>tournament_locked</code> when a locked field is sent, <code>tournament_detached</code> on a detached tournament, <code>bga_tournament_taken</code> when the new link is already declared.</td></tr>
+<tr><td><code>/api/tournaments/:id</code></td><td>DELETE</td><td>organizer / moderator</td><td>409 <code>tournament_has_pools</code> unless zero pools.</td></tr>
+<tr><td><code>/api/tournaments/:id/pool</code></td><td>GET</td><td>required</td><td>Get-or-create the caller's pool (<code>createdBy: 'page'</code>). 409 <code>tournament_closed</code> when cancelled/ended <strong>and</strong> no pool exists yet.</td></tr>
+<tr><td><code>/api/tournament-bound-pools</code></td><td>GET</td><td>required</td><td>Unchanged shape + <code>tournament: { id, name, startsAt, status } | null</code> per pool.</td></tr>
+<tr><td><code>/api/tournament-bga-decklist</code>, <code>/api/tournament-pool-counts</code>, <code>/api/tournament-pool-by-deck</code>, <code>/api/tournament-pool</code></td><td>—</td><td>—</td><td><strong>Unchanged contracts.</strong> Internally they go through <a href="#s14">§14.2</a> / <code>loadPool</code>.</td></tr>
+</table>
+<p>A public GET carrying an expired bearer gets the anonymous view, never a 401. Moderators: the access token's <code>realm_access.roles</code> contains <code>TOURNAMENT_MODERATOR_ROLE</code>, or the <code>sub</code> is in <code>TOURNAMENT_MODERATORS</code> (both optional env vars, see <code>.env.example</code>); roles are read from the token payload only after userinfo accepted that token (<code>api/_lib/auth.js</code> <code>verifyUser</code>).</p>
+
+<h3>14.4 Routes</h3>
+<table class="wrap">
+<tr><th>Route</th><th>Page</th><th>Notes</th></tr>
+<tr><td><code>/tournament</code></td><td><code>TournamentMenu.jsx</code> (reworked)</td><td>Public "Upcoming" and "Ongoing" lists; "Create a tournament" (login prompt if logged out); "My tournaments" (bound pools, with the declared tournament's status); the generic "Prepare my next tournament" moved to a small block at the bottom.</td></tr>
+<tr><td><code>/tournament/new</code></td><td><code>TournamentForm.jsx</code></td><td>Create mode.</td></tr>
+<tr><td><code>/tournament/t/:id</code></td><td><code>TournamentDetail.jsx</code></td><td>Header, description, 3-step checklist (register on BGA → open your pool → build your deck), organizer panel.</td></tr>
+<tr><td><code>/tournament/t/:id/edit</code></td><td><code>TournamentForm.jsx</code></td><td>Edit mode; BGA link + config disabled once a pool exists.</td></tr>
+<tr><td><code>/tournament/t/:id/pool</code></td><td><code>TournamentPoolPage.jsx</code></td><td><code>TournamentPoolView</code> with <code>load = fetchTournamentPool(id)</code>, back link to the tournament.</td></tr>
+</table>
+<p>Status is derived, never stored: <code>detached</code> (detached_at) &gt; <code>cancelled</code> (cancelled_at) &gt; <code>ended</code> (ended_at, or ends_at reached) &gt; <code>ongoing</code> (starts_at reached) &gt; <code>upcoming</code>. Cancelled and ended tournaments stay editable; only pool existence locks the BGA link and the config. Reopen clears an <code>ends_at</code> already reached (else the tournament would stay <code>ended</code>). A rename also renames the attached pools' <code>tournament_name</code>, which every deck name derives from. <code>evenFactions</code> is normalized to <code>false</code> below 2 uniques.</p>
+
+<h3>14.5 Detach (moderators, squatting)</h3>
+<p>Any account can declare any BGA id, so a declaration can hijack a tournament someone else organizes; uniqueness then blocks the real organizer and cancel does not help (the BGA path ignores status). A <strong>moderator</strong> fixes it with <code>PATCH { action: 'detach' }</code> (<code>tournamentStore.detachTournament</code>, one statement): <strong>every</strong> pool of the declaration is deleted, played or not (their <code>sealed_pool_games</code> cascade), <code>detached_at</code> is set, and the BGA id is free again (<code>tournaments_bga_tournament_id_live</code> is partial on <code>detached_at IS NULL</code>). <code>getTournamentByBgaId</code> skips detached rows, so the next BGA call for that id goes to the real organizer's declaration (or the legacy pending pool). The detached row stays as a read-only trace (status <code>detached</code>, any PATCH → 409 <code>tournament_detached</code>, DELETE still allowed); the decks already saved on decks-api are left orphaned and the players start over.</p>
+</section>
+
+<!-- ───────────────────────── 15 ───────────────────────── -->
+<section id="s15">
+<h2>15. Glossary</h2>
 <dl class="kv">
 <dt>sub</dt><dd>Keycloak subject (user id). The owner key of every pool.</dd>
 <dt>nonce</dt><dd>Random UUID minted once per pool; the only secret-ish input of the seed.</dd>
-<dt>pool</dt><dd>A player's sealed card pool. Never stored, always regenerated.</dd>
+<dt>pool</dt><dd>A player's sealed card pool. Stored on the row at creation since lot 1 (<a href="#s14">§14.1</a>); older rows are regenerated until frozen.</dd>
 <dt>normal pool</dt><dd>The single casual pool per player (<code>kind = normal</code>), resettable with a cooldown.</dd>
 <dt>pending / preparation pool</dt><dd>A <code>kind = tournament</code> pool with <code>tournament_id IS NULL</code>. At most one per player.</dd>
 <dt>bound pool</dt><dd>A tournament pool with <code>tournament_id</code> set; immutable.</dd>

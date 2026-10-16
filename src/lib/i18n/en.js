@@ -472,6 +472,7 @@ export default {
     statusOngoing: 'Ongoing',
     statusEnded: 'Ended',
     statusCancelled: 'Cancelled',
+    statusDetached: 'Detached',
     // card / detail
     startsAt: 'Starts {{date}}',
     endsAt: 'Ends {{date}}',
@@ -554,6 +555,10 @@ export default {
     reopen: 'Reopen',
     delete: 'Delete',
     cancelConfirm: 'Cancel this tournament? Existing pools and decks are kept.',
+    detach: 'Detach (moderator)',
+    detachHint: 'For a BGA tournament declared by someone who does not organize it. Deletes every pool of this declaration and frees the BGA link for the real organizer.',
+    detachConfirm: 'Detach this tournament? EVERY pool created for it is deleted, played or not ({{n}} today), and cannot be recovered. Its BGA link becomes free for a new declaration.',
+    detachedNotice: 'A moderator detached this tournament: its pools were deleted and its BGA link no longer points here. It can no longer be edited.',
     deleteConfirm: 'Delete this tournament? This cannot be undone.',
     deleteBlocked: 'Cannot delete: pools exist. Cancel it instead.',
     backToTournament: 'Back to the tournament',

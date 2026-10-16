@@ -66,3 +66,10 @@ describe('validateTournamentFields (patch)', () => {
     expect(validateTournamentFields({ endsAt: '' }, { now: NOW, current }).values).toEqual({ endsAt: null })
   })
 })
+
+describe('tournamentStatus (detached)', () => {
+  it('reports detached above every other state, for rows and JSON', () => {
+    expect(tournamentStatus({ starts_at: later, cancelled_at: earlier, detached_at: earlier }, NOW)).toBe('detached')
+    expect(tournamentStatus({ startsAt: earlier, detachedAt: earlier }, NOW)).toBe('detached')
+  })
+})

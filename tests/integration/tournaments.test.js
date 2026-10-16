@@ -514,3 +514,54 @@ describe('final review fixes', () => {
     expect(p.tournament_name).toBe('AD name')
   })
 })
+
+describe('detach (moderators) and other follow-ups', () => {
+  it('a moderator detaches a squatted declaration: every pool deleted, BGA id freed for the real organizer', async () => {
+    const squat = await mkTournament({ organizerSub: 'alice', bgaTournamentId: '7007', name: 'Squat' })
+    const played = await getOrCreateTournamentPool('bob', squat)
+    await query('INSERT INTO sealed_pool_games (pool_id, game_id) VALUES ($1, $2)', [played.id, 'g1'])
+    await getOrCreateTournamentPool('carol', squat)
+
+    asUser(ALICE)
+    expect((await call(tournamentsItem, { method: 'PATCH', query: { id: squat.id }, body: { action: 'detach' } })).statusCode).toBe(403)
+
+    asUser(MOD)
+    const detached = await call(tournamentsItem, { method: 'PATCH', query: { id: squat.id }, body: { action: 'detach' } })
+    expect(detached.statusCode).toBe(200)
+    expect(detached.body).toMatchObject({ status: 'detached', poolCount: 0 })
+    expect(typeof detached.body.detachedAt).toBe('string')
+    expect((await query('SELECT count(*)::int AS n FROM sealed_pools WHERE tournament_ref = $1', [squat.id])).rows[0].n).toBe(0)
+
+    // Frozen: no edit, no new pool, hidden from the open list and from the creation cap.
+    asUser(ALICE)
+    const edit = await call(tournamentsItem, { method: 'PATCH', query: { id: squat.id }, body: { name: 'Back' } })
+    expect(edit.statusCode).toBe(409)
+    expect(edit.body).toEqual({ error: 'tournament_detached' })
+    expect((await call(tournamentPoolFor, { query: { id: squat.id } })).body).toEqual({ error: 'tournament_closed', status: 'detached' })
+    expect((await listTournaments('open')).map(r => r.id)).not.toContain(squat.id)
+    expect(await countOpenTournaments('alice')).toBe(0)
+
+    // The real organizer declares the same BGA tournament; BGA's call now lands on it.
+    const real = await mkTournament({ organizerSub: 'dave', bgaTournamentId: '7007', name: 'Real' })
+    const p = await bindTournamentId('bob', '7007', 'BGA name')
+    expect(p.tournament_ref).toBe(real.id)
+    expect(p.tournament_name).toBe('Real')
+  })
+
+  it('reopen clears an end date already reached, so the tournament is open again', async () => {
+    const t = await mkTournament({ organizerSub: 'alice', startsAt: inDays(-5), endsAt: inDays(-1) })
+    asUser(ALICE)
+    const res = await call(tournamentsItem, { method: 'PATCH', query: { id: t.id }, body: { action: 'reopen' } })
+    expect(res.body).toMatchObject({ status: 'ongoing', endsAt: null })
+    const future = await mkTournament({ organizerSub: 'alice', endsAt: inDays(9) })
+    await call(tournamentsItem, { method: 'PATCH', query: { id: future.id }, body: { action: 'close' } })
+    expect((await call(tournamentsItem, { method: 'PATCH', query: { id: future.id }, body: { action: 'reopen' } })).body.endsAt).not.toBeNull()
+  })
+
+  it('lists declared tournaments first in the player\'s bound pools', async () => {
+    const t = await mkTournament({ name: 'Declared' })
+    await getOrCreateTournamentPool('alice', t)
+    await bindTournamentId('alice', '8008', 'Legacy bound later')
+    expect((await listBoundTournamentPools('alice')).map(p => p.tournament_name)).toEqual(['Declared', 'Legacy bound later'])
+  })
+})

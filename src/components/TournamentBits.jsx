@@ -5,10 +5,11 @@ const PILL = {
   ongoing: 'text-green-400 border-green-700 bg-green-900/25',
   ended: 'text-muted border-line bg-surface2',
   cancelled: 'text-red-400 border-red-800 bg-red-950/25',
+  detached: 'text-red-400 border-red-800 bg-red-950/25',
 }
 
 export function StatusPill({ status, t }) {
-  const key = { upcoming: 'statusUpcoming', ongoing: 'statusOngoing', ended: 'statusEnded', cancelled: 'statusCancelled' }[status] ?? 'statusUpcoming'
+  const key = { upcoming: 'statusUpcoming', ongoing: 'statusOngoing', ended: 'statusEnded', cancelled: 'statusCancelled', detached: 'statusDetached' }[status] ?? 'statusUpcoming'
   return <span className={`text-xs px-2 py-0.5 rounded-full border ${PILL[status] ?? PILL.upcoming}`}>{t(`tournaments.${key}`)}</span>
 }
 

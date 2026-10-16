@@ -70,6 +70,7 @@ Outcome of the 2026-10-16 design discussion. Each line is a decision, not an opt
 | Tournament name vs BGA name | For declared tournaments the altered-draft name is authoritative; the BGA call never overwrites it (it still refreshes the name of legacy-bound pools). |
 | Config edits | Frozen as soon as the first pool exists. Name, description, dates stay editable. The BGA link is editable only while no pool exists. |
 | Cancelled / ended tournaments | **Stay editable** by the organizer and moderators in every status: name, description, dates, and the actions (restore, reopen). The lock on the BGA link and the config depends only on pool existence, never on status. Reusing a BGA link therefore means restoring the cancelled tournament and editing it, not creating a second one. |
+| Squatting (decided after the lot-1 review) | Anyone can declare any BGA id, so a declaration can hijack a tournament someone else organizes. A **moderator-only "detach"** action deletes **every** pool of that declaration (played or not; decided 2026-10-16: all players restart on the real organizer's config), marks it `detached_at`, and frees its BGA id; the BGA path ignores detached declarations. The row stays as a read-only trace. Decks already saved on decks-api are left orphaned. |
 | Start date | Must be in the future at creation. Editable afterwards. Stored as `timestamptz`; entered in the organizer's browser timezone, displayed in the viewer's with the timezone shown. |
 
 ## 3. Functional design
@@ -86,7 +87,8 @@ Outcome of the 2026-10-16 design discussion. Each line is a decision, not an opt
 `status` is derived, never stored:
 
 ```
-cancelled   if cancelled_at is set
+detached    if detached_at is set
+cancelled   else if cancelled_at is set
 ended       else if ended_at is set, or ends_at is set and now >= ends_at
 ongoing     else if now >= starts_at
 upcoming    otherwise
@@ -95,11 +97,12 @@ upcoming    otherwise
 | Action | Who | Precondition | Effect |
 | --- | --- | --- | --- |
 | Create | logged-in | < 10 open tournaments (moderators exempt); `starts_at` in the future; BGA link valid and unused | row inserted, status `upcoming` |
-| Edit name / description / dates | organizer, moderator | any status (cancelled and ended included) | updated |
+| Edit name / description / dates | organizer, moderator | any status but detached (cancelled and ended included) | updated; a rename also renames the attached pools' `tournament_name` (deck names derive from it) |
 | Edit BGA link | organizer, moderator | zero pools, any status | updated |
 | Edit config | organizer, moderator | zero pools (checked atomically in the UPDATE), any status | updated |
-| Cancel / restore | organizer, moderator | — | `cancelled_at` set / cleared; pools untouched |
-| Close / reopen | organizer, moderator | — | `ended_at` set / cleared |
+| Cancel / restore | organizer, moderator | not detached | `cancelled_at` set / cleared; pools untouched |
+| Close / reopen | organizer, moderator | not detached | `ended_at` set / cleared; reopen also clears an `ends_at` already reached (else the tournament would stay `ended`) |
+| Detach | moderator only | not detached | every pool of the declaration deleted, `detached_at` set, BGA id freed; no edit possible afterwards (409 `tournament_detached`), delete still allowed |
 | Delete | organizer, moderator | zero pools | hard delete |
 | Prepare pool (page) | logged-in player | status `upcoming` or `ongoing` | get-or-create the player's pool |
 | Pool via BGA call | altered-bga-api | tournament exists, **any status** | get-or-create (§6) |
@@ -158,13 +161,16 @@ create table if not exists tournaments (
   config            jsonb not null,         -- §5.1, validated server-side
   cancelled_at      timestamptz,
   ended_at          timestamptz,            -- manual close
+  detached_at       timestamptz,            -- moderator detach (squatting), frees the BGA id
   created_at        timestamptz not null default now(),
   updated_at        timestamptz not null default now()
 );
--- One altered-draft tournament per BGA tournament, cancelled ones included: a cancelled
+-- One live altered-draft tournament per BGA tournament, cancelled ones included: a cancelled
 -- tournament's pools still answer BGA for that id, so a second declaration would split the
--- players between two configs. Reuse = restore the cancelled one.
-create unique index if not exists tournaments_bga_tournament_id on tournaments (bga_tournament_id);
+-- players between two configs. Reuse = restore the cancelled one. Detached declarations
+-- (moderator action, pools deleted) don't count.
+create unique index if not exists tournaments_bga_tournament_id_live
+  on tournaments (bga_tournament_id) where detached_at is null;
 create index if not exists tournaments_organizer on tournaments (organizer_sub);
 create index if not exists tournaments_starts_at on tournaments (starts_at);
 
@@ -216,7 +222,7 @@ One shape for tournaments, for the legacy format (converted on read), and later 
   (`{ type, mix: { SET: boosters } }`), plus `uniques.random` (per-booster probability).
 - `heroes`: `packs` (one hero per booster) or `free` (no hero in boosters, every hero of the
   set appended to the pool — today's `heroes_in_pool = false`).
-- `uniques.inBoosters` 0–7, `uniques.guaranteed` 0–7, `evenFactions` boolean.
+- `uniques.inBoosters` 0–7, `uniques.guaranteed` 0–7, `evenFactions` boolean (normalized to `false` when `inBoosters + guaranteed < 2`).
 - Conversion of a `current_format` row: `set_code → source.setCode`, `heroes_in_pool → heroes`,
   `unique_count → uniques.inBoosters`, `guaranteed_uniques → uniques.guaranteed`,
   `even_factions → uniques.evenFactions`, `excludeBanlist: false`.
@@ -265,8 +271,8 @@ and `api/tournament-pool-counts.js`, becomes:
 1. Row `(sub, tournament_id = bgaId)` exists → return it. If it is a legacy row
    (`tournament_ref is null`) refresh `tournament_name` from `bgaName` as today; if it is a
    registered pool, leave the name alone.
-2. Else, a tournament with `bga_tournament_id = bgaId` exists (**whatever its status** — if BGA
-   is playing it, every player must get the same config) → `getOrCreateTournamentPool(sub,
+2. Else, a tournament with `bga_tournament_id = bgaId` exists (**whatever its status**, detached
+   excepted — if BGA is playing it, every player must get the same config) → `getOrCreateTournamentPool(sub,
    tournament, { createdBy: 'bga' })`.
 3. Else → legacy: bind the player's pending generic pool, unchanged.
 
@@ -292,7 +298,7 @@ files are mounted in `server/index.js` exactly like the existing ones.
 | `/api/tournaments` | GET | none (optional bearer) | List. `?status=upcoming\|ongoing\|open\|all` (`open` = upcoming + ongoing, the default), ordered by `starts_at`. With a bearer: each item carries `viewer.hasPool` / `viewer.poolId`. |
 | `/api/tournaments` | POST | required | Create. Enforces §9. Returns the tournament. |
 | `/api/tournaments/:id` | GET | none (optional bearer) | Detail + `poolCount`, `locked`, `poolsByOrigin` (organizer/moderator only), `viewer` (bearer only: `isOrganizer`, `isModerator`, `hasPool`, `poolId`, deck summary). |
-| `/api/tournaments/:id` | PATCH | organizer / moderator | Partial update: `name`, `description`, `startsAt`, `endsAt`, `bgaUrl` (unlocked only), `config` (unlocked only, atomic `WHERE NOT EXISTS (pool)`), `action: cancel\|restore\|close\|reopen`. 409 `tournament_locked` when a locked field is sent. |
+| `/api/tournaments/:id` | PATCH | organizer / moderator | Partial update: `name`, `description`, `startsAt`, `endsAt`, `bgaUrl` (unlocked only), `config` (unlocked only, atomic `WHERE NOT EXISTS (pool)`), `action: cancel\|restore\|close\|reopen\|detach` (`detach` moderator only). 409 `tournament_locked` when a locked field is sent, 409 `tournament_detached` on a detached tournament, 409 `bga_tournament_taken` when the new link is already declared. |
 | `/api/tournaments/:id` | DELETE | organizer / moderator | 409 `tournament_has_pools` unless zero pools. |
 | `/api/tournaments/:id/pool` | GET | required | Get-or-create the caller's pool (`createdBy: 'page'`). 409 `tournament_closed` when status is `cancelled` or `ended` **and** no pool exists yet (an existing pool is always returned). Response = `poolResponse` + `tournament: { id, name, status }`. |
 | `/api/tournament-bound-pools` | GET | required | Unchanged shape + `tournament: { id, name, startsAt, status } \| null` per pool (LEFT JOIN). |
@@ -412,5 +418,7 @@ waiting on Re:Union.
 4. **Lobby refactor (lot 2)** is the regression risk. Replay `TESTING.md`.
 5. **Concurrency** is handled by unique indexes + `ON CONFLICT DO NOTHING` + re-select, the
    pattern already in `poolStore.js`.
-6. Non-goals restated: draft tournaments, notifications, BGA registration checks, nominative
+6. **Squatting.** Any account can declare any BGA id. Mitigation: the moderator-only detach
+   (§2, §3.2). Its cost: every player of that declaration loses their pool and starts over.
+7. Non-goals restated: draft tournaments, notifications, BGA registration checks, nominative
    participant lists, card language as a setting, automatic expiry.

@@ -31,13 +31,14 @@ export async function getTournament(id) {
   return rows[0] ?? null
 }
 
+/** The live (not detached) declaration of a BGA tournament — what the BGA path resolves to. */
 export async function getTournamentByBgaId(bgaId) {
-  const { rows } = await query('SELECT * FROM tournaments WHERE bga_tournament_id = $1', [String(bgaId)])
+  const { rows } = await query('SELECT * FROM tournaments WHERE bga_tournament_id = $1 AND detached_at IS NULL', [String(bgaId)])
   return rows[0] ?? null
 }
 
-// "Open" = neither cancelled nor ended (manually, or by a reached ends_at).
-const OPEN_SQL = 'cancelled_at IS NULL AND ended_at IS NULL AND (ends_at IS NULL OR ends_at > now())'
+// "Open" = neither detached, cancelled nor ended (manually, or by a reached ends_at).
+const OPEN_SQL = 'detached_at IS NULL AND cancelled_at IS NULL AND ended_at IS NULL AND (ends_at IS NULL OR ends_at > now())'
 
 /** @param {'open'|'upcoming'|'ongoing'|'all'} status */
 export async function listTournaments(status = 'open') {
@@ -110,6 +111,24 @@ export async function updateTournament(id, fields, { requireUnlocked = false } =
   return rows[0] ?? null
 }
 
+/**
+ * Moderator-only (spec §2, "squatting"): deletes EVERY pool of the declaration (played or
+ * not; their games cascade) and marks it detached, in one statement. The row is kept as a
+ * trace for its organizer; its BGA id is free again (partial unique index) and the BGA path
+ * no longer resolves to it. Decks already saved on decks-api are left orphaned.
+ * @returns {Promise<object|null>} the detached row with `deleted_pools`, or null if not found / already detached
+ */
+export async function detachTournament(id) {
+  const { rows } = await query(
+    `WITH deleted AS (DELETE FROM sealed_pools WHERE tournament_ref = $1 RETURNING 1)
+     UPDATE tournaments SET detached_at = now(), updated_at = now()
+     WHERE id = $1 AND detached_at IS NULL
+     RETURNING *, (SELECT count(*)::int FROM deleted) AS deleted_pools`,
+    [id],
+  )
+  return rows[0] ?? null
+}
+
 /** @returns {Promise<'deleted'|'has_pools'|'not_found'>} */
 export async function deleteTournamentIfNoPools(id) {
   const { rows } = await query(
@@ -138,6 +157,7 @@ export function toTournamentJson(row, extras = {}) {
     config: row.config,
     cancelledAt: iso(row.cancelled_at),
     endedAt: iso(row.ended_at),
+    detachedAt: iso(row.detached_at),
     createdAt: iso(row.created_at),
     updatedAt: iso(row.updated_at),
     ...extras,

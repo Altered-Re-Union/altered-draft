@@ -227,7 +227,7 @@ export async function bindTournamentId(sub, tournamentId, tournamentName) {
   return retry.rows[0]
 }
 
-/** Every bound tournament pool for a player (legacy-bound and declared), most recent first. */
+/** Every bound tournament pool for a player: declared tournaments first (spec §8), then legacy-bound, most recent first. */
 export async function listBoundTournamentPools(sub) {
   const { rows } = await query(
     `SELECT p.*,
@@ -236,7 +236,7 @@ export async function listBoundTournamentPools(sub) {
      FROM sealed_pools p
      LEFT JOIN tournaments t ON t.id = p.tournament_ref
      WHERE p.sub = $1 AND p.kind = 'tournament' AND p.tournament_id IS NOT NULL
-     ORDER BY p.bound_at DESC`,
+     ORDER BY (p.tournament_ref IS NULL), p.bound_at DESC`,
     [sub],
   )
   return rows

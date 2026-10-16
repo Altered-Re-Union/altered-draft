@@ -52,7 +52,9 @@ export function validateTournamentConfig(input) {
       format: 'sealed',
       source: { type: 'set', setCode: set.code, boosters: SEALED_BOOSTERS },
       heroes: c.heroes,
-      uniques: { inBoosters, guaranteed, evenFactions: !!u.evenFactions },
+      // Even factions only means something from 2 uniques on; a stale "true" would still
+      // change the draw (evenFactionTargets consumes the rng) and mislead the stored config.
+      uniques: { inBoosters, guaranteed, evenFactions: !!u.evenFactions && inBoosters + guaranteed >= 2 },
       excludeBanlist: !!c.excludeBanlist,
     },
   }

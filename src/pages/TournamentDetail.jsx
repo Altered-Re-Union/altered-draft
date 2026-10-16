@@ -54,6 +54,11 @@ export default function TournamentDetail() {
     }
   }
 
+  async function handleDetach() {
+    if (!window.confirm(t('tournaments.detachConfirm', { n: tournament.poolCount ?? 0 }))) return
+    await act('detach')
+  }
+
   async function handleDelete() {
     if (!window.confirm(t('tournaments.deleteConfirm'))) return
     setBusy(true)
@@ -68,6 +73,7 @@ export default function TournamentDetail() {
 
   const viewer = tournament?.viewer ?? null
   const canManage = !!(viewer?.isOrganizer || viewer?.isModerator)
+  const detached = tournament?.status === 'detached'
   const btn = 'text-xs px-3 py-1.5 rounded bg-surface2 hover:bg-surface3 disabled:opacity-40 transition-colors'
 
   return (
@@ -94,6 +100,7 @@ export default function TournamentDetail() {
               </p>
               <p className="text-sm text-muted">{summarizeConfig(tournament.config, t, tc)}</p>
               {tournament.description && <p className="text-sm text-ink whitespace-pre-wrap pt-2">{tournament.description}</p>}
+              {detached && <p className="text-sm text-red-400 pt-2">{t('tournaments.detachedNotice')}</p>}
             </header>
 
             <TournamentChecklist
@@ -113,7 +120,7 @@ export default function TournamentDetail() {
                 {tournament.status === 'ongoing' && tournament.poolsByOrigin?.bga === 0 && (
                   <p className="text-xs text-accent2">{t('tournaments.bgaZeroWarning')}</p>
                 )}
-                <div className="flex flex-wrap gap-2">
+                {!detached && <div className="flex flex-wrap gap-2">
                   <Link to={`/tournament/t/${id}/edit`} className={btn}>{t('tournaments.edit')}</Link>
                   {tournament.cancelledAt
                     ? <button onClick={() => act('restore')} disabled={busy} className={btn}>{t('tournaments.restore')}</button>
@@ -124,7 +131,16 @@ export default function TournamentDetail() {
                   <button onClick={handleDelete} disabled={busy || (tournament.poolCount ?? 0) > 0}
                     title={(tournament.poolCount ?? 0) > 0 ? t('tournaments.deleteBlocked') : undefined}
                     className={`${btn} hover:bg-red-900`}>{t('tournaments.delete')}</button>
-                </div>
+                </div>}
+                {detached && (
+                  <button onClick={handleDelete} disabled={busy} className={`${btn} hover:bg-red-900`}>{t('tournaments.delete')}</button>
+                )}
+                {viewer?.isModerator && !detached && (
+                  <div className="border-t border-line pt-3 space-y-2">
+                    <p className="text-xs text-faint">{t('tournaments.detachHint')}</p>
+                    <button onClick={handleDetach} disabled={busy} className={`${btn} text-red-400 hover:bg-red-900`}>{t('tournaments.detach')}</button>
+                  </div>
+                )}
               </section>
             )}
           </>

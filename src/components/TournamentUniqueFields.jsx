@@ -20,7 +20,12 @@ export default function TournamentUniqueFields({ uniques, onChange, uniqueSuppor
   const { t } = useLang()
   const off = disabled || !uniqueSupport
   const total = (uniques.inBoosters ?? 0) + (uniques.guaranteed ?? 0)
-  const set = patch => onChange({ ...uniques, ...patch })
+  const set = patch => {
+    const next = { ...uniques, ...patch }
+    // Even factions only means something from 2 uniques on (the server drops it too).
+    if ((next.inBoosters ?? 0) + (next.guaranteed ?? 0) < 2) next.evenFactions = false
+    onChange(next)
+  }
 
   return (
     <div className="space-y-3">

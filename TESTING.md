@@ -85,6 +85,15 @@ Local: `make dev` (+ altered-dev-environment for login, users `alice` / `bob`). 
 - [ ] As `alice`: the card shows "✓ Your pool is ready"; "My tournaments" lists "Test cup" with its pill and "Change my deck" → `/tournament/t/<id>/pool`; "Prepare my next tournament" sits at the bottom in a small block.
 - [ ] Edit the start to yesterday (as organizer) → the card moves to "Ongoing tournaments".
 
+**Follow-ups after the lot-1 review**
+- [ ] Logged out, open `/tournament/t/<id>/edit` → the Connect prompt shows (no redirect to the tournament page).
+- [ ] Close a tournament whose end date has passed, then Reopen → status back to Ongoing, end date cleared.
+- [ ] As a player with a declared-tournament pool AND a legacy-bound pool, "My tournaments" lists the declared one first.
+- [ ] Form: set uniques to 1 + 1, tick "even factions", lower to 1 + 0 → the box unticks; the saved config has `evenFactions: false`.
+- [ ] Rename a tournament that has pools → "My tournaments" and the pool page title show the new name; the deck is renamed on its next sync / BGA load.
+- [ ] Relink an unlocked tournament to a BGA link another tournament uses → "A tournament already exists for this BGA link." under the field (409, not a 500).
+- [ ] Detach (needs a moderator: `TOURNAMENT_MODERATORS=<sub>` in `.env`, restart the API): as a moderator, the panel shows "Detach (moderator)" with its hint; the confirm says how many pools will be deleted; after it, status "Detached", the red notice, only Delete left; the players' pools are gone ("My tournaments"); a new declaration with the same BGA link succeeds and a BGA deck-list call for that id lands on it. As the organizer (not moderator), no Detach button; Edit on a detached tournament redirects to its page.
+
 **Regression / deploy**
 - [ ] Lobby → Sealed → Cards: the set grid looks and toggles as before (select, click again to deselect, Next disabled until a set is chosen); Sealed settings still show the card-language row.
 - [ ] Deploy: `sealed-pools-schema.sql` applied on the target DB (Supabase SQL editor / AlteredOps migration), then `node --env-file=.env scripts/freeze-sealed-pools.mjs` once; the log reports `frozen N/N pools (0 failed)`.
