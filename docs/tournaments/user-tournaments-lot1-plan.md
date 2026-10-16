@@ -2992,7 +2992,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 **Interfaces:**
 - Produces: the keys below, used by Tasks 14, 16, 17, 18. Plurals use the `tc` convention (`…One` / `…Many` with `{{n}}`).
 
-- [ ] **Step 1: Add to `en.js`**
+- [x] **Step 1: Add to `en.js`**
 
 ```js
   tournaments: {
@@ -3100,7 +3100,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
   },
 ```
 
-- [ ] **Step 2: Add to `fr.js`**
+- [x] **Step 2: Add to `fr.js`**
 
 ```js
   tournaments: {
@@ -3202,7 +3202,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
   },
 ```
 
-- [ ] **Step 3: Check both dictionaries have the same keys**
+- [x] **Step 3: Check both dictionaries have the same keys**
 
 Run:
 
@@ -3218,7 +3218,7 @@ import('./src/lib/i18n/en.js').then(async en => {
 
 Expected: `ok 98 keys` (or the exact count; what matters is no `MISSING`).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/lib/i18n/en.js src/lib/i18n/fr.js
