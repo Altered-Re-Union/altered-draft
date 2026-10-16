@@ -1,0 +1,1024 @@
+# Sealed tournaments on BGA — feature documentation
+
+> Audience: AI assistants and developers working on the tournament feature across
+> **altered-draft**, **altered-bga-api** and **altered-core-decks-api**.
+> Written against the code as of 2026-10-16 (altered-draft branch `chore/local-dev-stack`,
+> altered-bga-api `main` at "Shift Stage 1 group parent to the tournament root", AlteredBGA
+> `main` at `19beb5f2`).
+> A developer-oriented HTML rendering of the same content lives next to this file
+> (`index.html`).
+
+Table of contents
+
+1. [What the feature is](#1-what-the-feature-is)
+2. [Functional description](#2-functional-description)
+3. [Architecture](#3-architecture)
+4. [Pool generation: determinism and composition](#4-pool-generation-determinism-and-composition)
+5. [Pool lifecycle and tournament binding](#5-pool-lifecycle-and-tournament-binding)
+6. [Deck synchronisation and naming conventions](#6-deck-synchronisation-and-naming-conventions)
+7. [Database schema](#7-database-schema)
+8. [Code map and responsibilities](#8-code-map-and-responsibilities)
+9. [API contracts and exchanged data](#9-api-contracts-and-exchanged-data)
+10. [Configuration, environments, deployment](#10-configuration-environments-deployment)
+11. [Local development and testing](#11-local-development-and-testing)
+12. [Invariants, pitfalls, and how to extend](#12-invariants-pitfalls-and-how-to-extend)
+13. [History and design decisions](#13-history-and-design-decisions)
+14. [Glossary](#14-glossary)
+
+---
+
+## 1. What the feature is
+
+Re:Union runs **online sealed tournaments** of the Altered TCG. The tournament itself
+(pairings, rounds, results) lives on **BoardGameArena (BGA)**. The sealed part — opening a
+pool of boosters and building a deck from it — lives on **altered-draft**
+(`https://altered-draft.altered.re`). When a BGA game starts, BGA asks for the player's
+deck through **altered-bga-api** (`https://bga-api.altered.re`), which answers the
+sealed-format deck LIST straight from altered-draft, while the deck CONTENT still comes
+from **altered-core-decks-api** (`https://decks.alteredcore.org`), which validates the deck
+against the player's pool by calling altered-draft back.
+
+Current competitive format (seeded by `sealed-pools-schema.sql`, row in `current_format`):
+
+| Field | Value | Meaning |
+| --- | --- | --- |
+| `type` | `sealed` | Only sealed is supported; draft is explicitly deferred. |
+| `set_code` | `EOLE` | Set 6, *Roots of Corruption*. |
+| `unique_count` | `1` | One unique **inside** the boosters (replaces a rare slot). |
+| `guaranteed_uniques` | `1` | One extra unique handed out **outside** the boosters. |
+| `even_factions` | `false` | Uniques drawn freely across factions. |
+| `heroes_in_pool` | `false` | Heroes are not opened in boosters; **every hero of the set is appended to the pool** instead. |
+
+So a tournament pool is **7 boosters of 12 cards** (9 commons + 3 rares, one of the 21 rare
+slots swapped for a unique) **+ 1 guaranteed unique + all EOLE heroes**.
+
+The two cheating vectors and how the design kills them:
+
+- **Re-rolling** a sealed pool until it is good → **one-shot commitment**: a player can hold
+  only one *pending* tournament pool at a time. It is only unlocked (a new one becomes
+  mintable) once a real BGA tournament binds to it.
+- **Playing cards outside the pool** → **server-side validation**: the pool is never stored;
+  it is regenerated deterministically from a seed and decks-api checks `deck ⊆ pool` before
+  handing deck content to BGA. An invalid deck is rejected outright (HTTP 422), which BGA
+  surfaces as "This deck is not legal".
+
+Out of scope / not built: draft tournaments, a signed attestation (the
+`SEALED_ATTESTATION_SECRET` env var is provisioned on AlteredOps but **unused by any code**),
+a "tournament ended" signal, automated cleanup of old pools.
+
+---
+
+## 2. Functional description
+
+### 2.1 Actors
+
+| Actor | Role |
+| --- | --- |
+| Player | Has a Re:Union account (Keycloak, realm `players`). Logs into altered-draft with it. |
+| altered-draft | Generates pools, hosts the deckbuilder, owns all tournament state (`sealed_pools`). |
+| altered-core-decks-api | Stores the actual deck (card list) under the player's Re:Union account. Validates sealed decks. |
+| altered-bga-api | Gateway in front of decks-api for BGA. Short-circuits the sealed deck LIST to altered-draft. Also ingests end-of-game stats (separate feature). |
+| BGA (AlteredBGA game code + BGA platform) | Runs the tournament and the games. The game code (PHP, `modules/php/States/SetupTrait.php`) builds the envelope and calls BGA's platform proxy, which forwards to altered-bga-api with the player's bearer token and appends `tournamentId`/`gameId`. The game client (`altered.js`) drives the sealed-specific screens. |
+| Keycloak (`auth.altered.re`) | Identity. Every tournament endpoint verifies the player's bearer token against Keycloak's userinfo. |
+| Card data sources | Set files from the PolluxTroy0 GitHub DB, uniques from `cards.alteredcore.org`, images from `cdn.alteredcore.org`. |
+
+### 2.2 Pages in altered-draft
+
+All tournament pages require a Re:Union login. Logged-out visitors get a "Connect"
+button that returns them to the same page after login.
+
+| Route | Page component | What the player sees |
+| --- | --- | --- |
+| `/` | `Home.jsx` | A **"Sealed set 6"** block with two image buttons: **Tournaments** (→ `/tournament`) and **Normal mode** (→ `/tournament/normal`). |
+| `/tournament` | `TournamentMenu.jsx` | A notice linking to the BGA tournament list (game id 1909 = Altered), the **"Prepare my next tournament"** button (→ `/tournament/prep`), and **"My ongoing tournaments"**: every bound tournament pool, most recent first, with the tournament name, bind date, deck name and card count, and a **"Change my deck"** link (→ `/tournament/pools/:id`). |
+| `/tournament/prep` | `TournamentPrep.jsx` → `TournamentPoolView` | The player's single *pending* tournament pool. **No reset button**: this is the one-shot commitment. |
+| `/tournament/normal` | `TournamentNormal.jsx` → `TournamentPoolView` | The player's single casual pool (for non-tournament BGA sealed games). Has a **"Reset pool"** button with a **30-minute cooldown** (live countdown). |
+| `/tournament/pools/:id` | `TournamentBoundDetail.jsx` → `TournamentPoolView` | One bound tournament pool, to edit the deck between games. Title = the tournament name. |
+| `/edit/deck/:deckId` | `EditDeckRedirect.jsx` | Deep link from a decks-api deck id (e.g. surfaced by BGA or altered.re). Resolves the caller's own pool for that deck and redirects to `/tournament/normal` or `/tournament/pools/:id`. Unknown or foreign deck → "Deck not found". |
+
+`TournamentPoolView.jsx` is the shared pool + deckbuilder screen:
+
+- **First-open pack reveal** (`PackReveal.jsx`): a full-screen overlay that walks through the
+  7 boosters, then an **8th "booster" holding the guaranteed unique**. Shown once per pool
+  (localStorage key `pool_reveal_seen:<poolId>:<resetAt>`), skippable (button or Escape).
+  Images are preloaded per pack so cards appear only when ready.
+- **Full-pool deckbuilder** (`PoolGrid`): every card of the pool with +/- controls, filters,
+  grouping. Heroes appear in the full pool, not in any booster.
+- **Validity badge**: `≥ 30 cards`, `≤ 3 factions`, `≤ 1 hero` → "Valid" / "Not valid".
+- **"Random deck"** (only when the deck is empty): builds a 30-card, ≤3-faction, 1-hero deck
+  from the pool (`randomDeck.js`).
+- **"Reset deck"** (with confirmation) empties the deck; the pool is untouched.
+- **"Reset pool"** (normal mode only): new pool, deck deleted, 30-minute cooldown.
+- **Background deck sync**: as soon as the deck is non-empty, a deck is created on decks-api
+  and kept in sync on every change, throttled to one call per 2 s. See §6.
+
+### 2.3 Player journeys
+
+**Tournament journey**
+
+1. The player opens `/tournament/prep` any time before the tournament. A pending pool is
+   minted on first visit and stays locked. They build a deck; it is saved under their
+   Re:Union account as a `sealed`-format deck.
+2. They register to the tournament on BGA. The BGA schedule is the start of the rounds, so
+   the deck has to be built before.
+3. The first game of the tournament starts. BGA asks altered-bga-api for the player's deck
+   list with `format: SEALED` and the tournament id. altered-bga-api calls altered-draft,
+   which **binds** the pending pool to that tournament id (one-time write), records the game,
+   and returns the linked deck summary. If the player never built a deck, altered-draft
+   **mints a random legal deck** named `Random …` so the game can still start.
+   On the BGA side the sealed format skips the preconstructed-deck wizard and goes straight
+   to the fetch flow; the single returned deck is auto-selected. A name starting with
+   `Random` shows a warning ("You didn't build your deck before the matches started…"); a
+   name starting with `Invalid` stops there with a link to fix the deck on altered-draft; an
+   empty list shows "No Sealed deck found" with a link to altered-draft.
+4. From then on the pool appears under **"My ongoing tournaments"**, and a *new* pending pool
+   is available for the next tournament. The player may edit the bound deck between games;
+   every BGA deck-content fetch re-validates it against the pool.
+5. BGA fetches the deck content through altered-bga-api → decks-api. decks-api validates
+   `deck ⊆ pool` by asking altered-draft for the pool linked to that deck id. Invalid → 422 →
+   BGA shows "This deck is not legal".
+
+**Normal (casual) journey**
+
+The same screen, but for non-tournament BGA sealed games. A BGA deck-list call **without** a
+tournament id resolves to the player's normal pool. The player can reset the pool every 30
+minutes; resetting deletes the linked deck on decks-api (best-effort) so decks-api never
+validates against a stale pool.
+
+### 2.4 Interactions with other Re:Union surfaces
+
+- **altered.re / deckbuilder.alteredcore.org**: the synced deck is a regular deck in the
+  player's account (`format: sealed`, `isDraft` reflecting validity). Editing it there goes
+  through decks-api's generic save, which validates against the pool too (by deck id).
+  decks-api refuses to change a deck's format to/from `sealed`.
+- **BGA**: only through altered-bga-api (§9.2). The BGA table option "Deck format =
+  Sealed" (option 155, value 7, `OPTION_DF_SEALED` in AlteredBGA) selects the format; its
+  description tells players decks must be built on altered-draft.altered.re. The BGA client
+  links to `https://altered-draft.altered.re/edit/deck/<deckId>` ("change your deck between
+  games", "fix it"), which is the `/edit/deck/:deckId` deep link above.
+- **End-of-game stats** (altered-bga-api `POST /games/register`): a separate feature that
+  stores games per BGA tournament id. Not wired to sealed pools today, but it keys on the
+  same BGA tournament ids (`Tournaments.TournamentId` / `TournamentParentId`) that
+  `sealed_pools.tournament_id` stores, so a join is possible later.
+
+### 2.5 Known functional limits
+
+- "My ongoing tournaments" only grows: there is no signal for a tournament ending.
+- Validity differs slightly between altered-draft (`≤ 1` hero) and decks-api (`exactly 1`
+  hero). A 30-card deck with no hero shows "Valid" in the app but is rejected by decks-api
+  and therefore by BGA. See §12.
+- The pool contents are visible to the player before the tournament; this is by design
+  (only the validated deck counts).
+
+---
+
+## 3. Architecture
+
+### 3.1 Components
+
+```mermaid
+flowchart LR
+  subgraph Player
+    B[Browser<br/>altered-draft SPA]
+  end
+  subgraph alteredDraft["altered-draft (altered-draft.altered.re)"]
+    API[api/tournament-*.js<br/>Vercel-style handlers<br/>mounted by server/index.js]
+    PG[(Postgres<br/>current_format<br/>sealed_pools<br/>sealed_pool_games)]
+    API --> PG
+  end
+  KC[Keycloak<br/>auth.altered.re<br/>realm players]
+  DA[altered-core-decks-api<br/>decks.alteredcore.org]
+  BGAAPI[altered-bga-api<br/>bga-api.altered.re]
+  BGA[BGA platform +<br/>AlteredBGA game]
+  CARDS[Card data<br/>GitHub set JSON · cards.alteredcore.org · cdn.alteredcore.org]
+
+  B -- "Bearer token" --> API
+  B -- "/api/decks proxy" --> API
+  API -- "userinfo" --> KC
+  API -- "decks CRUD (player token)" --> DA
+  API -- "fetchSet / fetchUniques" --> CARDS
+  B -- "card data + images" --> CARDS
+  BGA -- "GET /api/bga/decks (envelope)" --> BGAAPI
+  BGA -- "GET /api/bga/decks/{id} (envelope)" --> BGAAPI
+  BGAAPI -- "SEALED list → /api/tournament-bga-decklist" --> API
+  BGAAPI -- "content → /api/bga/decks/{id}" --> DA
+  DA -- "/api/tournament-pool-by-deck" --> API
+  DA -- "token check" --> KC
+```
+
+### 3.2 State ownership
+
+| State | Owner | Where |
+| --- | --- | --- |
+| Active competitive format | altered-draft | `current_format` (append-only) |
+| Per-player pools (nonce, snapshot of format, binding, deck summary) | altered-draft | `sealed_pools` |
+| Games played per pool | altered-draft | `sealed_pool_games` |
+| The deck itself (card list, name, isDraft, legality) | decks-api | `Deck` / `DeckCard` entities |
+| Identity | Keycloak | `sub` claim; altered-draft stores `sub` as the owner key |
+| Deck editor state in the browser | altered-draft frontend | React state; seeded from decks-api on load (no localStorage for tournament decks) |
+| Pack-reveal "seen" flag | browser | localStorage `pool_reveal_seen:<id>:<resetAt>` |
+| Tournament metadata (name, parent, group) + games + player results | altered-bga-api | `Tournaments`, `Games`, `PlayerGames` (end-of-game feature) |
+
+altered-draft **never stores a card list**: neither the pool (regenerated from the seed) nor
+the deck (only a summary: id, name, hero, faction, card count).
+
+### 3.3 Sequence: preparing a pool and building a deck
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant P as Player (browser)
+  participant AD as altered-draft API
+  participant KC as Keycloak
+  participant DB as Postgres (altered-draft)
+  participant DA as decks-api
+
+  P->>AD: GET /api/tournament-prep-pool (Bearer)
+  AD->>KC: GET userinfo → sub
+  AD->>DB: SELECT pending tournament pool for sub
+  alt none pending
+    AD->>DB: SELECT latest current_format
+    AD->>DB: INSERT sealed_pools (kind=tournament, nonce=uuid, format snapshot)
+  end
+  AD->>AD: regeneratePool(sub, row) → counts + boosters
+  AD-->>P: { id, kind, cards, boosters, deck: null, ... }
+  P->>P: fetchSet(EOLE) + fetchUniques(unique refs) → cardMap
+  P->>P: PackReveal (first open), then full-pool deckbuilder
+  P->>P: player adds a card (deck 0 → 1)
+  Note over P: throttled 2 s
+  P->>AD: POST /api/decks { name, format: sealed, isDraft, deckCards }
+  AD->>DA: POST /api/decks (player token)
+  DA-->>AD: { id: deckId, ... }
+  AD-->>P: deck
+  P->>AD: POST /api/tournament-pool?id=<poolId> { deckId, name, heroRef, faction, cardQuantity }
+  AD->>DB: UPDATE sealed_pools SET deck_* ...
+  AD-->>P: pool (with deck summary)
+  loop every further edit (throttled)
+    P->>AD: PATCH /api/decks/:id { name, deckCards, isDraft, format }
+    AD->>DA: PATCH (merge-patch+json)
+    P->>AD: POST /api/tournament-pool?id=... (summary)
+  end
+```
+
+### 3.4 Sequence: a BGA game starts (deck list → binding → deck content → validation)
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant BGA as BGA (platform + game)
+  participant GW as altered-bga-api
+  participant AD as altered-draft API
+  participant DB as Postgres (altered-draft)
+  participant DA as decks-api
+
+  BGA->>GW: GET /api/bga/decks?eventFormat=envelope&tournamentId=605019&gameId=555111 (Bearer player token)
+  GW->>GW: BgaEnvelope.TryDecode → payload.format == "SEALED"
+  GW->>GW: tournamentId := payload.tournamentParentId ?? query tournamentId
+  GW->>AD: GET /api/tournament-bga-decklist?tournamentId=597924&tournamentName=…&gameId=555111 (same Bearer)
+  AD->>AD: verifySub (Keycloak userinfo)
+  AD->>DB: bindTournamentId(sub, 597924, name)
+  Note over AD,DB: first time: UPDATE pending pool SET tournament_id, bound_at<br/>repeat: return the already-bound row (name refreshed)
+  AD->>DB: INSERT sealed_pool_games (pool_id, game_id) ON CONFLICT DO NOTHING
+  AD->>DA: ensureDeck: GET /api/decks/{deck_id} (reconcile format / isDraft / name)
+  alt no deck, or deck gone (404)
+    AD->>AD: regeneratePool + buildRandomDeck
+    AD->>DA: POST /api/decks { name: "Random …", isDraft: true }
+    AD->>DB: updateDeckSummary(pool, deckId)
+    AD->>DA: PATCH { isDraft: false }
+  end
+  AD-->>GW: hydra collection with the one deck summary
+  GW-->>BGA: same body, byte for byte
+  BGA->>GW: GET /api/bga/decks/envelope { deckId, format: SEALED, tableId, tournamentName }
+  GW->>GW: rewrite path to /api/bga/decks/{deckId} + query eventFormat/tableId/tournamentName
+  GW->>DA: GET /api/bga/decks/{deckId} (decks-api-direct client, Bearer)
+  DA->>DA: BgaDeckController::item → format == sealed → SealedFormatValidator
+  DA->>AD: GET /api/tournament-pool-by-deck?deckId=… (Bearer, cached 1 h per (sub, deckId))
+  AD->>DB: SELECT sealed_pools WHERE sub AND deck_id
+  AD->>AD: regeneratePoolCounts
+  AD-->>DA: { cards: { ref: count }, ... }
+  alt deck ⊆ pool and legal
+    DA-->>GW: 200 deck content (deckCardsByType, legality: true)
+    GW->>GW: alt-art ownership rewrite (fail-open)
+    GW-->>BGA: deck content
+  else invalid
+    DA-->>GW: 422 "Card X is not in your sealed pool."
+    GW-->>BGA: 422 → "This deck is not legal"
+  end
+```
+
+### 3.5 Sequence: resetting the normal pool
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant P as Player
+  participant AD as altered-draft API
+  participant DB as Postgres
+  participant DA as decks-api
+
+  P->>AD: POST /api/tournament-normal-pool (Bearer)
+  AD->>DB: SELECT normal pool for sub
+  alt reset_at within the last 30 min
+    AD-->>P: 429 { error: "cooldown", remainingMs }
+  else
+    AD->>DB: UPDATE sealed_pools SET nonce = new uuid, format snapshot re-read, reset_at = now(), deck_* = NULL
+    AD->>DA: DELETE /api/decks/{previousDeckId} (best-effort, player token)
+    AD-->>P: new pool (cards, boosters, deck: null)
+  end
+```
+
+---
+
+## 4. Pool generation: determinism and composition
+
+Everything is in `api/_lib/tournamentPool.js` (`regeneratePool`), fed by
+`src/lib/poolStore.js` (`buildPoolSeedString`), `src/lib/prng.js`,
+`src/lib/uniqueFactionRanges.js` and `src/lib/packGenerator.js`
+(`generateTournamentSealedPool`).
+
+### 4.1 Seed
+
+```
+seedStr = sub | set_code | unique_count | even_factions | heroes_in_pool | guaranteed_uniques | nonce
+```
+
+- `sub` is the verified Keycloak subject; `nonce` is a `crypto.randomUUID()` minted when the
+  row is inserted (or on a normal-pool reset).
+- **`tournament_id` is deliberately NOT part of the seed**: a pool must have identical
+  contents before and after binding (bug fixed 2026-08-12, "Fix tournament sealed pool
+  changing contents when bound").
+- Two PRNG streams are derived with FNV-1a (`hashSeed`) + `mulberry32`:
+  - `mulberry32(hashSeed(seedStr))` drives the booster draws and the unique-slot placement;
+  - `mulberry32(hashSeed(seedStr + '#uniques'))` drives the unique draws.
+
+### 4.2 Steps (`regeneratePool(sub, poolRow)`)
+
+```mermaid
+flowchart TD
+  A[seedStr from sub + row] --> U[pickDeterministicUniques<br/>set, rng for uniques, uniqueCount = unique_count + guaranteed_uniques]
+  U --> U1[first unique_count refs → booster uniques]
+  U --> U2[rest → outside uniques]
+  A --> S[fetchSet set_code<br/>B printings only, tokens excluded]
+  S --> G[generateTournamentSealedPool cards, rng, uniqueRefs = booster uniques, includeHeroes = heroes_in_pool]
+  U1 --> G
+  G --> P[7 packs × 12 refs<br/>9 commons + 3 rares; unique injected into a rare slot chosen by the same rng]
+  P --> C[counts = flatten packs]
+  U2 --> C
+  C --> H{heroes_in_pool?}
+  H -- false --> H1[append every HERO card of the set ×1]
+  H -- true --> H2[heroes already drawn in packs, 13-card packs]
+  H1 --> R[return counts + boosters]
+  H2 --> R
+```
+
+Details that matter:
+
+- **Booster composition** (`generateOnePack` with `rng`): optional hero slot (only if
+  `includeHeroes`), 9 commons (1 per faction + 3 paired draws AX|BR, LY|MU, OR|YZ), 3 rares.
+  No unique slot of its own (`randomUniqueRate = 0`, empty uniques pool). Pools are deduped by
+  `name+faction` inside `splitPools`.
+- **Unique injection**: after the 7 packs are built, all `(pack, rareSlot)` positions (7×3)
+  are shuffled with the booster rng and the first `uniqueRefs.length` receive the uniques.
+- **Unique drawing** (`pickDeterministicUniques`): uses the bundled per-set tables
+  `src/lib/data/factionRanges/<SET>.json` = `{ family_id: { faction: [[start, end], ...] } }`,
+  derived from real production data. Each rare *family* (e.g. `AX_106`) has a serial range
+  split into non-contiguous windows between its home faction and exactly one out-of-faction
+  pairing (per card, not a fixed axis). A draw picks a `(family, faction)` weighted by its
+  serial count, then a serial uniformly within that faction's windows, and composes
+  `ALT_<SET>_B_<family>_U_<serial>`. `evenFactions: true` round-robins target factions.
+  Dedupes within one call (so booster and outside uniques never overlap).
+  Sets covered: CORE, COREKS, ALIZE, BISE, CYCLONE, DUSTER, EOLE. **FUGUE has no table**, so
+  `unique_count > 0` on FUGUE yields no uniques.
+- **Guaranteed uniques** and **appended heroes** belong to `counts` but to no booster. The
+  frontend surfaces the guaranteed unique(s) as an "8th booster" in the reveal, computed as
+  "unique refs in `cards` that are in no booster".
+- `regeneratePoolCounts` is the flat-counts-only variant used by validation callers.
+- Card rendering resolves uniques live per ref (`fetchUniques` → `cards.alteredcore.org`,
+  image = the base `_R1` art on the CDN).
+
+### 4.3 Why it is reproducible
+
+Every consumer (pool pages, BGA deck list, decks-api validation) calls the same
+`regeneratePool` with the same row, so they always agree. The card data source
+(`fetchSet`) must stay stable for a given set: a change in the upstream set file (new
+printing, renamed card) would change the deduped pools and therefore the draws. This is an
+accepted risk for a released set.
+
+---
+
+## 5. Pool lifecycle and tournament binding
+
+A `sealed_pools` row is one of three things, distinguished by `kind` and `tournament_id`:
+
+```mermaid
+stateDiagram-v2
+  direction LR
+  [*] --> Normal: GET /api/tournament-normal-pool (first call)
+  Normal --> Normal: POST reset (new nonce, deck deleted)<br/>only if reset_at older than 30 min
+  [*] --> Pending: GET /api/tournament-prep-pool (first call)<br/>or first bind with no pending pool
+  Pending --> Bound: bindTournamentId(sub, tournamentId)<br/>UPDATE ... WHERE tournament_id IS NULL
+  Bound --> Bound: later calls with the same tournamentId<br/>(tournament_name refreshed, nothing else)
+  note right of Pending
+    Partial unique index:
+    at most ONE pending tournament pool per sub.
+    This is the one-shot commitment lock.
+  end note
+  note right of Bound
+    Unique index (sub, tournament_id):
+    one pool per player per tournament.
+    Immutable: nonce, format snapshot, tournament_id.
+  end note
+```
+
+Rules implemented in `src/lib/poolStore.js`:
+
+- `getOrCreateNormalPool(sub)` / `getOrCreatePreparationPool(sub)`: SELECT, else INSERT with
+  the latest `current_format` snapshot and a fresh nonce. Insert races are absorbed by
+  `ON CONFLICT ... DO NOTHING` + re-select.
+- `bindTournamentId(sub, tournamentId, tournamentName)`:
+  1. if a row `(sub, tournament_id)` exists → return it (refresh `tournament_name` if given);
+  2. else take (or create) the pending pool and `UPDATE ... SET tournament_id, tournament_name,
+     bound_at = now() WHERE id = $1 AND tournament_id IS NULL`;
+  3. lost race → re-select. **Idempotent**: every game of the same tournament re-triggers it.
+  Binding frees the "pending" slot, so the next `/api/tournament-prep-pool` mints a new pool.
+- `resetNormalPool(sub)`: 30-minute cooldown on `reset_at`; new nonce; re-snapshots the active
+  format; clears `deck_*`; returns `previousDeckId` for the handler to delete on decks-api.
+- `recordGamePlayed(poolId, gameId)` / `countGamesPlayed(poolId)`: deduped by the composite
+  PK; a BGA table reloading the deck-list screen calls repeatedly with the same `gameId`.
+- `getPoolById(sub, id)` and `getPoolByDeckId(sub, deckId)` are always **owner-scoped**
+  (never resolve a pool by id alone).
+
+Which tournament id gets bound: altered-bga-api forwards BGA's `tournamentParentId` when the
+envelope carries one, else the stage's own `tournamentId`. A multi-stage BGA tournament
+(Stage 1 groups + Stage 2) therefore binds **one** pool for the whole event.
+
+---
+
+## 6. Deck synchronisation and naming conventions
+
+The deck lives on decks-api; altered-draft keeps only a summary on the pool row
+(`deck_id`, `deck_name`, `deck_hero_ref`, `deck_faction`, `deck_card_quantity`). Two writers
+keep both sides consistent:
+
+**Frontend sync** (`TournamentPoolView.jsx`, `scheduleSync`, throttled 2 s):
+
+- Runs after every deck change once the deck is non-empty. Skipped when the deck state is
+  merely seeded from a load or a reset (`skipNextSyncRef`), so opening the page never
+  renames a `Random …` deck.
+- Computes validity (`≥30`, `≤3 factions`, `≤1 hero`) and builds
+  `{ name, deckCards, isDraft: !valid, format: 'sealed' }`.
+- `updateDeck(deckId)` if the pool has one, recreating with `createDeck` on a 404 (deck
+  deleted from the deckbuilder); else `createDeck`. Then `syncPoolDeck(poolId, summary)`
+  (`POST /api/tournament-pool?id=`).
+
+**Backend reconciliation** (`api/_lib/tournamentPool.js`, `ensureDeck`, on every BGA deck-list
+call):
+
+- If the pool has a deck with cards: `GET` it on decks-api. 404 → treat as gone and re-mint.
+  Other failures → trust the cache (never wipe a good deck on a transient error).
+- Re-derives from the live card list: `format` forced to `sealed`, `isDraft = !valid`, name
+  rebuilt from the pool. Any drift is PATCHed to decks-api and the summary refreshed.
+- If there is no deck (or it is empty/gone): `buildRandomDeck` from the regenerated pool,
+  `POST` as **`isDraft: true` first**, link it to the pool (`updateDeckSummary`), then
+  `PATCH { isDraft: false }`. The two-step is required: decks-api validates non-draft decks
+  by calling back `/api/tournament-pool-by-deck`, and caches a failure for 30 s per deck id,
+  so validating before the link exists would poison the cache.
+
+**Naming** (fixed literals, do not translate the prefixes):
+
+| Situation | Name |
+| --- | --- |
+| Tournament pool, bound | `<tournament_name>` |
+| Tournament pool, pending | frontend: `t('tournamentPoolView.nextTournamentDeckName')`; backend: `Next tournament sealed set 6` |
+| Normal pool | frontend: `t('tournamentPoolView.normalDeckName')`; backend: `Sealed set 6 · out of tournament` |
+| Deck not valid | prefix **`Invalid `**. The BGA client (`altered.js`) matches a name starting with `invalid` (case-insensitive): it skips the deck-content call and shows "Invalid deck" with a link to fix it on altered-draft. |
+| Auto-minted, unreviewed | prefix **`Random `** (dropped on the player's next edit, since the frontend recomputes the name from scratch). The BGA client matches a name starting with `random` and warns "You didn't build your deck before the matches started. A random deck was generated using your pool." |
+
+`isDraft` mirrors validity: `true` when invalid (decks-api then skips validation and marks
+the deck not legal), `false` when valid (decks-api validates, incl. pool membership).
+
+---
+
+## 7. Database schema
+
+File: `sealed-pools-schema.sql` (idempotent; applied by `make dev`, by the AlteredOps
+`migrations` one-shot image, and to be applied by hand on any other Postgres). Requires
+`pgcrypto` for `gen_random_uuid()`.
+
+```mermaid
+erDiagram
+  current_format {
+    bigint id PK
+    text type "sealed | draft"
+    text set_code
+    int unique_count "uniques inside boosters"
+    boolean even_factions
+    boolean heroes_in_pool
+    int guaranteed_uniques "uniques outside boosters"
+    timestamptz created_at
+  }
+  sealed_pools {
+    uuid id PK
+    text sub "Keycloak subject (owner)"
+    text kind "normal | tournament"
+    text set_code "snapshot"
+    int unique_count "snapshot"
+    boolean even_factions "snapshot"
+    boolean heroes_in_pool "snapshot"
+    int guaranteed_uniques "snapshot"
+    text nonce "random uuid, part of the seed"
+    text tournament_id "null = pending; set once"
+    text tournament_name "informative, refreshable"
+    timestamptz bound_at
+    timestamptz reset_at "normal only, cooldown"
+    text deck_id "decks-api deck uuid"
+    text deck_name
+    text deck_hero_ref
+    text deck_faction
+    int deck_card_quantity
+    timestamptz created_at
+  }
+  sealed_pool_games {
+    uuid pool_id PK,FK
+    text game_id PK "BGA gameId"
+    timestamptz created_at
+  }
+  current_format ||..o{ sealed_pools : "snapshotted at insert (no FK)"
+  sealed_pools ||--o{ sealed_pool_games : "games played"
+```
+
+Indexes and what they enforce:
+
+| Index | Definition | Enforces |
+| --- | --- | --- |
+| `sealed_pools_one_normal_per_sub` | unique `(sub) WHERE kind = 'normal'` | One casual pool per player (reset updates in place). |
+| `sealed_pools_one_pending_tournament_per_sub` | unique `(sub) WHERE kind = 'tournament' AND tournament_id IS NULL` | **One-shot commitment**: one pending pool per player. |
+| `sealed_pools_one_binding_per_sub_per_tournament` | unique `(sub, tournament_id) WHERE tournament_id IS NOT NULL` | One pool per player per tournament (many players share a tournament id). |
+| `sealed_pools_bound_tournaments` | `(sub, bound_at DESC) WHERE kind = 'tournament' AND tournament_id IS NOT NULL` | "My ongoing tournaments" listing. |
+| `sealed_pool_games` PK | `(pool_id, game_id)` | Games-played dedup. |
+
+Conventions:
+
+- `current_format` is **append-only**. Changing the format = `INSERT` a new row; the active
+  format is `ORDER BY created_at DESC, id DESC LIMIT 1`. Existing pools keep their snapshot.
+- Migration guards in the file: `tournament_seed → tournament_id` rename, columns added with
+  `IF NOT EXISTS`, indexes dropped and recreated so a renamed column is never left dangling.
+- The seed row (`EOLE`, 1 in-booster unique, 1 guaranteed, random factions, heroes appended)
+  is inserted only when the table is empty.
+- No cleanup job exists for `sealed_pools` (unlike `draft_rooms` on the Vercel/Supabase path).
+
+Related tables in **altered-bga-api** (EF Core, Postgres `bgadb`) — not part of the sealed
+flow but keyed on the same BGA ids: `Tournaments(TournamentId, Name, TournamentParentId,
+TournamentGroup)`, `Games(TableId PK, TournamentId, Format, Env, ReceivedAt)`,
+`PlayerGames(Id, TableId FK, BgaUserId, ReunionUserId, BgaName, Deck, PlayedCards, IsWinner)`,
+`RequestLogs` (every request/response pair, with `DecodedEnvelope` and unverified `UserId`,
+useful to inspect what BGA really sends).
+
+Related entity in **decks-api**: `Deck { id uuid, name (≤150), format enum incl. 'sealed',
+isDraft, isPublic, user, deckCards[], stats, formatErrors, legalityDetail }`.
+
+---
+
+## 8. Code map and responsibilities
+
+### 8.1 altered-draft
+
+| Path | Responsibility |
+| --- | --- |
+| `sealed-pools-schema.sql` | Schema + seed row + migration guards (§7). |
+| `src/lib/db.js` | `pg.Pool` from `DATABASE_URL` (max 5), SSL heuristic (`DATABASE_SSL` override, else no SSL for localhost). Server-side only. |
+| `src/lib/poolStore.js` | Data-access layer: active format, get-or-create pools, reset with cooldown, binding, listing, games played, owner-scoped lookups, deck summary update, `buildPoolSeedString`. |
+| `api/_lib/auth.js` | `verifySub(req)`: Bearer → Keycloak userinfo → `sub`. `bearerToken(req)`. |
+| `api/_lib/tournamentPool.js` | `regeneratePool` / `regeneratePoolCounts` (§4), `ensureDeck` + `deckStillExists` (§6), `poolResponse` (response shape), server-side decks-api calls. |
+| `api/tournament-normal-pool.js` | GET get-or-create normal pool; POST reset (+ best-effort deck delete). |
+| `api/tournament-prep-pool.js` | GET get-or-create pending tournament pool. No reset. |
+| `api/tournament-bound-pools.js` | GET list of bound pools (summaries + games played). |
+| `api/tournament-pool.js` | GET one pool by id (owner-scoped, full cards + boosters); POST update deck summary. |
+| `api/tournament-bga-decklist.js` | Called by altered-bga-api. Binds, records game, `ensureDeck`, answers the hydra collection. |
+| `api/tournament-pool-by-deck.js` | Called by decks-api. Pool for `(sub, deckId)`, flat counts. |
+| `api/tournament-pool-counts.js` | Legacy (no caller today). Pool counts by `tournamentId` — **also binds** as a side effect. |
+| `api/decks/index.js`, `api/decks/[id].js` | Same-origin proxies to decks-api (list/create; get/patch) forwarding the player's token. Used by the frontend sync. |
+| `server/index.js` | Express server for the Docker deployment: mounts every handler above on `/api/*`. **A new handler must be registered here too.** |
+| `src/lib/prng.js` | `hashSeed` (FNV-1a), `mulberry32`, `seededRng`. |
+| `src/lib/uniqueFactionRanges.js` + `src/lib/data/factionRanges/*.json` | Deterministic unique drawing from per-family faction windows. |
+| `src/lib/packGenerator.js` | `generateTournamentSealedPool(cards, rng, { boosters, uniqueRefs, includeHeroes })`, `generateOnePack` with injectable rng, `splitPools`. |
+| `src/lib/randomDeck.js` | `buildRandomDeck(poolCards, cardMap, { size })`: shared by the UI button and `ensureDeck`. |
+| `src/lib/cardData.js` | `fetchSet`, `fetchUniques`, `isUniqueRef`, `cardImageUrl`. |
+| `src/lib/tournamentApi.js` | Frontend client for the tournament endpoints (adds the Bearer token, throws with `.status`/`.data`). |
+| `src/lib/decks.js` | Frontend decks-api client via the proxies (`listDecks`, `getDeck`, `createDeck`, `updateDeck`, `toDeckCards`, `deckCardsToRefs`). |
+| `src/components/TournamentPoolView.jsx` | Shared pool/deckbuilder screen, validity, random deck, reset, throttled sync, reveal gating. |
+| `src/components/PackReveal.jsx` | First-open pack-by-pack overlay (+ guaranteed-unique "8th booster"). |
+| `src/components/PoolGrid.jsx` | Card grid with +/- controls (shared with the room-based sealed mode). |
+| `src/pages/TournamentMenu.jsx`, `TournamentPrep.jsx`, `TournamentNormal.jsx`, `TournamentBoundDetail.jsx`, `EditDeckRedirect.jsx` | Routes (§2.2). |
+| `src/pages/Home.jsx` | The "Sealed set 6" entry block. |
+| `src/App.jsx` | Route table. |
+| `src/lib/i18n/en.js`, `fr.js` | `home.*`, `tournamentPages.*`, `tournamentPoolView.*`, `packReveal.*`, `deckValidity.*`. |
+| `src/lib/banlist.js` | Equinox ban list. **Not applied** to tournament pools (decks-api allows banned cards in sealed; pool membership is the only gate). |
+| `src/lib/packGenerator.test.js` | Determinism + unique injection tests for `generateTournamentSealedPool`. |
+| `ROADMAP.md` "Set 6 preview" | The design record (long, partly superseded; history in §13). |
+
+### 8.2 altered-bga-api (.NET 10)
+
+| Path | Responsibility |
+| --- | --- |
+| `Program.cs` | Routes. `GET /api/bga/decks`: decode envelope → if `payload.format == "SEALED"` → `SealedDecklistHandler` (never falls through to decks-api); else `DecklistHandler.RewriteQuery` + YARP forward. `GET /api/bga/decks/{id}`: decode envelope → `DeckContentHandler.TryRewrite` → `DeckOwnershipRewriteHandler` (direct call to decks-api + alt-art rewrite). Named `HttpClient("altered-draft")` with pooled connections, one retry on transient failures, timing. |
+| `Envelope/BgaEnvelope.cs`, `Base64UrlCodec.cs`, `FlexibleStringConverter.cs` | Envelope decoding (base64 or base64url, lenient JSON types). |
+| `Decklist/DecklistPayload.cs` | `{ format, tableId, tournamentName, tournamentParentId }`. |
+| `Decklist/SealedDecklistHandler.cs` | Builds `GET {AlteredDraft:BaseUrl}/api/tournament-bga-decklist?tournamentId&tournamentName&gameId`, forwards `Authorization`, relays the response byte for byte; 502 `altered_draft_not_configured` / `altered_draft_unreachable`. |
+| `Decklist/DecklistHandler.cs` | Non-sealed formats: rewrite `eventFormat` + add `tableId`/`tournamentName` and forward. |
+| `DeckContent/DeckContentHandler.cs`, `DeckContentPayload.cs` | Rewrite `{id}` envelope to the real deck id + query params. |
+| `DeckContent/DeckOwnershipRewriteHandler.cs` | Fetches deck content from decks-api, applies alt-art preferences (fail-open). Relays 422 unchanged. |
+| `Upstream/UpstreamRetryHandler.cs`, `UpstreamPooling.cs` | Retry (connection errors, 502/503/504, 520–524; not 500, not timeouts) and connection pooling. |
+| `RequestLogging/*` | Persists request/response pairs (`RequestLogs`), `GET /api/request-logs?apiKey=`. |
+| `EndGame/*`, `GameSync/*`, `PlayerLookup/*`, `Data/*` | End-of-game ingestion and feeds (separate feature). |
+| `AlteredBgaApi.Tests/Decklist/SealedDecklistHandlerTests.cs`, `Integration/SealedDecklistEndpointTests.cs` | Contract tests for the sealed short-circuit (parent id, quoted ids, 502 paths, never-fall-through). |
+| `appsettings.json` | `AlteredDraft:BaseUrl` default `https://altered-draft.altered.re`, `Upstream:BaseUrl` `https://decks.alteredcore.org`. |
+
+### 8.3 altered-core-decks-api (Symfony)
+
+| Path | Responsibility |
+| --- | --- |
+| `src/Controller/BgaDeckController.php` | `collection()` (hydra list; `SEALED → sealed` mapping exists but the sealed list never reaches it) and `item()`: for `format == sealed` runs `SealedFormatValidator` and throws 422 on errors; else returns `normalizeBga` content. |
+| `src/Validator/Format/SealedFormatValidator.php` | Exactly 1 hero, ≤3 factions, ≥29 non-hero cards, banned/suspended allowed, no set restriction, **every card (hero included) ⊆ pool**. Fails closed when the pool can't be fetched. |
+| `src/Client/AlteredDraftSealedPoolClient.php` | `GET {ALTERED_DRAFT_URL}/api/tournament-pool-by-deck?deckId=` with the caller's Bearer; cache 1 h per `(keycloakId, deckId)`, 30 s on error. |
+| `src/State/DeckStateProcessor.php` | On save: `isDraft` → no validation, `legal=false`; else validate by format. `assertSealedFormatIsImmutable`: a deck can't change format to or from `sealed`. |
+| `src/Enum/DeckFormat.php` | Includes `sealed`. |
+| `config/services.yaml`, `.env` | `ALTERED_DRAFT_URL`. |
+
+### 8.4 AlteredOps (deployment)
+
+| Path | Responsibility |
+| --- | --- |
+| `sync-with-servers/services/altered-draft/docker-compose.yml` | Postgres (wal2json), one-shot `migrations` image (applies `*.sql`), app, realtime sidecar. `DATABASE_SSL=false`. |
+| `sync-with-servers/services/altered-draft/env/*.defaults`, `secrets.list` | Domains, DB names; secrets `KEYCLOAK_CLIENT_SECRET`, `SEALED_ATTESTATION_SECRET` (unused), realtime secrets. |
+| `sync-with-servers/services/bga-api/docker-compose.yml`, `env/*.defaults` | `AlteredDraft__BaseUrl` ← `ALTERED_DRAFT_BASE_URL` (per env), `Upstream__BaseUrl`. |
+
+### 8.5 AlteredBGA (the BGA game code)
+
+| Path | Responsibility |
+| --- | --- |
+| `gameoptions.json` (option `155`, value `7`), `modules/php/constants.inc.php` (`OPTION_DF_SEALED`), `modules/php/Core/Globals.php` | The "Sealed" deck-format table option → `setDeckFormat('SEALED')`. |
+| `modules/php/States/SetupTrait.php` `actLoaAPIdDecks` | Builds the deck-list envelope (`format`, `tableId`, `tournamentName`, `tournamentParentId`, `tournamentGroup`) into `eventFormat` and calls BGA's `get_player_decks`. Keeps `eventFormat` out of the request echoed to the client (base64 chars fail `validateJSonAlphaNum`). |
+| `modules/php/States/SetupTrait.php` `actGetDeckInfos` | Builds the deck-content envelope (`playerId`, `playerName`, `deckId`, `format`, `tableId`, `tournamentName`) as the `deck_id` of `get_player_deck_content`; throws "This deck is not legal" when `legality != true`; refuses uniques without `content`, with an unimplemented power, or named Moonlight Jellyfish. |
+| `modules/php/States/EndGameTrait.php` | `register_game` call with `tournamentId`, `tournamentName`, `tournamentParentId`, `tournamentGroup`, players, decks, winner (the end-of-game feature of altered-bga-api). |
+| `altered.js` (`isSealedDeckFormat`, `showAccountNotConfiguredDeckPickerContent`, `selectFetchedDeck`, `_getSealedDeckNoticesHtml`, `showInvalidFetchedDeckMessage`, `_getDeckEditLink`) | Sealed-only client flow: straight to the fetch flow, auto-select the single deck, `invalid`/`random` name prefixes, "No Sealed deck found" screen, links to `altered-draft.altered.re/edit/deck/<id>`. |
+
+Tournament context comes from BGA's framework: `$this->bga->tournament->isTournament()` /
+`getInfo()` → `id`, `name`, `tournament_parent_id`, `tournament_group`.
+
+---
+
+## 9. API contracts and exchanged data
+
+### 9.1 altered-draft tournament endpoints
+
+Common to all: `Authorization: Bearer <Keycloak access token>` verified via userinfo
+(`401 { "error": "unauthorized" }` otherwise); JSON responses; `405` with `Allow` on wrong
+methods; unhandled errors → `500 { "error": "internal_error", "message" }` (Express path).
+Handlers read query params from `req.query` or the URL (both Vercel and Express).
+
+**Pool response shape** (`poolResponse`, used by most endpoints):
+
+```json
+{
+  "id": "0b1e…-uuid",
+  "kind": "tournament",
+  "setCode": "EOLE",
+  "tournamentId": "597924",
+  "tournamentName": "Winter Cup",
+  "boundAt": "2026-09-22T18:02:11.000Z",
+  "resetAt": null,
+  "cards": { "ALT_EOLE_B_AX_12_C": 2, "ALT_EOLE_B_LY_7_R1": 1, "ALT_EOLE_B_AX_111_U_400": 1, "ALT_EOLE_B_AX_01_C": 1 },
+  "boosters": [["ALT_EOLE_B_AX_12_C", "…11 more refs"], ["…"], "… 7 arrays of 12"],
+  "gamesPlayed": 3,
+  "deck": { "id": "3fa85f64-…", "name": "Winter Cup", "heroRef": "ALT_EOLE_B_AX_01_C", "faction": "AX", "cardQuantity": 30 }
+}
+```
+
+`cards` is `ref → count` (the full pool incl. guaranteed uniques and appended heroes);
+`boosters` is present only where noted; `deck` is `null` until a deck is linked.
+
+| Endpoint | Method | Params | Response | Notes |
+| --- | --- | --- | --- | --- |
+| `/api/tournament-normal-pool` | GET | — | pool (+ `boosters`, `gamesPlayed`) | Get-or-create the normal pool. |
+| `/api/tournament-normal-pool` | POST | — | pool (+ `boosters`, `gamesPlayed`) or `429 { "error": "cooldown", "remainingMs" }` | Reset. Deletes the previous deck on decks-api (best-effort). |
+| `/api/tournament-prep-pool` | GET | — | pool (+ `boosters`, `gamesPlayed`) | Get-or-create the pending tournament pool. |
+| `/api/tournament-bound-pools` | GET | — | `{ "pools": [ { id, setCode, tournamentId, tournamentName, boundAt, gamesPlayed, deck: { id, name, cardQuantity } \| null } ] }` | Most recent first. |
+| `/api/tournament-pool` | GET | `id` | pool (+ `boosters`, `gamesPlayed`); `400 invalid_request`; `404 not_found` | Owner-scoped. |
+| `/api/tournament-pool` | POST | `id`; body `{ deckId, name, heroRef, faction, cardQuantity }` | pool (+ `boosters`, `gamesPlayed`) | Updates the cached deck summary. |
+| `/api/tournament-bga-decklist` | GET | `tournamentId?`, `tournamentName?`, `gameId?` | hydra collection (below) | For altered-bga-api. Binds, records the game, `ensureDeck`. |
+| `/api/tournament-pool-by-deck` | GET | `deckId` | pool **without** `boosters` (+ `gamesPlayed`); `400`; `404 not_found` | For decks-api. |
+| `/api/tournament-pool-counts` | GET | `tournamentId?` | `{ "id", "cards" }` | Legacy. Binds when `tournamentId` is given. |
+
+**`/api/tournament-bga-decklist` response** (exact shape of decks-api's
+`BgaDeckController::collection()`, relayed verbatim to BGA):
+
+```json
+{
+  "hydra:member": [
+    {
+      "alterator": { "reference": "ALT_EOLE_B_AX_01_C" },
+      "faction": { "reference": "AX" },
+      "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "name": "Winter Cup",
+      "cardQuantity": 30,
+      "format": "sealed"
+    }
+  ],
+  "hydra:totalItems": 1,
+  "hydra:view": { "@id": "/api/tournament-bga-decklist?tournamentId=597924&…", "@type": "hydra:PartialCollectionView" }
+}
+```
+
+Zero or one member. Empty only when a deck could not be minted at all (e.g. decks-api down).
+
+### 9.2 BGA → altered-bga-api
+
+The AlteredBGA game code (`modules/php/States/SetupTrait.php`) builds the envelope itself
+with `base64_encode(json_encode(...))` (standard base64 with padding; altered-bga-api
+accepts base64 and base64url alike) and calls BGA's platform functions `get_player_decks`
+/ `get_player_deck_content`. BGA's platform then calls altered-bga-api with the player's
+Re:Union bearer token and **appends `tournamentId` and `gameId` as raw query params** (the
+game code never sets them). The only free-text fields the game code controls are
+`eventFormat` (deck list) and `{id}` (deck content), hence the envelope. `env` is the BGA
+game name (`altered`, or the test instance's name), `mode` is BGA table option 201 (the
+rating mode, hence sometimes a bare number). `tableId` is sent as a string.
+
+**Deck list**: `GET /api/bga/decks?eventFormat=<b64>&tournamentId=605019&gameId=555111&page=1&name=&faction.reference[]=…`
+
+```json
+{ "v": 1, "env": "altered", "mode": 1,
+  "payload": { "format": "SEALED", "tableId": "123456", "tournamentName": "Winter Cup - Stage 2",
+               "tournamentParentId": 597924, "tournamentGroup": "A" } }
+```
+
+`tournamentName` / `tournamentParentId` / `tournamentGroup` come from BGA's
+`$this->bga->tournament->getInfo()` (`name`, `tournament_parent_id`, `tournament_group`)
+and are `null` outside a tournament. altered-bga-api's `DecklistPayload` reads `format`,
+`tableId`, `tournamentName`, `tournamentParentId`; `tournamentGroup` is ignored on this
+call. The game code keeps `eventFormat` out of the request it echoes back to its client:
+the client replays that request on pagination and faction changes, and BGA's
+`validateJSonAlphaNum` guard rejects base64's `+ / =`.
+
+Important asymmetry: **`tournamentId` and `gameId` are raw query params added by BGA's
+platform** on the request itself, not envelope fields. `tournamentParentId` only travels in
+the envelope (added by AlteredBGA PR #630). Reading `tournamentId` from the payload was the
+2026-08-12 bug that made every sealed call fall back to the normal pool.
+
+**Deck content**: `GET /api/bga/decks/<b64>` with
+
+```json
+{ "v": 1, "env": "altered", "mode": 1,
+  "payload": { "playerId": "96369700", "playerName": "Shiranui_8668",
+               "deckId": "3fa85f64-5717-4562-b3fc-2c963f66afa6", "format": "SEALED",
+               "tableId": "123456", "tournamentName": "Winter Cup - Stage 2" } }
+```
+
+`playerId` / `playerName` are ignored by altered-bga-api's `DeckContentPayload`.
+
+Rewritten to `GET {Upstream}/api/bga/decks/3fa85f64-…?eventFormat=SEALED&tableId=123456&tournamentName=…`.
+
+Anything that is not a valid envelope (legacy plain `STANDARD` string, plain deck uuid)
+forwards untouched.
+
+### 9.3 altered-bga-api → altered-draft
+
+`GET {AlteredDraft:BaseUrl}/api/tournament-bga-decklist?tournamentId=<parent or stage id>&tournamentName=<name>&gameId=<gameId>`
+with the incoming `Authorization` header copied. Absent values are omitted from the URL.
+Response relayed with its status and content type. Failure modes: `502
+{ "error": "altered_draft_not_configured" }` (missing base URL), `502
+{ "error": "altered_draft_unreachable" }` (network/timeout). One automatic retry on
+connection errors / 502 / 503 / 504 / Cloudflare 520–524 (`Upstream:Retries`, default 1,
+`Upstream:RetryDelayMs` 250 + jitter). A SEALED request **never** falls through to decks-api.
+
+### 9.4 altered-bga-api → decks-api → altered-draft (deck content)
+
+- altered-bga-api → decks-api: `GET /api/bga/decks/{deckId}?eventFormat=SEALED&tableId&tournamentName` (Bearer copied).
+- decks-api → altered-draft: `GET /api/tournament-pool-by-deck?deckId=<deckId>` (Bearer copied). Uses only `cards` from the response. Cached 1 h per `(keycloakId, deckId)`; errors/404 cached 30 s and treated as "cannot validate" → deck invalid.
+- decks-api → altered-bga-api → BGA: `200` deck content (`normalizeBga`: `deckCardsByType`, `alterator`, `legality`, …) or `422 Unprocessable Entity` with the joined error messages (`Card "X" is not in your sealed pool.`, `Card "X": only 1 in your pool, deck has 2.`, faction/hero/size errors). altered-bga-api relays non-200 bodies as-is; on 200 it may rewrite alt-art references (fail-open).
+- AlteredBGA game code (`actGetDeckInfos`) throws "This deck is not legal" when `legality != true`.
+
+### 9.5 altered-draft → decks-api
+
+Server-side (`api/_lib/tournamentPool.js`, `api/tournament-normal-pool.js`), always with the
+**player's** bearer token (never a service account):
+
+| Call | When |
+| --- | --- |
+| `GET /api/decks/{id}` | `ensureDeck` existence + reconciliation check. |
+| `PATCH /api/decks/{id}` (`Content-Type: application/merge-patch+json`) | Reconcile `format` / `isDraft` / `name`; flip the minted deck off draft. |
+| `POST /api/decks` `{ name, format: "sealed", isDraft: true, isPublic: false, deckCards: [{ cardReference, quantity }] }` | Mint a random deck. |
+| `DELETE /api/decks/{id}` | On normal-pool reset (best-effort). |
+
+Frontend, through the same-origin proxies `api/decks/index.js` (GET list, POST create) and
+`api/decks/[id].js` (GET, PATCH with merge-patch): `createDeck`, `updateDeck`, `getDeck`.
+
+---
+
+## 10. Configuration, environments, deployment
+
+### 10.1 altered-draft
+
+| Variable | Purpose |
+| --- | --- |
+| `DATABASE_URL` | Postgres with `sealed-pools-schema.sql` applied. Server-side only. |
+| `DATABASE_SSL` | `true`/`false` override of the localhost heuristic (AlteredOps sets `false`). |
+| `KEYCLOAK_ISSUER`, `KEYCLOAK_CLIENT_ID`, `KEYCLOAK_CLIENT_SECRET` | Login + `verifySub` userinfo URL (`src/lib/endpoints.js`). |
+| `DECKS_API_URL` | decks-api base (default `https://decks.alteredcore.org`). |
+| `CARDS_API_URL`, `CDN_URL` | Unique resolution and images. |
+| `SEALED_ATTESTATION_SECRET` | Provisioned on AlteredOps, **not read by any code**. |
+
+Deployments: **prod** `https://altered-draft.altered.re`, **preprod**
+`https://altered-draft-preprod.altered.re` (AlteredOps, Docker, `server/index.js`, GitOps
+pull ~5 min after a push to `main` of the Re:Union fork). The Vercel deployment
+(`altered-draft.vercel.app`) runs the same handlers but is not the one altered-bga-api
+points at.
+
+### 10.2 altered-bga-api
+
+| Setting (env form) | Purpose |
+| --- | --- |
+| `AlteredDraft__BaseUrl` (`ALTERED_DRAFT_BASE_URL` in AlteredOps) | Where sealed deck-list calls go. Per env: prod → `altered-draft.altered.re`, preprod → `altered-draft-preprod.altered.re`. Only required when a SEALED request is handled; a missing value must not crash startup. |
+| `Upstream__BaseUrl` | decks-api (`https://decks.alteredcore.org`, same in both envs). |
+| `Upstream__Retries`, `Upstream__RetryDelayMs` | Retry tunables. |
+| `ConnectionStrings__bgadb`, `ApiKeys__*` | DB and the other features. |
+
+Deployments: `https://bga-api.altered.re` (prod), `https://bga-api-preprod.altered.re`
+(preprod). Images `ghcr.io/altered-re-union/altered-bga-api` (+ `-migrations`).
+
+### 10.3 decks-api
+
+`ALTERED_DRAFT_URL` (default `https://altered-draft.altered.re`; `.env.test` uses
+`http://altered-draft.mock`). Single deployment for all envs.
+
+### 10.4 Keycloak
+
+Client `altered-draft` (confidential) must list every altered-draft origin's
+`/auth/callback`. Tokens from the `players` realm are accepted by altered-draft, decks-api
+and (unverified, label only) altered-bga-api's request logs.
+
+---
+
+## 11. Local development and testing
+
+**altered-draft**: `make dev` starts Postgres (applies both schemas, incl. the `current_format`
+seed), the API on `:8080` and Vite on `:5173`. Tournament pages need Keycloak + decks-api
+from the sibling `altered-dev-environment` repo (`./run.sh`; users `alice`/`bob`,
+password `TestPassword1234`; Chrome/Firefox only). `make dev` registers the `altered-draft`
+Keycloak client in that realm (re-run `make keycloak-client` after a Keycloak restart).
+decks-api calls altered-draft back through `host.docker.internal:8080` (`ALTERED_DRAFT_URL`
+set by the dev-env AppHost).
+
+**altered-bga-api**: `dotnet run` with `AlteredDraft__BaseUrl=http://localhost:8080` and a
+Postgres (`docker run … postgres:17`, `dotnet ef database update`). Simulate BGA:
+
+```bash
+# envelope → base64url (no padding)
+ENV=$(printf '{"v":1,"env":"alteredtest","mode":"arena","payload":{"format":"SEALED","tableId":1,"tournamentName":"Local Cup"}}' \
+  | base64 | tr '+/' '-_' | tr -d '=\n')
+TOKEN=<access token of alice from the local Keycloak>
+curl -s "http://localhost:5176/api/bga/decks?eventFormat=$ENV&tournamentId=42&gameId=g1" \
+  -H "Authorization: Bearer $TOKEN" | jq
+```
+
+Or call altered-draft directly: `curl -s "http://localhost:8080/api/tournament-bga-decklist?tournamentId=42&gameId=g1" -H "Authorization: Bearer $TOKEN"`.
+
+**Automated tests**
+
+| Repo | Command | Covers |
+| --- | --- | --- |
+| altered-draft | `npm test` (Vitest) | `generateTournamentSealedPool` determinism + unique injection, PRNG, card helpers. No DB/API coverage of the tournament handlers today (`npm run test:integration` only covers `api/rooms`). |
+| altered-bga-api | `dotnet test` | `SealedDecklistHandlerTests` (params, parent id, quoted ids, auth forwarding, 502 paths), `SealedDecklistEndpointTests` (real pipeline, never-fall-through, startup without `AlteredDraft:BaseUrl`). |
+| decks-api | PHPUnit | `SealedFormatValidatorTest`, `SealedFormatValidatorUserDeckTest`, `AlteredDraftSealedPoolClientTest`, `BgaDeckSealedIntegrationTest`. |
+
+**Debugging in prod**: altered-bga-api `GET /api/request-logs?apiKey=<ApiKeys:EndGame>` shows
+the raw frames BGA sent (with `decodedEnvelope` and `userId`). altered-draft logs
+`verifySub` failures and `tournament-pool-by-deck` hits/misses with `sub` and `deckId`.
+
+---
+
+## 12. Invariants, pitfalls, and how to extend
+
+### 12.1 Invariants (do not break)
+
+1. **The seed string excludes `tournament_id`** and includes exactly the six snapshot
+   columns + nonce, in that order. Adding a column to the seed changes every existing pool.
+2. **One pending tournament pool per `sub`**, enforced by the partial unique index; binding
+   is a one-time `UPDATE … WHERE tournament_id IS NULL`.
+3. **Pools are never persisted**; every reader regenerates. Card data for a running set must
+   stay stable.
+4. **Owner scoping**: every lookup is `(sub, …)`. Never resolve a pool or a deck by id alone.
+5. **`/api/tournament-bga-decklist` returns the exact hydra shape** of decks-api's
+   collection endpoint; altered-bga-api relays it byte for byte.
+6. **A SEALED request never falls through to decks-api** in altered-bga-api, whatever
+   happens (config missing, network error → 502).
+7. **`Invalid ` and `Random ` prefixes are literals** matched on the BGA side; never localize
+   them. The base name always tracks the tournament name (no dates).
+8. **Mint random decks as `isDraft: true` first, link, then flip** — decks-api caches a failed
+   validation for 30 s per deck id.
+9. **PATCH to decks-api uses `application/merge-patch+json`**; `application/json` is rejected.
+10. **`heroes_in_pool = false` means every hero of the set is in `cards`**; decks-api relies
+    on that instead of a "any hero" carve-out.
+11. **JSON imports use `with { type: 'json' }`** (plain Node on Docker enforces it).
+12. New API handlers must be **registered in `server/index.js`** as well as existing as
+    `api/*.js`, or the Docker deployment won't serve them.
+13. `current_format` is **append-only**; never `UPDATE` it.
+
+### 12.2 Pitfalls observed in history
+
+- Reading `tournamentId` from the envelope instead of the query string (fixed 2026-08-12).
+- Including `tournament_id` in the seed (fixed 2026-08-12).
+- Reading `AlteredDraft:BaseUrl` as a required startup binding broke every format in prod
+  (now lazy, per request).
+- Express 5's `req.query` is a live getter: `Object.assign` on it is lost; `server/index.js`
+  uses `Object.defineProperty` for route params.
+- Validity mismatch: altered-draft `≤ 1` hero vs decks-api `exactly 1` hero. A hero-less
+  30-card deck is "Valid" in the UI, saved as `isDraft: false`, then rejected by decks-api
+  (and BGA). Align the UI rule if this bites.
+- decks-api caches pool-by-deck for 1 h: a normal-pool reset deletes the deck precisely so
+  the stale cache entry can never be hit again (deck ids are never reused).
+- `api/tournament-pool-counts.js` binds as a side effect; calling it casually with a
+  `tournamentId` consumes the player's pending pool.
+- `pickDeterministicUniques` silently yields fewer uniques when a set has no faction-range
+  table (FUGUE) — the pool will simply have fewer cards.
+- BGA applies its own checks on top of decks-api's validation when it loads the content
+  (`actGetDeckInfos`): a unique must carry its `content` and an implemented power, and
+  Moonlight Jellyfish uniques are refused as suspended by Equinox, even though decks-api's
+  sealed validator allows banned cards. Irrelevant for EOLE pools, relevant if the format
+  moves to a set with such cards (CORE).
+
+### 12.3 Recipes
+
+**Change the competitive format** (new set or knobs): `INSERT INTO current_format (type,
+set_code, unique_count, even_factions, heroes_in_pool, guaranteed_uniques) VALUES (…)`.
+Existing pools keep their snapshot. If `set_code` is a set without a
+`src/lib/data/factionRanges/<SET>.json`, add that table first (from the
+`faction_ranges_<SET>.csv` extract: `{ family: { faction: [[start,end],…] } }`), import it in
+`uniqueFactionRanges.js`, and make sure `SETS` in `cardData.js` knows the set. Update the
+backend fallback names (`baseDeckName` in `tournamentPool.js`) and the i18n strings
+(`nextTournamentDeckName`, `normalDeckName`, `home.sealedTitle`) which still say "set 6".
+
+**Add a field to the pool response**: extend `poolResponse` in `api/_lib/tournamentPool.js`;
+if it needs a column, add it to `sealed-pools-schema.sql` with `ADD COLUMN IF NOT EXISTS`;
+mirror it in `tournamentApi.js` consumers.
+
+**Add a tournament endpoint**: create `api/tournament-<name>.js` exporting a Vercel-style
+handler, start with `verifySub`, use `poolStore.js` for data access, register it in
+`server/index.js`, add a client function in `src/lib/tournamentApi.js`.
+
+**Expose "games played" or results to the UI**: `gamesPlayed` is already in every pool
+response (from `sealed_pool_games`). Actual results live in altered-bga-api
+(`GET /api/games` feed, `ApiKeys:GameSync`), keyed by the same BGA tournament id.
+
+**Change what BGA sends**: altered-bga-api is the adapter. New envelope fields go in
+`DecklistPayload` / `DeckContentPayload`; the sealed contract to altered-draft is the three
+query params (`tournamentId`, `tournamentName`, `gameId`) + the Bearer.
+
+**Support a tournament ending**: nothing exists. Options: a manual "archive" flag on
+`sealed_pools`, or joining altered-bga-api's `Tournaments`/`Games` by `tournament_id`.
+
+**Draft tournaments**: deferred by design; a draft is not a pure function of a seed, so it
+would need binding an already-completed `draft_rooms` result to a tournament id instead.
+
+---
+
+## 13. History and design decisions
+
+| Date | Event |
+| --- | --- |
+| 2026-07-02 | Design in `ROADMAP.md` "Set 6 preview": tournament-safe sealed + Re:Union hosting. First pass used time-windowed events and `hash(sub + starts_at + ends_at)`. |
+| 2026-07 | A Re:Union member found the hole (BGA's tournament seed is only known after the tournament starts, deck-building happens before) → current model: **current format + nonce + lazy binding**, no time window. |
+| 2026-07-22 → 25 | Backend built: `sealed-pools-schema.sql`, `poolStore.js`, tournament handlers, `tournament-pool-by-deck` (decks-api validation keyed by deck id instead of threading a seed). First seeded format: 3 uniques, 1 per faction, no heroes. |
+| 2026-07-27 | Booster-by-booster view, guaranteed uniques outside the boosters, first-open pack reveal. |
+| 2026-08-06 → 08 | altered-bga-api: `tournamentName` instead of `tournamentSeed`; sealed short-circuit shipped (PR #2). altered-draft adapts: `tournament_seed` → `tournament_id` (PR #12). AlteredBGA "Add Sealed mode" (2026-08-08): deck-format option 7, `format: SEALED` in the envelopes, sealed-only client flow. |
+| 2026-08-11 | Random deck + `ensureDeck` (BGA never gets an empty list), `Invalid ` naming, cached-deck existence check. |
+| 2026-08-12 | Fixes: pool contents no longer change on binding (seed excludes `tournament_id`); deck names track the tournament; altered-bga-api reads `tournamentId`/`gameId` from the query string; AlteredBGA #488 fixes the sealed/custom deck selection flow (cancel, confirm, back). |
+| 2026-09-21 → 10-03 | AlteredBGA #630 adds `tournamentParentId`/`tournamentGroup` to the envelopes and the end-game call; altered-bga-api stores parent id / group and the sealed path forwards the **parent** id so multi-stage tournaments share one pool; backfills for older tournaments. |
+| 2026-10-16 | Service URLs made configurable (`src/lib/endpoints.js`), local dev stack. |
+
+Decisions worth knowing: decks-api stays a thin consumer (no binding state of its own);
+the hero is "just another pool ref" (no special-casing); validation rejects rather than
+flags; a normal-pool reset deletes the deck to keep decks-api caching simple; only the
+`B` printing of each card is stocked, so alt-art refs never appear in pools.
+
+---
+
+## 14. Glossary
+
+| Term | Meaning |
+| --- | --- |
+| **sub** | Keycloak subject (user id). The owner key of every pool. |
+| **nonce** | Random UUID minted once per pool; the only secret-ish input of the seed. |
+| **pool** | A player's sealed card pool. Never stored, always regenerated. |
+| **normal pool** | The single casual pool per player (`kind = normal`), resettable with a cooldown. |
+| **pending / preparation pool** | A `kind = tournament` pool with `tournament_id IS NULL`. At most one per player. |
+| **bound pool** | A tournament pool with `tournament_id` set; immutable. |
+| **binding** | The one-time write of a BGA tournament id onto the pending pool, triggered by the first BGA deck-list call for that tournament. |
+| **current format** | The latest `current_format` row; snapshotted onto each new pool. |
+| **envelope** | The `{ v, env, mode, payload }` JSON that the AlteredBGA game code base64-encodes into `eventFormat` or `{id}` (`SetupTrait.php`). |
+| **hydra collection** | decks-api's list shape (`hydra:member`, `hydra:totalItems`, `hydra:view`) that BGA expects. |
+| **family / serial / window** | A rare card slot (`AX_106`), a unique's serial number, and the serial ranges that map to a faction for that family. |
+| **OOF** | Out-of-faction printing of a card (its `_R2`, or a unique serial in the other faction's window). |
+| **guaranteed unique** | A unique appended to the pool outside the boosters (`guaranteed_uniques`). |
+| **Random / Invalid prefixes** | Deck-name literals flagging an unreviewed auto-built deck / an illegal deck. |
+| **AlteredOps** | Re:Union's GitOps deployment repo (Docker on their infra, Traefik, Scaleway secrets). |
