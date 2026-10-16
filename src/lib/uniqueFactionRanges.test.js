@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { pickDeterministicUniques } from './uniqueFactionRanges.js'
-import { mulberry32 } from './prng.js'
+import { pickDeterministicUniques, hasFactionRanges } from './uniqueFactionRanges.js'
+import { mulberry32, hashSeed } from './prng.js'
 import CORE from './data/factionRanges/CORE.json' with { type: 'json' }
 
 const REF_RE = /^ALT_CORE_B_([A-Z0-9_]+)_U_(\d+)$/
@@ -64,5 +64,20 @@ describe('pickDeterministicUniques', () => {
 
     expect(Object.keys(factionCounts).sort()).toEqual(['AX', 'BR', 'LY', 'MU', 'OR', 'YZ'])
     expect(Object.values(factionCounts).every(v => v === 2)).toBe(true)
+  })
+})
+
+describe('pickDeterministicUniques isAllowed / hasFactionRanges', () => {
+  it('skips refs the predicate rejects and still returns the requested count', () => {
+    const rng = () => mulberry32(hashSeed('seed'))
+    const first = pickDeterministicUniques('EOLE', rng(), { uniqueCount: 1 })[0]
+    const picked = pickDeterministicUniques('EOLE', rng(), { uniqueCount: 1, isAllowed: ref => ref !== first })
+    expect(picked).toHaveLength(1)
+    expect(picked[0]).not.toBe(first)
+  })
+
+  it('reports which sets have faction-range data', () => {
+    expect(hasFactionRanges('EOLE')).toBe(true)
+    expect(hasFactionRanges('FUGUE')).toBe(false)
   })
 })

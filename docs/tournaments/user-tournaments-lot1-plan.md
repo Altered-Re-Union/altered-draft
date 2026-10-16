@@ -371,7 +371,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 - Produces: constants `CONFIG_VERSION = 1`, `SEALED_BOOSTERS = 7`, `MAX_UNIQUES = 7`
 - Produces: `hasFactionRanges(setCode) → boolean`; `pickDeterministicUniques(setCode, rng, { uniqueCount, evenFactions, isAllowed })`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `src/lib/tournamentConfig.test.js`:
 
@@ -474,12 +474,12 @@ describe('pickDeterministicUniques isAllowed / hasFactionRanges', () => {
 
 (Keep the file's existing imports; if `describe`/`it`/`expect` are already imported at the top, don't import them twice.)
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `npx vitest run src/lib/tournamentConfig.test.js src/lib/uniqueFactionRanges.test.js`
 Expected: FAIL — unresolved import `./tournamentConfig.js`; `hasFactionRanges` is not exported; the `isAllowed` test fails because the predicate is ignored.
 
-- [ ] **Step 3: Modify `src/lib/uniqueFactionRanges.js`**
+- [x] **Step 3: Modify `src/lib/uniqueFactionRanges.js`**
 
 Replace the `pickDeterministicUniques` signature and retry loop:
 
@@ -519,7 +519,7 @@ export function pickDeterministicUniques(setCode, rng, { uniqueCount = 0, evenFa
 
 (`faction` was already unused in the destructuring; leave it as the file has it.)
 
-- [ ] **Step 4: Implement `src/lib/tournamentConfig.js`**
+- [x] **Step 4: Implement `src/lib/tournamentConfig.js`**
 
 ```js
 // The sealed configuration object of a tournament (docs/tournaments/user-tournaments-spec.md
@@ -610,12 +610,12 @@ export function legacyColumnsFromConfig(config) {
 }
 ```
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 Run: `npx vitest run src/lib/tournamentConfig.test.js src/lib/uniqueFactionRanges.test.js`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/lib/tournamentConfig.js src/lib/tournamentConfig.test.js src/lib/uniqueFactionRanges.js src/lib/uniqueFactionRanges.test.js
