@@ -2576,7 +2576,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 - Consumes: `regeneratePool` (Task 4), `configFromLegacyFormat` (Task 2).
 - Produces: `freezeSealedPools({ regenerate = regeneratePool } = {}) → { total, frozen, failed }` exported for the test; the script runs it when executed directly.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `tests/integration/tournaments.test.js` (import at the top: `import { freezeSealedPools } from '../../scripts/freeze-sealed-pools.mjs'`):
 
@@ -2603,12 +2603,12 @@ describe('freeze-sealed-pools', () => {
 })
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `npm run test:integration -- tests/integration/tournaments.test.js -t freeze`
 Expected: FAIL — unresolved import.
 
-- [ ] **Step 3: Implement `scripts/freeze-sealed-pools.mjs`**
+- [x] **Step 3: Implement `scripts/freeze-sealed-pools.mjs`**
 
 ```js
 #!/usr/bin/env node
@@ -2660,12 +2660,12 @@ db-freeze-pools: check-node env
 
 (Use the same `$(NODE)` variable the `api` target's `API_CMD` uses; check the top of the Makefile for its name.)
 
-- [ ] **Step 4: Run the test**
+- [x] **Step 4: Run the test**
 
 Run: `npm run test:integration -- tests/integration/tournaments.test.js -t freeze`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add scripts/freeze-sealed-pools.mjs Makefile tests/integration/tournaments.test.js

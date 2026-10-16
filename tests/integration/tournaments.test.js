@@ -51,6 +51,7 @@ import tournamentsIndex from '../../api/tournaments/index.js'
 import tournamentsItem from '../../api/tournaments/[id].js'
 import tournamentPoolFor from '../../api/tournaments/[id]/pool.js'
 import boundPools from '../../api/tournament-bound-pools.js'
+import { freezeSealedPools } from '../../scripts/freeze-sealed-pools.mjs'
 
 function mockRes() {
   const res = {
@@ -464,5 +465,26 @@ describe('GET /api/tournament-bound-pools', () => {
     const byName = Object.fromEntries(res.body.pools.map(p => [p.tournamentName, p]))
     expect(byName['Declared'].tournament).toMatchObject({ id: t.id, name: 'Declared', status: 'upcoming' })
     expect(byName['Legacy one'].tournament).toBeNull()
+  })
+})
+
+describe('freeze-sealed-pools', () => {
+  it('stores cards/boosters/config on rows that lack them, skips the others, survives one failure', async () => {
+    await query(
+      `INSERT INTO sealed_pools (sub, kind, set_code, unique_count, even_factions, heroes_in_pool, guaranteed_uniques, nonce)
+       VALUES ('a', 'normal', 'EOLE', 1, false, false, 1, 'n1'), ('b', 'normal', 'EOLE', 1, false, false, 1, 'n2')`)
+    const stored = await getOrCreateNormalPool('c')
+    const regenerate = vi.fn(async (sub, row) => {
+      if (sub === 'b') throw new Error('network down')
+      return { counts: { X: 1 }, boosters: [['X']] }
+    })
+    const result = await freezeSealedPools({ regenerate })
+    expect(result).toEqual({ total: 2, frozen: 1, failed: 1 })
+    const a = (await query("SELECT * FROM sealed_pools WHERE sub = 'a'")).rows[0]
+    expect(a.cards).toEqual({ X: 1 })
+    expect(a.config.source.setCode).toBe('EOLE')
+    expect((await query("SELECT cards FROM sealed_pools WHERE sub = 'b'")).rows[0].cards).toBeNull()
+    expect(regenerate).not.toHaveBeenCalledWith('c', expect.anything())
+    void stored
   })
 })
