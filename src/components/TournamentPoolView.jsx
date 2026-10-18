@@ -4,6 +4,7 @@ import { fetchSet, fetchUniques, isUniqueRef } from '../lib/cardData.js'
 import { createDeck, updateDeck, toDeckCards, getDeck, deckCardsToRefs } from '../lib/decks.js'
 import { syncPoolDeck } from '../lib/tournamentApi.js'
 import { syncDeckToPool } from '../lib/poolDeckSync.js'
+import { createSerialRunner } from '../lib/serialRunner.js'
 import { buildRandomDeck } from '../lib/randomDeck.js'
 import { useLang } from '../lib/i18n/i18n.jsx'
 import PoolGrid from './PoolGrid.jsx'
@@ -145,63 +146,71 @@ export default function TournamentPoolView({ title, load, reset, backTo = null }
     }
   }
 
-  const scheduleSync = useCallback(() => {
+  // One sync at a time, reading the pool and the deck when it RUNS (not when it was
+  // scheduled): a timer-deferred run used to reuse the pool captured at schedule time —
+  // still without a deck for a brand-new pool — and two overlapping runs each created a
+  // deck on decks-api. The runner folds requests made during a run into one more run.
+  const syncOnceRef = useRef(null)
+  syncOnceRef.current = async () => {
     const currentPool = poolRef.current
     if (!currentPool) return
-    const totalInDeck = Object.values(deckRef.current).reduce((a, b) => a + b, 0)
-    if (totalInDeck === 0) return // nothing to create/sync yet
-
-    const run = async () => {
-      lastSyncAtRef.current = Date.now()
-      setSyncing(true)
-      try {
-        const refs = Object.entries(deckRef.current).flatMap(([ref, qty]) => Array(qty).fill(ref))
-        const deckCards = toDeckCards(refs)
-        const heroRef = refs.find(r => cardMap[r]?.cardType === 'HERO')
-        const deckFactions = new Set(refs.map(r => cardMap[r]?.faction).filter(Boolean))
-        const deckHeroCount = refs.filter(r => cardMap[r]?.cardType === 'HERO').length
-        const isValid = refs.length >= 30 && deckFactions.size <= 3 && deckHeroCount <= 1
-        // "Invalid " is a literal token the BGA-side integration matches on to flag the
-        // deck explicitly, instead of failing opaquely on the next decks-api call — do not
-        // route it through t()/translate it, same rule as ensureDeck's "Random " prefix.
-        // The base name itself always tracks the tournament this pool is/will be bound to
-        // (no date): the real tournament name once bound, else a generic placeholder for
-        // the still-pending preparation pool or the out-of-tournament normal pool.
-        const namePrefix = isValid ? '' : 'Invalid '
-        const baseName = currentPool.kind === 'tournament'
-          ? (currentPool.tournamentName || t('tournamentPoolView.nextTournamentDeckName'))
-          : t('tournamentPoolView.normalDeckName')
-        const summary = {
-          name: `${namePrefix}${baseName}`,
-          deckCards,
-          isDraft: !isValid,
-          format: 'sealed',
-        }
-        // New decks: draft → link → flip (see poolDeckSync.js for why the order matters).
-        const updatedPool = await syncDeckToPool({
-          poolId: currentPool.id,
-          deckId: currentPool.deck?.id ?? null,
-          summary,
-          heroRef: heroRef ?? null,
-          faction: heroRef ? cardMap[heroRef]?.faction : null,
-          cardQuantity: refs.length,
-        }, { createDeck, updateDeck, syncPoolDeck })
-        poolRef.current = updatedPool
-        setPool(updatedPool)
-      } catch (e) {
-        setError(e.message || t('tournamentPoolView.couldNotSyncDeck'))
-      } finally {
-        setSyncing(false)
+    if (Object.values(deckRef.current).reduce((a, b) => a + b, 0) === 0) return
+    lastSyncAtRef.current = Date.now()
+    setSyncing(true)
+    try {
+      const refs = Object.entries(deckRef.current).flatMap(([ref, qty]) => Array(qty).fill(ref))
+      const deckCards = toDeckCards(refs)
+      const heroRef = refs.find(r => cardMap[r]?.cardType === 'HERO')
+      const deckFactions = new Set(refs.map(r => cardMap[r]?.faction).filter(Boolean))
+      const deckHeroCount = refs.filter(r => cardMap[r]?.cardType === 'HERO').length
+      const isValid = refs.length >= 30 && deckFactions.size <= 3 && deckHeroCount <= 1
+      // "Invalid " is a literal token the BGA-side integration matches on to flag the
+      // deck explicitly, instead of failing opaquely on the next decks-api call — do not
+      // route it through t()/translate it, same rule as ensureDeck's "Random " prefix.
+      // The base name itself always tracks the tournament this pool is/will be bound to
+      // (no date): the real tournament name once bound, else a generic placeholder for
+      // the still-pending preparation pool or the out-of-tournament normal pool.
+      const namePrefix = isValid ? '' : 'Invalid '
+      const baseName = currentPool.kind === 'tournament'
+        ? (currentPool.tournamentName || t('tournamentPoolView.nextTournamentDeckName'))
+        : t('tournamentPoolView.normalDeckName')
+      const summary = {
+        name: `${namePrefix}${baseName}`,
+        deckCards,
+        isDraft: !isValid,
+        format: 'sealed',
       }
+      // New decks: draft → link → flip (see poolDeckSync.js for why the order matters).
+      const updatedPool = await syncDeckToPool({
+        poolId: currentPool.id,
+        deckId: currentPool.deck?.id ?? null,
+        summary,
+        heroRef: heroRef ?? null,
+        faction: heroRef ? cardMap[heroRef]?.faction : null,
+        cardQuantity: refs.length,
+      }, { createDeck, updateDeck, syncPoolDeck })
+      poolRef.current = updatedPool
+      setPool(updatedPool)
+    } catch (e) {
+      setError(e.message || t('tournamentPoolView.couldNotSyncDeck'))
+    } finally {
+      setSyncing(false)
     }
+  }
+  const runSyncRef = useRef(null)
+  if (!runSyncRef.current) runSyncRef.current = createSerialRunner(() => syncOnceRef.current())
 
+  // Throttled (one call per SYNC_THROTTLE_MS). Stable: everything it needs is in refs.
+  const scheduleSync = useCallback(() => {
+    if (!poolRef.current) return
+    if (Object.values(deckRef.current).reduce((a, b) => a + b, 0) === 0) return // nothing to create/sync yet
     const elapsed = Date.now() - lastSyncAtRef.current
     if (elapsed >= SYNC_THROTTLE_MS) {
-      run()
+      runSyncRef.current()
     } else if (!syncTimerRef.current) {
-      syncTimerRef.current = setTimeout(() => { syncTimerRef.current = null; run() }, SYNC_THROTTLE_MS - elapsed)
+      syncTimerRef.current = setTimeout(() => { syncTimerRef.current = null; runSyncRef.current() }, SYNC_THROTTLE_MS - elapsed)
     }
-  }, [cardMap, t])
+  }, [])
 
   useEffect(() => {
     if (skipNextSyncRef.current) { skipNextSyncRef.current = false; return }

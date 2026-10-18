@@ -37,6 +37,15 @@ export async function syncDeckToPool({ poolId, deckId, summary, heroRef, faction
 
   const created = await createDeck({ ...summary, isDraft: true })
   const pool = await link(created.id)
-  if (!summary.isDraft) await updateDeck(created.id, { isDraft: false })
+  if (!summary.isDraft) {
+    // The deck is created and linked: losing that would make the next sync create ANOTHER
+    // deck. If the flip fails, keep the link — the deck stays a draft, and the next sync
+    // (an update with isDraft false) flips it.
+    try {
+      await updateDeck(created.id, { isDraft: false })
+    } catch (e) {
+      console.warn(`syncDeckToPool: could not flip deck ${created.id} off draft: ${e?.message}`)
+    }
+  }
   return pool
 }

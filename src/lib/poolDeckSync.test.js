@@ -58,3 +58,13 @@ describe('syncDeckToPool', () => {
     await expect(syncDeckToPool({ poolId: 'p1', deckId: 'd1', summary: summary(false), ...extra }, deps)).rejects.toThrow('gone')
   })
 })
+
+describe('syncDeckToPool when the final flip fails', () => {
+  it('still returns the linked pool (the deck stays a draft; the next sync re-sends isDraft false)', async () => {
+    const { calls, deps } = fakes()
+    deps.updateDeck = async (id, body) => { calls.push(['update', id, body]); if (body.isDraft === false && !body.deckCards) throw new Error('decks-api down') ; return { id } }
+    const pool = await syncDeckToPool({ poolId: 'p1', deckId: null, summary: summary(false), ...extra }, deps)
+    expect(pool.deck.id).toBe('new-deck')
+    expect(calls.map(c => c[0])).toEqual(['create', 'link', 'update'])
+  })
+})
