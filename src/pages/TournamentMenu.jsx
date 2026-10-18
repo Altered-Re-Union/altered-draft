@@ -6,6 +6,7 @@ import { useLang } from '../lib/i18n/i18n.jsx'
 import TopNav from '../components/TopNav.jsx'
 import Footer from '../components/Footer.jsx'
 import { StatusPill, formatDateTime, summarizeConfig } from '../components/TournamentBits.jsx'
+import { groupCreatedTournaments } from '../lib/tournamentRules.js'
 
 const BGA_TOURNAMENT_LIST_URL = 'https://boardgamearena.com/tournamentlist?d&type=&players_per_match_min=0&players_per_match_max=0&status=future&gamecateg=3&game=1909&full=true&tournament_i_registered=0&time=0&prestige=0&order=recommended'
 
@@ -51,6 +52,37 @@ function CardWithDeckCta({ to, deckTo, label, t, children }) {
 
 function deckLine(deck, t, tc) {
   return deck ? `${deck.name} · ${tc('tournamentPages.cardsInDeck', deck.cardQuantity ?? 0)}` : t('tournamentPages.noDeckStartedYet')
+}
+
+const GROUP_TITLE = {
+  ongoing: 'tournaments.groupOngoing', upcoming: 'tournaments.groupUpcoming',
+  ended: 'tournaments.groupEnded', cancelled: 'tournaments.groupCancelled', detached: 'tournaments.groupDetached',
+}
+
+// "My created tournaments": active groups shown, the archive (ended / cancelled / detached)
+// folded in a <details> — out of the way, one click away, no tabs inside the tab.
+function CreatedTournaments({ list, t, tc }) {
+  const { active, archive, archiveCount } = groupCreatedTournaments(list)
+  const groupBlock = g => (
+    <div key={g.status} className="space-y-2">
+      <h3 className="text-sm font-semibold text-ink2">{t(GROUP_TITLE[g.status])} <span className="text-faint font-normal tabular-nums">{g.items.length}</span></h3>
+      {g.items.map(tn => <TournamentCard key={tn.id} tn={tn} t={t} tc={tc} />)}
+    </div>
+  )
+  return (
+    <div className="space-y-5">
+      {active.length ? active.map(groupBlock) : <p className="text-muted text-sm">{t('tournaments.noCreatedActive')}</p>}
+      {archiveCount > 0 && (
+        <details className="group border-t border-line pt-4">
+          <summary className="cursor-pointer select-none text-sm font-semibold text-ink2 hover:text-ink list-none flex items-center gap-2">
+            <span className="transition-transform group-open:rotate-90" aria-hidden="true">▸</span>
+            {t('tournaments.createdArchive', { n: archiveCount })}
+          </summary>
+          <div className="space-y-5 mt-4">{archive.map(groupBlock)}</div>
+        </details>
+      )}
+    </div>
+  )
 }
 
 function ConnectBox({ t, login }) {
@@ -209,7 +241,7 @@ export default function TournamentMenu() {
 
             {tab === 'created' && (!user && !authLoading ? <ConnectBox t={t} login={login} /> : (
               listState(user ? created : null, createdError, 'tournaments.noCreated')
-                ?? created.map(tn => <TournamentCard key={tn.id} tn={tn} t={t} tc={tc} />)
+                ?? <CreatedTournaments list={created} t={t} tc={tc} />
             ))}
           </div>
         </section>

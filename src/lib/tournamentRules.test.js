@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { tournamentStatus, validateTournamentFields } from './tournamentRules.js'
+import { tournamentStatus, validateTournamentFields, groupCreatedTournaments } from './tournamentRules.js'
 
 const NOW = new Date('2026-11-01T12:00:00Z')
 const later = '2026-11-02T19:00:00Z'
@@ -71,5 +71,19 @@ describe('tournamentStatus (detached)', () => {
   it('reports detached above every other state, for rows and JSON', () => {
     expect(tournamentStatus({ starts_at: later, cancelled_at: earlier, detached_at: earlier }, NOW)).toBe('detached')
     expect(tournamentStatus({ startsAt: earlier, detachedAt: earlier }, NOW)).toBe('detached')
+  })
+})
+
+describe('groupCreatedTournaments', () => {
+  const tn = (name, status, startsAt) => ({ name, status, startsAt })
+  it('splits active (ongoing then upcoming) from archive (ended, cancelled, detached), each chronological, empty groups dropped', () => {
+    const list = [
+      tn('U2', 'upcoming', '2026-11-20T00:00:00Z'), tn('E1', 'ended', '2026-10-01T00:00:00Z'), tn('O1', 'ongoing', '2026-10-15T00:00:00Z'),
+      tn('U1', 'upcoming', '2026-11-02T00:00:00Z'), tn('C1', 'cancelled', '2026-12-01T00:00:00Z'), tn('E0', 'ended', '2026-09-01T00:00:00Z'),
+    ]
+    const g = groupCreatedTournaments(list)
+    expect(g.active.map(x => [x.status, x.items.map(i => i.name)])).toEqual([['ongoing', ['O1']], ['upcoming', ['U1', 'U2']]])
+    expect(g.archive.map(x => [x.status, x.items.map(i => i.name)])).toEqual([['ended', ['E0', 'E1']], ['cancelled', ['C1']]])
+    expect(g.archiveCount).toBe(3)
   })
 })

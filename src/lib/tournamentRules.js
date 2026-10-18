@@ -92,3 +92,21 @@ export function validateTournamentFields(body, { now = new Date(), isCreate = fa
 
   return { ok: Object.keys(errors).length === 0, errors, values }
 }
+
+const ACTIVE_ORDER = ['ongoing', 'upcoming']
+const ARCHIVE_ORDER = ['ended', 'cancelled', 'detached']
+
+/**
+ * "My created tournaments": the active ones first (ongoing, then upcoming), then the archive
+ * (ended, cancelled, detached), each group in chronological order of start. Empty groups
+ * are dropped. Items are API tournaments (`status`, `startsAt`).
+ * @returns {{ active: { status, items }[], archive: { status, items }[], archiveCount: number }}
+ */
+export function groupCreatedTournaments(list) {
+  const byStart = (a, b) => new Date(a.startsAt) - new Date(b.startsAt)
+  const group = order => order
+    .map(status => ({ status, items: list.filter(x => x.status === status).sort(byStart) }))
+    .filter(g => g.items.length)
+  const archive = group(ARCHIVE_ORDER)
+  return { active: group(ACTIVE_ORDER), archive, archiveCount: archive.reduce((n, g) => n + g.items.length, 0) }
+}
