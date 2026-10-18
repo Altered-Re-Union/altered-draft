@@ -106,8 +106,9 @@ db-migrate:
 	@for f in $(SCHEMAS); do echo "→ applying $$f"; $(PSQL) -f /schemas/$$f || exit 1; done
 
 # One-shot after the lot-1 migration: store the contents of legacy pools (see the script).
+# Same env as `make api`, so `make db-freeze-pools DB_PORT=…` hits the overridden DB.
 db-freeze-pools: check-node env
-	$(NODE) --env-file=.env scripts/freeze-sealed-pools.mjs
+	env $(API_ENV) $(NODE) --env-file=.env scripts/freeze-sealed-pools.mjs
 
 db-down:
 	@$(COMPOSE) down

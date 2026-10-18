@@ -2,8 +2,10 @@
 // One-shot (idempotent): stores the regenerated cards/boosters/config on every legacy
 // sealed_pools row that has none, so no pool depends on the upstream set file's order
 // anymore (docs/tournaments/user-tournaments-spec.md §10). Needs DATABASE_URL and network
-// access to the card data. Run once after the lot-1 migration:
-//   node --env-file=.env scripts/freeze-sealed-pools.mjs
+// access to the card data. Run once after the lot-1 migration, once the new app container
+// serves (old code would keep creating rows without cards meanwhile):
+//   docker exec <altered-draft container> node scripts/freeze-sealed-pools.mjs   (deployed)
+//   make db-freeze-pools                                                    (local dev)
 import { fileURLToPath } from 'node:url'
 import { query, getPool } from '../src/lib/db.js'
 import { regeneratePool } from '../api/_lib/tournamentPool.js'
