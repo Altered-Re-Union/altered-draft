@@ -50,6 +50,12 @@ export async function listTournaments(status = 'open') {
   return rows
 }
 
+/** Every tournament `sub` organizes, whatever its status (detached included), most recent start first. */
+export async function listTournamentsByOrganizer(sub) {
+  const { rows } = await query('SELECT * FROM tournaments WHERE organizer_sub = $1 ORDER BY starts_at DESC, created_at DESC', [sub])
+  return rows
+}
+
 export async function countOpenTournaments(sub) {
   const { rows } = await query(
     `SELECT count(*)::int AS count FROM tournaments WHERE organizer_sub = $1 AND ${OPEN_SQL}`,

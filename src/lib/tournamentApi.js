@@ -84,6 +84,12 @@ export async function listTournaments(status = 'open') {
   return handle(res)
 }
 
+/** The tournaments the caller organizes, every status. Requires a session. */
+export async function listMyTournaments() {
+  const res = await fetch('/api/tournaments?mine=1', { headers: await authHeaders() })
+  return handle(res)
+}
+
 /** The live declaration of a BGA tournament id (whatever its status), or null. Public. */
 export async function findTournamentByBgaId(bgaId) {
   const res = await fetch(`/api/tournaments?bgaId=${encodeURIComponent(bgaId)}`, { headers: await optionalAuthHeaders() })

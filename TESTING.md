@@ -64,9 +64,9 @@ link in a second tab as a 2nd player). Locally there is no Realtime: pages poll 
 - [ ] **Pool** (`/tournament/t/:id/pool`): one stored pool per player (same contents on every visit), deck sync to decks-api, back link to the tournament.
 - [ ] **Lifecycle**: once a pool exists, cards / settings / BGA link are locked and Delete is disabled; rename reaches the pools; Cancel closes pool creation (existing pools stay usable, the tournament stays editable) and Restore reopens; Mark as ended / Reopen (a passed end date is cleared).
 - [ ] **Moderation** (moderator via `TOURNAMENT_MODERATORS` / `TOURNAMENT_MODERATOR_ROLE`): **Detach** deletes every pool of the declaration and frees its BGA link for a new declaration; the detached tournament is read-only.
-- [ ] **Menu** (`/tournament`): public Upcoming / Ongoing lists, Create (login prompt when logged out), "My tournaments" with declared tournaments first and a "Change my deck" link.
+- [ ] **Menu** (`/tournament`): "My ongoing tournaments" grid at the top (started tournaments you have a pool in: the card opens the tournament page, "Change my deck" opens the pool); tabs Upcoming (default) / Ongoing / My pools (declared tournaments first, generic preparation block at the bottom) / My created tournaments (every status), each with its one-line explanation, the active tab kept in the URL (`?tab=`); Create and the personal tabs prompt a login when logged out.
 - [ ] **BGA path**: a deck-list call (`/api/tournament-bga-decklist?tournamentId=…`) for a declared tournament creates or returns the player's pool for it ("Random <tournament name>" deck when none was built), for an undeclared id binds the generic preparation pool; the organizer panel counts pools "created by BGA games".
-- [ ] A pool bound before the stored-pools migration still opens from "My tournaments" and its deck validates on BGA.
+- [ ] A pool bound before the stored-pools migration still opens from "My pools" and its deck validates on BGA.
 
 ## 9. Cross-cutting
 - [ ] **FR UI**: no English leftovers or raw keys on the pages touched by the change.

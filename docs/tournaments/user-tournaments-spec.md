@@ -124,7 +124,7 @@ Players keep viewing and editing the deck of an existing pool whatever the statu
    3. **Build your deck** — link to the pool page; deck name and card count once a deck exists.
 3. `/tournament/t/:id/pool` is the existing `TournamentPoolView` (pack reveal, full-pool
    deckbuilder, background deck sync to decks-api). Nothing changes in that component for lot 1.
-4. From the first BGA game on, the pool also shows under "My tournaments" like any bound pool.
+4. From the first BGA game on, the pool also shows under "My pools" like any bound pool.
    If the player never opened altered-draft, the first BGA call creates the pool from the
    tournament's config and mints a random deck, exactly like today's legacy journey.
 
@@ -295,7 +295,7 @@ files are mounted in `server/index.js` exactly like the existing ones.
 
 | Endpoint | Method | Auth | Purpose |
 | --- | --- | --- | --- |
-| `/api/tournaments` | GET | none (optional bearer) | List. `?status=upcoming\|ongoing\|open\|all` (`open` = upcoming + ongoing, the default), ordered by `starts_at`. `?bgaId=<numeric id>` instead returns the live (not detached) declaration of that BGA tournament whatever its status, 0 or 1 item: the form's duplicate-link check. With a bearer: each item carries `viewer.hasPool` / `viewer.poolId`. |
+| `/api/tournaments` | GET | none (optional bearer) | List. `?status=upcoming\|ongoing\|open\|all` (`open` = upcoming + ongoing, the default), ordered by `starts_at`. `?bgaId=<numeric id>` instead returns the live (not detached) declaration of that BGA tournament whatever its status, 0 or 1 item: the form's duplicate-link check. `?mine=1` (bearer required, 401 otherwise) returns every tournament the caller organizes, whatever its status, most recent start first ("My created tournaments"). With a bearer: each item carries `viewer.hasPool` / `viewer.poolId`. |
 | `/api/tournaments` | POST | required | Create. Enforces §9. Returns the tournament. |
 | `/api/tournaments/:id` | GET | none (optional bearer) | Detail + `poolCount`, `locked`, `poolsByOrigin` (organizer/moderator only), `viewer` (bearer only: `isOrganizer`, `isModerator`, `hasPool`, `poolId`, deck summary). |
 | `/api/tournaments/:id` | PATCH | organizer / moderator | Partial update: `name`, `description`, `startsAt`, `endsAt`, `bgaUrl` (unlocked only), `config` (unlocked only, atomic `WHERE NOT EXISTS (pool)`), `action: cancel\|restore\|close\|reopen\|detach` (`detach` moderator only). 409 `tournament_locked` when a locked field is sent, 409 `tournament_detached` on a detached tournament, 409 `bga_tournament_taken` when the new link is already declared. |
@@ -326,7 +326,7 @@ Routes (added to `App.jsx`; `/tournament/pools/:id` and the other existing route
 
 | Route | Page | Notes |
 | --- | --- | --- |
-| `/tournament` | `TournamentMenu.jsx` (reworked) | Public sections "Upcoming" and "Ongoing"; "Create a tournament" (login prompt if logged out); "My tournaments" (bound pools, registered ones first, with the tournament name/status); the generic "Prepare my next tournament" moved to a small block at the bottom. |
+| `/tournament` | `TournamentMenu.jsx` (reworked) | Header (title, "Create a tournament", BGA registration notice); **"My ongoing tournaments"** (logged in, when any): a grid of the started tournaments the player has a pool in, each card opening the tournament page with a direct "Change my deck" button; then **tabs**, each with a one-line explanation, the active one kept in the URL (`?tab=upcoming|ongoing|pools|created`): **Upcoming** (default, public), **Ongoing** (public: pools can still be prepared until the end), **My pools** (every bound pool, declared tournaments first; a card opens the tournament page, or the pool itself for a BGA tournament nobody declared, plus "Change my deck"; the generic "Prepare my next tournament" block sits at the bottom of this tab), **My created tournaments** (`GET /api/tournaments?mine=1`, every status). The two personal tabs show a Connect box when logged out. |
 | `/tournament/new` | `TournamentForm.jsx` | Create mode. Live validation (`src/lib/tournamentForm.js` `tournamentFormIssues`, the API's own pure checks + a duplicate-link lookup, `GET /api/tournaments?bgaId=`, debounced while typing; the unique index + 409 on submit stay the real guard): the submit button sits in a bar stuck to the bottom of the screen, disabled while problems remain, with the list of problems next to it (each one jumps to its field). |
 | `/tournament/t/:id` | `TournamentDetail.jsx` | Header, description, checklist, organizer panel. |
 | `/tournament/t/:id/edit` | `TournamentForm.jsx` | Edit mode; config section disabled when locked. Nothing of the form renders until `GET /api/tournaments/:id` (its `viewer` block) says the viewer may edit; anyone else goes straight to the tournament page (the PATCH is refused server-side anyway, 403). |

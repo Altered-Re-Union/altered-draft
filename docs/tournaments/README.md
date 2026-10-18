@@ -105,7 +105,7 @@ All tournament pages require a Re:Union login, except the public list of declare
 | Route | Page component | What the player sees |
 | --- | --- | --- |
 | `/` | `Home.jsx` | A **"Sealed set 6"** block with two image buttons: **Tournaments** (→ `/tournament`) and **Normal mode** (→ `/tournament/normal`). |
-| `/tournament` | `TournamentMenu.jsx` | A notice linking to the BGA tournament list (game id 1909 = Altered); the public **"Upcoming"** / **"Ongoing"** lists of declared tournaments and a **"Create a tournament"** button (§14); **"My tournaments"**: every bound tournament pool, declared tournaments first then most recent first, with the tournament name (and the declared tournament's status), deck name and card count, and a **"Change my deck"** link (→ `/tournament/t/:id/pool` for a declared tournament, `/tournament/pools/:id` otherwise); the generic **"Prepare my next tournament"** button (→ `/tournament/prep`) in a small block at the bottom. |
+| `/tournament` | `TournamentMenu.jsx` | Header (title, "Create a tournament", BGA registration notice); **"My ongoing tournaments"** (logged in, when any): a grid of the started tournaments the player has a pool in, each card opening the tournament page with a direct "Change my deck" button; then **tabs**, each with a one-line explanation, the active one kept in the URL (`?tab=upcoming|ongoing|pools|created`): **Upcoming** (default, public), **Ongoing** (public: pools can still be prepared until the end), **My pools** (every bound pool, declared tournaments first; a card opens the tournament page, or the pool itself for a BGA tournament nobody declared, plus "Change my deck"; the generic "Prepare my next tournament" block sits at the bottom of this tab), **My created tournaments** (`GET /api/tournaments?mine=1`, every status). The two personal tabs show a Connect box when logged out. |
 | `/tournament/new` | `TournamentForm.jsx` | Declare a tournament (§14). |
 | `/tournament/t/:id` | `TournamentDetail.jsx` | A declared tournament: description, dates, 3-step checklist, organizer panel (§14). Public. |
 | `/tournament/t/:id/edit` | `TournamentForm.jsx` | Edit a declared tournament (organizer / moderator). |
@@ -162,7 +162,7 @@ All tournament pages require a Re:Union login, except the public list of declare
    `Random` shows a warning ("You didn't build your deck before the matches started…"); a
    name starting with `Invalid` stops there with a link to fix the deck on altered-draft; an
    empty list shows "No Sealed deck found" with a link to altered-draft.
-4. From then on the pool appears under **"My tournaments"**, and a *new* pending pool
+4. From then on the pool appears under **"My pools"**, and a *new* pending pool
    is available for the next tournament. The player may edit the bound deck between games;
    every BGA deck-content fetch re-validates it against the pool.
 5. BGA fetches the deck content through altered-bga-api → decks-api. decks-api validates
@@ -194,7 +194,7 @@ validates against a stale pool.
 
 ### 2.5 Known functional limits
 
-- "My tournaments" only grows: pools are never archived. Declared tournaments show their
+- "My pools" only grows: pools are never archived. Declared tournaments show their
   status (upcoming / ongoing / ended / cancelled) next to the pool; generic ones have none.
 - Validity differs slightly between altered-draft (`≤ 1` hero) and decks-api (`exactly 1`
   hero). A 30-card deck with no hero shows "Valid" in the app but is rejected by decks-api
@@ -516,7 +516,7 @@ Rules implemented in `src/lib/poolStore.js`:
   PK; a BGA table reloading the deck-list screen calls repeatedly with the same `gameId`.
 - `getPoolById(sub, id)`, `getPoolByDeckId(sub, deckId)` and `getPoolForTournament(sub, id)`
   are always **owner-scoped** (never resolve a pool by id alone).
-- `listBoundTournamentPools(sub)`: "My tournaments", declared tournaments first, then most
+- `listBoundTournamentPools(sub)`: "My pools", declared tournaments first, then most
   recent first, with the declared tournament's name / dates / status columns (LEFT JOIN).
 
 Which tournament id gets bound: altered-bga-api forwards BGA's `tournamentParentId` when the
@@ -654,7 +654,7 @@ Indexes and what they enforce:
 | `sealed_pools_one_normal_per_sub` | unique `(sub) WHERE kind = 'normal'` | One casual pool per player (reset updates in place). |
 | `sealed_pools_one_pending_tournament_per_sub` | unique `(sub) WHERE kind = 'tournament' AND tournament_id IS NULL` | **One-shot commitment**: one pending pool per player. |
 | `sealed_pools_one_binding_per_sub_per_tournament` | unique `(sub, tournament_id) WHERE tournament_id IS NOT NULL` | One pool per player per tournament (many players share a tournament id). |
-| `sealed_pools_bound_tournaments` | `(sub, bound_at DESC) WHERE kind = 'tournament' AND tournament_id IS NOT NULL` | "My tournaments" listing. |
+| `sealed_pools_bound_tournaments` | `(sub, bound_at DESC) WHERE kind = 'tournament' AND tournament_id IS NOT NULL` | "My pools" listing. |
 | `sealed_pools_one_per_sub_per_tournament_ref` | unique `(sub, tournament_ref) WHERE tournament_ref IS NOT NULL` | One pool per player per declared tournament (§14). |
 | `tournaments_bga_tournament_id_live` | unique `(bga_tournament_id) WHERE detached_at IS NULL` | One live declaration per BGA tournament, cancelled ones included; a detached one frees the id (§14.5). |
 | `sealed_pool_games` PK | `(pool_id, game_id)` | Games-played dedup. |
@@ -1187,7 +1187,7 @@ migration — from then on no pool depends on the upstream set file's order. Ide
 
 | Endpoint | Method | Auth | Purpose |
 | --- | --- | --- | --- |
-| `/api/tournaments` | GET | none (optional bearer) | List. `?status=upcoming\|ongoing\|open\|all` (`open` = upcoming + ongoing, the default), ordered by `starts_at`. `?bgaId=<numeric id>` instead returns the live (not detached) declaration of that BGA tournament whatever its status, 0 or 1 item: the form's duplicate-link check. With a bearer: each item carries `viewer.hasPool` / `viewer.poolId`. |
+| `/api/tournaments` | GET | none (optional bearer) | List. `?status=upcoming\|ongoing\|open\|all` (`open` = upcoming + ongoing, the default), ordered by `starts_at`. `?bgaId=<numeric id>` instead returns the live (not detached) declaration of that BGA tournament whatever its status, 0 or 1 item: the form's duplicate-link check. `?mine=1` (bearer required, 401 otherwise) returns every tournament the caller organizes, whatever its status, most recent start first ("My created tournaments"). With a bearer: each item carries `viewer.hasPool` / `viewer.poolId`. |
 | `/api/tournaments` | POST | required | Create. Enforces spec §9 (10 open tournaments per account, moderators exempt). Returns the tournament. |
 | `/api/tournaments/:id` | GET | none (optional bearer) | Detail + `poolCount`, `locked`, `poolsByOrigin` (organizer/moderator only), `viewer` (bearer only). |
 | `/api/tournaments/:id` | PATCH | organizer / moderator | Partial update: `name`, `description`, `startsAt`, `endsAt`, `bgaUrl` (unlocked only), `config` (unlocked only, atomic), `action: cancel\|restore\|close\|reopen\|detach` (`detach` moderator only, §14.5). 409 `tournament_locked` when a locked field is sent, `tournament_detached` on a detached tournament, `bga_tournament_taken` when the new link is already declared. |
@@ -1205,7 +1205,7 @@ token payload only after userinfo accepted that token (`api/_lib/auth.js` `verif
 
 | Route | Page | Notes |
 | --- | --- | --- |
-| `/tournament` | `TournamentMenu.jsx` (reworked) | Public "Upcoming" and "Ongoing" lists; "Create a tournament" (login prompt if logged out); "My tournaments" (bound pools, with the declared tournament's status); the generic "Prepare my next tournament" moved to a small block at the bottom. |
+| `/tournament` | `TournamentMenu.jsx` (reworked) | Header (title, "Create a tournament", BGA registration notice); **"My ongoing tournaments"** (logged in, when any): a grid of the started tournaments the player has a pool in, each card opening the tournament page with a direct "Change my deck" button; then **tabs**, each with a one-line explanation, the active one kept in the URL (`?tab=upcoming|ongoing|pools|created`): **Upcoming** (default, public), **Ongoing** (public: pools can still be prepared until the end), **My pools** (every bound pool, declared tournaments first; a card opens the tournament page, or the pool itself for a BGA tournament nobody declared, plus "Change my deck"; the generic "Prepare my next tournament" block sits at the bottom of this tab), **My created tournaments** (`GET /api/tournaments?mine=1`, every status). The two personal tabs show a Connect box when logged out. |
 | `/tournament/new` | `TournamentForm.jsx` | Create mode. Live validation (`src/lib/tournamentForm.js` `tournamentFormIssues`, the API's own pure checks + a duplicate-link lookup, `GET /api/tournaments?bgaId=`, debounced while typing; the unique index + 409 on submit stay the real guard): the submit button sits in a bar stuck to the bottom of the screen, disabled while problems remain, with the list of problems next to it (each one jumps to its field). |
 | `/tournament/t/:id` | `TournamentDetail.jsx` | Header, description, 3-step checklist (register on BGA → open your pool → build your deck), organizer panel. |
 | `/tournament/t/:id/edit` | `TournamentForm.jsx` | Edit mode; BGA link + config disabled once a pool exists. Nothing of the form renders until `GET /api/tournaments/:id` (its `viewer` block) says the viewer may edit; anyone else goes straight to the tournament page (the PATCH is refused server-side anyway, 403). |

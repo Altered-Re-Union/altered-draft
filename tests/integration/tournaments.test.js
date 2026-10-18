@@ -581,3 +581,21 @@ describe('GET /api/tournaments?bgaId= (form duplicate-link check)', () => {
     expect((await call(tournamentsIndex, { query: { bgaId: 'abc' }, auth: false })).statusCode).toBe(400)
   })
 })
+
+describe('GET /api/tournaments?mine=1 (my created tournaments)', () => {
+  it('lists every tournament the caller organizes, whatever its status, most recent start first; 401 logged out', async () => {
+    const soon = await mkTournament({ organizerSub: 'alice', name: 'Soon', startsAt: inDays(1) })
+    const later = await mkTournament({ organizerSub: 'alice', name: 'Later', startsAt: inDays(9) })
+    const gone = await mkTournament({ organizerSub: 'alice', name: 'Cancelled', startsAt: inDays(4) })
+    await updateTournament(gone.id, { cancelledAt: new Date() })
+    await mkTournament({ organizerSub: 'bob', name: 'Not mine' })
+    asUser(ALICE)
+    const res = await call(tournamentsIndex, { query: { mine: '1' } })
+    expect(res.statusCode).toBe(200)
+    expect(res.body.tournaments.map(x => [x.name, x.status])).toEqual([['Later', 'upcoming'], ['Cancelled', 'cancelled'], ['Soon', 'upcoming']])
+    expect(res.body.tournaments[0].viewer.isOrganizer).toBe(true)
+    void soon; void later
+    verifyUser.mockResolvedValue(null)
+    expect((await call(tournamentsIndex, { query: { mine: '1' }, auth: false })).statusCode).toBe(401)
+  })
+})
