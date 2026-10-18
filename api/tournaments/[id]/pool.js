@@ -22,7 +22,14 @@ export default async function handler(req, res) {
   let pool = await getPoolForTournament(user.sub, row.id)
   if (!pool) {
     if (!OPEN_STATUSES.includes(status)) return res.status(409).json({ error: 'tournament_closed', status })
-    pool = await getOrCreateTournamentPool(user.sub, row, { createdBy: 'page' })
+    try {
+      pool = await getOrCreateTournamentPool(user.sub, row, { createdBy: 'page' })
+    } catch (e) {
+      // Detached / deleted between our read and the insert, or a lost race we couldn't settle.
+      if (e.code === 'tournament_unavailable') return res.status(409).json({ error: 'tournament_closed', status: 'detached' })
+      if (e.code === 'pool_unavailable') return res.status(409).json({ error: 'pool_unavailable' })
+      throw e
+    }
   }
 
   const { counts, boosters } = await loadPool(user.sub, pool)

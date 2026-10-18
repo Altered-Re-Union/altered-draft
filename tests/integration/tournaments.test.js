@@ -42,11 +42,25 @@ vi.mock('../../src/lib/poolBuilder.js', async importOriginal => {
   }
 })
 
+vi.mock('../../src/lib/cardData.js', async importOriginal => {
+  const mod = await importOriginal()
+  const card = (reference, faction, cardType = 'CHARACTER') => ({ reference, name: reference, faction, cardType, rarity: 'C' })
+  return {
+    ...mod,
+    fetchSet: vi.fn(async setCode => [card(`ALT_${setCode}_B_AX_01_C`, 'AX', 'HERO'), card(`ALT_${setCode}_B_BR_02_R1`, 'BR')]),
+    fetchUniques: vi.fn(async () => []),
+  }
+})
+
 vi.mock('../../api/_lib/auth.js', async importOriginal => {
   const mod = await importOriginal()
   return { ...mod, verifyUser: vi.fn(async () => null), verifySub: vi.fn(async () => null) }
 })
-import { verifyUser } from '../../api/_lib/auth.js'
+import { verifyUser, verifySub } from '../../api/_lib/auth.js'
+import { buildPool } from '../../src/lib/poolBuilder.js'
+import bgaDecklist from '../../api/tournament-bga-decklist.js'
+import fs from 'node:fs'
+import path from 'node:path'
 import tournamentsIndex from '../../api/tournaments/index.js'
 import tournamentsItem from '../../api/tournaments/[id].js'
 import tournamentPoolFor from '../../api/tournaments/[id]/pool.js'
@@ -652,5 +666,103 @@ describe('declaring a BGA tournament already played with legacy pools (option A)
     await legacyPool('dave', '555555', 'CYCLONE')
     expect((await call(tournamentsIndex, { query: { bgaId: '555555' }, auth: false })).body.legacy).toEqual({ pools: 2, mixed: true, config: null })
     expect((await call(tournamentsIndex, { query: { bgaId: '565656' }, auth: false })).body.legacy).toBeNull()
+  })
+})
+
+
+describe('PR #20 review fixes', () => {
+  const sleep = ms => new Promise(r => setTimeout(r, ms))
+
+  it('a pool left attached to a detached declaration is re-adopted by the new declaration (never null)', async () => {
+    const old = await mkTournament({ bgaTournamentId: '707070', name: 'Squat' })
+    const stray = await getOrCreateTournamentPool('alice', old)
+    await query('UPDATE tournaments SET detached_at = now() WHERE id = $1', [old.id]) // e.g. a pool inserted during a detach
+    const real = await mkTournament({ bgaTournamentId: '707070', name: 'Real' })
+    const p = await getOrCreateTournamentPool('alice', real)
+    expect(p).not.toBeNull()
+    expect(p.id).toBe(stray.id)
+    expect(p.tournament_ref).toBe(real.id)
+  })
+
+  it('a stale tournament row cannot create a pool with an outdated config', async () => {
+    const t = await mkTournament()
+    await query("UPDATE tournaments SET config = jsonb_set(config, '{source,setCode}', '\"EOLE\"') WHERE id = $1", [t.id])
+    const p = await getOrCreateTournamentPool('alice', t) // t still says CYCLONE
+    expect(p.config.source.setCode).toBe('EOLE')
+  })
+
+  it('a stale row of a detached tournament refuses to create a pool', async () => {
+    const t = await mkTournament()
+    await query('UPDATE tournaments SET detached_at = now() WHERE id = $1', [t.id])
+    await expect(getOrCreateTournamentPool('alice', t)).rejects.toMatchObject({ code: 'tournament_unavailable' })
+  })
+
+  it('a config change racing the first pool never leaves a pool in an outdated format', async () => {
+    const base = vi.mocked(buildPool).getMockImplementation()
+    for (let i = 0; i < 4; i++) {
+      const t = await mkTournament({ organizerSub: 'alice' })
+      vi.mocked(buildPool).mockImplementationOnce(async (...a) => { await sleep(150); return base(...a) })
+      asUser(ALICE)
+      const [pool, patch] = await Promise.all([
+        getOrCreateTournamentPool(`p${i}`, t),
+        sleep(30).then(() => call(tournamentsItem, { method: 'PATCH', query: { id: t.id }, body: { config: { ...CONFIG, source: { type: 'set', setCode: 'EOLE' } } } })),
+      ])
+      const final = await getTournament(t.id)
+      expect(pool.config.source.setCode).toBe(final.config.source.setCode)
+      expect([200, 409]).toContain(patch.statusCode)
+    }
+  })
+
+  it('detach releases the adopted pools (re-adopted by the next declaration) and deletes only the declaration\'s own', async () => {
+    const legacy = await bindTournamentId('carol', '717171', 'BGA name') // carol already plays it
+    const squat = await mkTournament({ bgaTournamentId: '717171', name: 'Squat', config: { ...CONFIG, source: { type: 'set', setCode: 'EOLE', boosters: 7 } } })
+    const native = await getOrCreateTournamentPool('dave', squat)
+    expect((await query('SELECT tournament_ref, adopted_at FROM sealed_pools WHERE id = $1', [legacy.id])).rows[0]).toMatchObject({ tournament_ref: squat.id })
+    asUser(MOD)
+    const res = await call(tournamentsItem, { method: 'PATCH', query: { id: squat.id }, body: { action: 'detach' } })
+    expect(res.statusCode).toBe(200)
+    const after = (await query('SELECT id, tournament_ref, adopted_at, tournament_id FROM sealed_pools WHERE id = ANY($1)', [[legacy.id, native.id]])).rows
+    expect(after).toEqual([{ id: legacy.id, tournament_ref: null, adopted_at: null, tournament_id: '717171' }])
+    const real = await mkTournament({ bgaTournamentId: '717171', name: 'Real', config: { ...CONFIG, source: { type: 'set', setCode: 'EOLE', boosters: 7 } } })
+    expect((await query('SELECT tournament_ref, tournament_name FROM sealed_pools WHERE id = $1', [legacy.id])).rows[0]).toEqual({ tournament_ref: real.id, tournament_name: 'Real' })
+  })
+
+  it('tournament-bga-decklist end to end on a declared tournament: creates the pool, records the game, mints a Random deck', async () => {
+    const t = await mkTournament({ bgaTournamentId: '727272', name: 'Declared cup' })
+    vi.mocked(verifySub).mockResolvedValue('erin')
+    const calls = []
+    vi.stubGlobal('fetch', vi.fn(async (url, init = {}) => {
+      calls.push(`${init.method ?? 'GET'} ${new URL(url).pathname}`)
+      if ((init.method ?? 'GET') === 'POST') return { ok: true, status: 201, json: async () => ({ id: 'deck-erin', ...JSON.parse(init.body) }) }
+      return { ok: true, status: 200, json: async () => ({}) }
+    }))
+    try {
+      const res = await call(bgaDecklist, { query: { tournamentId: '727272', tournamentName: 'BGA - Stage 1', gameId: 'g1' } })
+      expect(res.statusCode).toBe(200)
+      expect(res.body['hydra:totalItems']).toBe(1)
+      expect(res.body['hydra:member'][0]).toMatchObject({ id: 'deck-erin', name: 'Random Declared cup', format: 'sealed' })
+      const pool = (await query("SELECT * FROM sealed_pools WHERE sub = 'erin'")).rows[0]
+      expect(pool).toMatchObject({ tournament_ref: t.id, tournament_id: '727272', created_by: 'bga', deck_id: 'deck-erin' })
+      expect((await query('SELECT game_id FROM sealed_pool_games WHERE pool_id = $1', [pool.id])).rows).toEqual([{ game_id: 'g1' }])
+      expect(calls).toEqual(['POST /api/decks', 'PATCH /api/decks/deck-erin'])
+    } finally {
+      vi.unstubAllGlobals()
+      vi.mocked(verifySub).mockResolvedValue(null)
+    }
+  })
+
+  it('sealed-pools-schema.sql replays twice on a populated database without touching the data', async () => {
+    const t = await mkTournament({ name: 'Survivor' })
+    const p = await getOrCreateTournamentPool('alice', t)
+    await query("UPDATE sealed_pools SET created_by = 'page' WHERE id = $1", [p.id])
+    const sql = fs.readFileSync(path.resolve(__dirname, '../../sealed-pools-schema.sql'), 'utf8')
+    await query(sql)
+    await query(sql)
+    expect((await query('SELECT tournament_ref, created_by, cards IS NOT NULL AS stored FROM sealed_pools WHERE id = $1', [p.id])).rows[0]).toEqual({ tournament_ref: t.id, created_by: 'page', stored: true })
+    const fks = (await query("SELECT count(*)::int AS n FROM pg_constraint WHERE conrelid = 'sealed_pools'::regclass AND contype = 'f' AND confrelid = 'tournaments'::regclass")).rows[0].n
+    expect(fks).toBe(1)
+    const idx = (await query("SELECT indexname FROM pg_indexes WHERE tablename IN ('sealed_pools', 'tournaments')")).rows.map(r => r.indexname)
+    expect(idx).toEqual(expect.arrayContaining(['tournaments_bga_tournament_id_live', 'sealed_pools_one_per_sub_per_tournament_ref', 'sealed_pools_by_tournament_ref', 'sealed_pools_legacy_by_bga_id']))
+    expect(idx).not.toContain('tournaments_bga_tournament_id')
   })
 })

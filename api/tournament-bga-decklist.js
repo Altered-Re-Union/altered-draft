@@ -37,9 +37,17 @@ export default async function handler(req, res) {
   const tournamentName = queryParam(req, 'tournamentName')
   const gameId = queryParam(req, 'gameId')
 
-  let pool = tournamentId
-    ? await bindTournamentId(sub, tournamentId, tournamentName || null)
-    : await getOrCreateNormalPool(sub, { createdBy: 'bga' })
+  let pool
+  try {
+    pool = tournamentId
+      ? await bindTournamentId(sub, tournamentId, tournamentName || null)
+      : await getOrCreateNormalPool(sub, { createdBy: 'bga' })
+  } catch (e) {
+    // A declared tournament changed under a racing call (poolStore.getOrCreateTournamentPool):
+    // a retry from BGA settles it.
+    if (e.code === 'tournament_unavailable' || e.code === 'pool_unavailable') return res.status(409).json({ error: e.code })
+    throw e
+  }
 
   if (gameId) {
     await recordGamePlayed(pool.id, gameId)

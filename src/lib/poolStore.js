@@ -11,7 +11,7 @@ import crypto from 'node:crypto'
 import { query } from './db.js'
 import { buildPool, buildPoolSeedString } from './poolBuilder.js'
 import { configFromLegacyFormat, legacyColumnsFromConfig } from './tournamentConfig.js'
-import { getTournamentByBgaId } from './tournamentStore.js'
+import { getTournamentByBgaId, getTournament } from './tournamentStore.js'
 // Re-exported: api/_lib/tournamentPool.js and the freeze script import it from here.
 export { buildPoolSeedString }
 
@@ -45,11 +45,23 @@ async function insertPool(sub, kind, { config, tournament = null, createdBy = 'p
     : tournament
       ? 'ON CONFLICT (sub, tournament_ref) WHERE tournament_ref IS NOT NULL DO NOTHING'
       : "ON CONFLICT (sub) WHERE kind = 'tournament' AND tournament_id IS NULL DO NOTHING"
+  // For a declared tournament the row is only inserted while that tournament STILL has
+  // this config and BGA id and is not detached, under FOR SHARE on it: a concurrent config
+  // change / relink / detach (FOR UPDATE, tournamentStore.js) either committed first — the
+  // condition then fails, 0 rows, the caller re-reads the tournament — or waits for this
+  // insert and then sees the pool. No pool can be built from an outdated config.
+  const values = tournament
+    ? `SELECT $1::text, $2::text, $3::text, $4::int, $5::boolean, $6::boolean, $7::int, $8::text,
+              $9::jsonb, $10::jsonb, $11::jsonb, $12::text, $13::uuid, $14::text, $15::text, $16::timestamptz
+       FROM (SELECT 1 FROM tournaments
+             WHERE id = $13::uuid AND bga_tournament_id = $14::text AND config = $9::jsonb AND detached_at IS NULL
+             FOR SHARE) live`
+    : 'VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)'
   const { rows } = await query(
     `INSERT INTO sealed_pools
        (sub, kind, set_code, unique_count, even_factions, heroes_in_pool, guaranteed_uniques, nonce,
         config, cards, boosters, created_by, tournament_ref, tournament_id, tournament_name, bound_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+     ${values}
      ${conflictClause}
      RETURNING *`,
     [
@@ -146,36 +158,53 @@ export async function getPoolForTournament(sub, tournamentId) {
 /**
  * Get-or-create the player's pool for a declared tournament (spec §6). Order:
  *  1. an existing attached pool;
- *  2. a LEGACY pool already bound to the tournament's BGA id (the tournament was declared
- *     after BGA started binding) — adopted, never replaced: its deck is already in play;
- *  3. a fresh stored pool from the tournament's config.
- * Two unique indexes guard creation ((sub, tournament_ref) and (sub, tournament_id)); a
- * race can surface as ON CONFLICT DO NOTHING or as a 23505 from the other index. Both
- * mean "someone else's row won" — re-select it.
+ *  2. a pool already bound to the tournament's BGA id but not attached to a live
+ *     declaration — a LEGACY one (the tournament was declared after BGA started binding)
+ *     or one left on a DETACHED declaration of that id — adopted, never replaced: its deck
+ *     may be in play (adopted_at marks it, so a later detach releases it);
+ *  3. a fresh stored pool from the tournament's config (insertPool only inserts while the
+ *     tournament still has that config and is live).
+ * A race on either unique index, or a tournament changed meanwhile, makes a step miss:
+ * the whole sequence is retried with the tournament re-read from the database. Throws
+ * `tournament_unavailable` (deleted / detached meanwhile) or `pool_unavailable` (still no
+ * row after the retries) instead of returning null.
  */
 export async function getOrCreateTournamentPool(sub, tournament, { createdBy = 'page' } = {}) {
-  const existing = await getPoolForTournament(sub, tournament.id)
-  if (existing) return existing
+  let current = tournament
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const existing = await getPoolForTournament(sub, current.id)
+    if (existing) return existing
 
-  const legacy = await query(
-    "SELECT * FROM sealed_pools WHERE sub = $1 AND kind = 'tournament' AND tournament_ref IS NULL AND tournament_id = $2",
-    [sub, tournament.bga_tournament_id],
-  )
-  if (legacy.rows[0]) {
-    const { rows } = await query(
-      'UPDATE sealed_pools SET tournament_ref = $2, tournament_name = $3 WHERE id = $1 AND tournament_ref IS NULL RETURNING *',
-      [legacy.rows[0].id, tournament.id, tournament.name],
+    if (attempt > 0) {
+      current = await getTournament(current.id)
+      if (!current || current.detached_at) throw codedError('tournament_unavailable', 'the tournament was removed or detached')
+    }
+
+    const { rows: adopted } = await query(
+      `UPDATE sealed_pools p SET tournament_ref = $3, tournament_name = $4, adopted_at = now()
+       WHERE p.sub = $1 AND p.kind = 'tournament' AND p.tournament_id = $2
+         AND (p.tournament_ref IS NULL OR p.tournament_ref IN (SELECT id FROM tournaments WHERE detached_at IS NOT NULL))
+       RETURNING *`,
+      [sub, current.bga_tournament_id, current.id, current.name],
     )
-    return rows[0] ?? getPoolForTournament(sub, tournament.id)
-  }
+    if (adopted[0]) return adopted[0]
 
-  try {
-    const inserted = await insertPool(sub, 'tournament', { config: tournament.config, tournament, createdBy })
-    if (inserted) return inserted
-  } catch (e) {
-    if (e.code !== '23505') throw e
+    try {
+      const inserted = await insertPool(sub, 'tournament', { config: current.config, tournament: current, createdBy })
+      if (inserted) return inserted
+    } catch (e) {
+      if (e.code !== '23505') throw e
+    }
+    // First attempt with the caller's row: it may be stale (config changed, detached).
+    if (attempt === 0 && !(await getTournament(current.id))) throw codedError('tournament_unavailable', 'the tournament was removed')
   }
-  return getPoolForTournament(sub, tournament.id)
+  throw codedError('pool_unavailable', 'could not create or find the pool for this tournament')
+}
+
+function codedError(code, message) {
+  const err = new Error(message)
+  err.code = code
+  return err
 }
 
 /**
