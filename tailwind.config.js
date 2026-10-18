@@ -32,6 +32,11 @@ export default {
         accent:      'rgb(var(--c-accent) / <alpha-value>)',     // gold accent
         accent2:     'rgb(var(--c-accent2) / <alpha-value>)',    // gold hover/bright
         'on-accent': 'rgb(var(--c-on-accent) / <alpha-value>)',  // text on gold
+        'accent-ink': 'rgb(var(--c-accent-ink) / <alpha-value>)', // gold as text (readable on light)
+        ok:          'rgb(var(--c-ok) / <alpha-value>)',         // success text / borders
+        'ok-soft':   'rgb(var(--c-ok-soft) / <alpha-value>)',    // success pill / panel bg
+        danger:      'rgb(var(--c-danger) / <alpha-value>)',     // error text / borders
+        'danger-soft': 'rgb(var(--c-danger-soft) / <alpha-value>)', // error pill / panel bg
       },
     },
   },

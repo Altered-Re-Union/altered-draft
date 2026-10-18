@@ -1,11 +1,11 @@
 import { SETS } from '../lib/cardData.js'
 
 const PILL = {
-  upcoming: 'text-accent border-accent/50 bg-accent/10',
-  ongoing: 'text-green-400 border-green-700 bg-green-900/25',
+  upcoming: 'text-accent-ink border-accent/50 bg-accent/15',
+  ongoing: 'text-ok border-ok/40 bg-ok-soft',
   ended: 'text-muted border-line bg-surface2',
-  cancelled: 'text-red-400 border-red-800 bg-red-950/25',
-  detached: 'text-red-400 border-red-800 bg-red-950/25',
+  cancelled: 'text-danger border-danger/40 bg-danger-soft',
+  detached: 'text-danger border-danger/40 bg-danger-soft',
 }
 
 export function StatusPill({ status, t }) {

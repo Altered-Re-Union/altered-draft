@@ -220,10 +220,10 @@ export default function TournamentForm() {
     }
   }
 
-  const inputCls = invalid => `w-full bg-surface2 border rounded-lg px-3 py-2 text-sm focus:outline-none ${invalid ? 'border-red-500 focus:border-red-400' : 'border-line focus:border-accent'}`
+  const inputCls = invalid => `w-full bg-surface2 border rounded-lg px-3 py-2 text-sm focus:outline-none ${invalid ? 'border-danger focus:border-danger' : 'border-line focus:border-accent'}`
   const ErrorLine = ({ field }) => {
     const issue = fieldIssue(field)
-    return issue ? <p className="text-xs text-red-400 mt-1" role="alert">{issueMessage(issue, t)}</p> : null
+    return issue ? <p className="text-xs text-danger mt-1" role="alert">{issueMessage(issue, t)}</p> : null
   }
   const submitLabel = saving ? t('tournaments.saving') : isEdit ? t('tournaments.submitSave') : t('tournaments.submitCreate')
   const issuesText = issues.map(i => `${t(FIELD_LABEL_KEY[i.field])} — ${issueMessage(i, t)}`)
@@ -255,7 +255,7 @@ export default function TournamentForm() {
         <TopNav />
         <div className="max-w-2xl w-full mx-auto px-4 py-8 flex-1">
           {loadError
-            ? <p className="text-red-400 text-sm">{loadError}</p>
+            ? <p className="text-danger text-sm">{loadError}</p>
             : <p className="text-muted text-sm">{t('tournaments.loading')}</p>}
         </div>
         <Footer />
@@ -293,7 +293,7 @@ export default function TournamentForm() {
               placeholder="https://boardgamearena.com/tournament?id=…" aria-invalid={!!fieldIssue('bgaUrl')}
               className={`${inputCls(fieldIssue('bgaUrl'))} font-mono disabled:opacity-60`} />
             <p className="text-xs text-faint mt-1">{t('tournaments.bgaUrlHint')}</p>
-            {bgaParsed && !fieldIssue('bgaUrl') && <p className="text-xs mt-1 text-green-400">{t('tournaments.bgaIdDetected', { id: bgaParsed.id })}</p>}
+            {bgaParsed && !fieldIssue('bgaUrl') && <p className="text-xs mt-1 text-ok">{t('tournaments.bgaIdDetected', { id: bgaParsed.id })}</p>}
             <ErrorLine field="bgaUrl" />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -316,8 +316,8 @@ export default function TournamentForm() {
         {/* Section 2 — cards */}
         <section id="tn-cards" tabIndex={-1} className="bg-surface rounded-xl border border-line p-5 space-y-4 focus:outline-none">
           <h2 className="font-semibold">{t('tournaments.sectionCards')}</h2>
-          {locked && <p className="text-xs text-accent2">{t('tournaments.lockedNotice')}</p>}
-          {imposed && <p className="text-sm text-accent2" role="status">{tc('tournaments.legacyImposed', legacy.pools)}</p>}
+          {locked && <p className="text-xs text-accent-ink">{t('tournaments.lockedNotice')}</p>}
+          {imposed && <p className="text-sm text-accent-ink" role="status">{tc('tournaments.legacyImposed', legacy.pools)}</p>}
           <p className="text-sm text-muted">{t('tournaments.cardsHint')}</p>
           <SetPresetGrid selected={setCode} onSelect={edit('setCode', setSetCode)} disabled={configFrozen || saving} />
           <ErrorLine field="setCode" />
@@ -341,7 +341,7 @@ export default function TournamentForm() {
 
         {/* Action bar, stuck to the bottom of the viewport */}
         <div className="sticky bottom-0 z-20 -mx-4 px-4 pt-3 pb-4 bg-base/95 backdrop-blur border-t border-line space-y-2">
-          {serverError && <p className="text-sm text-red-400" role="alert">{serverError}</p>}
+          {serverError && <p className="text-sm text-danger" role="alert">{serverError}</p>}
           {issues.length > 0 && !loading && (
             <div className="text-sm">
               <p className="text-muted mb-1">{isEdit ? t('tournaments.issuesTitleSave') : t('tournaments.issuesTitleCreate')}</p>
@@ -349,7 +349,7 @@ export default function TournamentForm() {
                 {issues.map((issue, i) => (
                   <li key={`${issue.field}-${issue.code}`}>
                     <button type="button" onClick={() => { touch(issue.field); focusField(issue.field) }}
-                      className={`text-left hover:underline ${touched.has(issue.field) ? 'text-red-400' : 'text-ink2'}`}>
+                      className={`text-left hover:underline ${touched.has(issue.field) ? 'text-danger' : 'text-ink2'}`}>
                       • {issuesText[i]}
                     </button>
                   </li>
@@ -359,7 +359,7 @@ export default function TournamentForm() {
           )}
           <span className="block" title={issues.length ? issuesText.join('\n') : undefined}>
             <button type="submit" disabled={blocked}
-              className="w-full py-2.5 bg-accent hover:bg-accent2 disabled:opacity-40 disabled:cursor-not-allowed text-on-accent font-bold rounded-lg transition-colors">
+              className="w-full py-2.5 bg-accent hover:bg-accent2 text-on-accent font-bold rounded-lg transition-colors disabled:bg-surface3 disabled:text-muted disabled:cursor-not-allowed">
               {submitLabel}
             </button>
           </span>

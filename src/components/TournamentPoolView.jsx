@@ -287,11 +287,11 @@ export default function TournamentPoolView({ title, load, reset, backTo = null }
             </div>
           ) : (
             <div className={`flex flex-wrap items-center gap-3 px-3 py-1.5 rounded-lg border-2 text-base font-semibold ${
-              isValid ? 'border-green-700 bg-green-900/25' : 'border-red-800 bg-red-950/25'}`}>
-              <span className={isEnough ? 'text-green-400' : 'text-red-400'}>{isEnough ? '✓' : '✗'} {t('deckValidity.cardsOf30Plus', { n: deckTotal })}</span>
-              <span className={isValidFactions ? 'text-green-400' : 'text-red-400'}>{isValidFactions ? '✓' : '✗'} {t('deckValidity.factionsOf3', { n: deckFactions.size })}</span>
-              <span className={isValidHero ? (deckHeroCount === 1 ? 'text-green-400' : 'text-faint') : 'text-red-400'}>{isValidHero ? '✓' : '✗'} {t('deckValidity.heroOf1', { n: deckHeroCount })}</span>
-              <span className={`font-bold ${isValid ? 'text-green-400' : 'text-red-400'}`}>
+              isValid ? 'border-ok/50 bg-ok-soft' : 'border-danger/40 bg-danger-soft'}`}>
+              <span className={isEnough ? 'text-ok' : 'text-danger'}>{isEnough ? '✓' : '✗'} {t('deckValidity.cardsOf30Plus', { n: deckTotal })}</span>
+              <span className={isValidFactions ? 'text-ok' : 'text-danger'}>{isValidFactions ? '✓' : '✗'} {t('deckValidity.factionsOf3', { n: deckFactions.size })}</span>
+              <span className={isValidHero ? (deckHeroCount === 1 ? 'text-ok' : 'text-faint') : 'text-danger'}>{isValidHero ? '✓' : '✗'} {t('deckValidity.heroOf1', { n: deckHeroCount })}</span>
+              <span className={`font-bold ${isValid ? 'text-ok' : 'text-danger'}`}>
                 {isValid ? t('deckValidity.valid') : t('deckValidity.notValid')}
               </span>
             </div>
@@ -304,7 +304,7 @@ export default function TournamentPoolView({ title, load, reset, backTo = null }
               {t('tournamentPoolView.makeRandomDeck')}
             </button>
             <button onClick={handleResetDeck} disabled={loading || deckTotal === 0}
-              className="text-xs px-3 py-1.5 rounded bg-surface2 hover:bg-red-900 disabled:opacity-40 transition-colors">
+              className="text-xs px-3 py-1.5 rounded bg-surface2 hover:bg-danger-soft hover:text-danger disabled:opacity-40 transition-colors">
               {t('tournamentPoolView.resetDeck')}
             </button>
             {reset && (
@@ -315,7 +315,7 @@ export default function TournamentPoolView({ title, load, reset, backTo = null }
             )}
           </div>
         </div>
-        {error && <p className="text-red-400 text-sm mb-2">{error}</p>}
+        {error && <p className="text-danger text-sm mb-2">{error}</p>}
 
         {/* Deckbuilding is always the full pool — the pack-by-pack experience is the
             first-open reveal overlay, not a persistent tab (avoids a "which tab?" step). */}

@@ -25,7 +25,7 @@ function TournamentCard({ tn, t, tc }) {
       <div className="flex items-center gap-2 flex-wrap">
         <p className="font-semibold">{tn.name}</p>
         <StatusPill status={tn.status} t={t} />
-        {v?.hasPool && <span className="text-xs text-green-400">✓ {t('tournaments.youHavePool')}</span>}
+        {v?.hasPool && <span className="text-xs text-ok">✓ {t('tournaments.youHavePool')}</span>}
       </div>
       <p className="text-sm text-ink2">{t('tournaments.startsAt', { date: formatDateTime(tn.startsAt) })}</p>
       <p className="text-xs text-muted">{summarizeConfig(tn.config, t, tc)}</p>
@@ -139,7 +139,7 @@ export default function TournamentMenu() {
   const counts = { upcoming: tournaments && upcoming.length, ongoing: tournaments && ongoing.length, pools: pools?.length, created: created?.length }
 
   const listState = (items, error, emptyKey) => {
-    if (error) return <p className="text-red-400 text-sm">{error}</p>
+    if (error) return <p className="text-danger text-sm">{error}</p>
     if (!items) return <p className="text-muted text-sm">{t('tournaments.loading')}</p>
     if (!items.length) return <p className="text-muted text-sm">{t(emptyKey)}</p>
     return null
@@ -160,7 +160,7 @@ export default function TournamentMenu() {
         <div className="bg-surface2 border border-line rounded-lg p-3 text-sm text-muted">
           <p>
             {t('tournamentPages.registerNoticePrefix')}{' '}
-            <a href={BGA_TOURNAMENT_LIST_URL} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
+            <a href={BGA_TOURNAMENT_LIST_URL} target="_blank" rel="noopener noreferrer" className="text-accent-ink hover:underline">
               {t('tournamentPages.registerNoticeLinkLabel')}
             </a>
           </p>

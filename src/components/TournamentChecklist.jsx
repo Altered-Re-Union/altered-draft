@@ -6,9 +6,9 @@ const registeredKey = id => `tournament_bga_registered:${id}`
 
 function Step({ n, title, desc, done, children }) {
   return (
-    <div className={`flex gap-3 rounded-lg border p-3 ${done ? 'border-green-700 bg-green-900/10' : 'border-line bg-surface2'}`}>
+    <div className={`flex gap-3 rounded-lg border p-3 ${done ? 'border-ok/50 bg-ok-soft' : 'border-line bg-surface2'}`}>
       <span className={`w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${
-        done ? 'bg-green-700 text-white' : 'bg-accent text-on-accent'}`}>{done ? '✓' : n}</span>
+        done ? 'bg-ok text-surface' : 'bg-accent text-on-accent'}`}>{done ? '✓' : n}</span>
       <div className="flex-1 space-y-1.5">
         <p className="font-semibold text-sm">{title}</p>
         <p className="text-xs text-faint">{desc}</p>
@@ -66,7 +66,7 @@ export default function TournamentChecklist({ tournament, viewer, user, onLogin,
         ) : (
           <p className="text-xs text-muted">{t('tournaments.step2Closed')}</p>
         )}
-        {openError && <p className="text-xs text-red-400 mt-1">{openError}</p>}
+        {openError && <p className="text-xs text-danger mt-1">{openError}</p>}
       </Step>
 
       <Step n={3} title={t('tournaments.step3Title')} desc={t('tournaments.step3Desc')} done={!!viewer?.deck?.cardQuantity}>

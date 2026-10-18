@@ -28,7 +28,7 @@ export default function SetPresetGrid({ selected, onSelect, disabled = false }) 
               <img src={iconUrl} alt={set.name} className="h-10 object-contain"
                 onError={e => { e.currentTarget.style.display = 'none' }} />
             ) : null}
-            <span className="text-xs text-ink text-center leading-tight font-medium px-1">{set.name}</span>
+            <span className="text-xs text-white text-center leading-tight font-medium px-1 [text-shadow:0_1px_2px_rgb(0_0_0/0.6)]">{set.name}</span>
             {isSelected && (
               <span className="absolute top-2 right-2 w-5 h-5 rounded-full bg-accent flex items-center justify-center text-xs text-on-accent font-bold">✓</span>
             )}

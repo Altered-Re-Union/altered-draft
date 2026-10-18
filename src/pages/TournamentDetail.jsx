@@ -88,7 +88,7 @@ export default function TournamentDetail() {
       <TopNav />
       <div className="max-w-2xl w-full mx-auto px-4 py-8 flex-1 space-y-6">
         <Link to="/tournament" className="text-xs text-muted hover:text-ink">← {t('tournamentPages.menuTitle')}</Link>
-        {error && <p className="text-red-400 text-sm">{error}</p>}
+        {error && <p className="text-danger text-sm">{error}</p>}
         {!tournament && !error && <p className="text-muted text-sm">{t('tournaments.loading')}</p>}
 
         {tournament && (
@@ -107,7 +107,7 @@ export default function TournamentDetail() {
               </p>
               <p className="text-sm text-muted">{summarizeConfig(tournament.config, t, tc)}</p>
               {tournament.description && <p className="text-sm text-ink whitespace-pre-wrap pt-2">{tournament.description}</p>}
-              {detached && <p className="text-sm text-red-400 pt-2">{t('tournaments.detachedNotice')}</p>}
+              {detached && <p className="text-sm text-danger pt-2">{t('tournaments.detachedNotice')}</p>}
             </header>
 
             <TournamentChecklist
@@ -125,27 +125,27 @@ export default function TournamentDetail() {
                   </p>
                 )}
                 {tournament.status === 'ongoing' && tournament.poolsByOrigin?.bga === 0 && (
-                  <p className="text-xs text-accent2">{t('tournaments.bgaZeroWarning')}</p>
+                  <p className="text-xs text-accent-ink">{t('tournaments.bgaZeroWarning')}</p>
                 )}
                 {!detached && <div className="flex flex-wrap gap-2">
                   <Link to={`/tournament/t/${id}/edit`} className={btn}>{t('tournaments.edit')}</Link>
                   {tournament.cancelledAt
                     ? <button onClick={() => act('restore')} disabled={busy} className={btn}>{t('tournaments.restore')}</button>
-                    : <button onClick={() => act('cancel')} disabled={busy} className={`${btn} hover:bg-red-900`}>{t('tournaments.cancel')}</button>}
+                    : <button onClick={() => act('cancel')} disabled={busy} className={`${btn} hover:bg-danger-soft hover:text-danger`}>{t('tournaments.cancel')}</button>}
                   {tournament.endedAt
                     ? <button onClick={() => act('reopen')} disabled={busy} className={btn}>{t('tournaments.reopen')}</button>
                     : <button onClick={() => act('close')} disabled={busy} className={btn}>{t('tournaments.close')}</button>}
                   <button onClick={handleDelete} disabled={busy || (tournament.poolCount ?? 0) > 0}
                     title={(tournament.poolCount ?? 0) > 0 ? t('tournaments.deleteBlocked') : undefined}
-                    className={`${btn} hover:bg-red-900`}>{t('tournaments.delete')}</button>
+                    className={`${btn} hover:bg-danger-soft hover:text-danger`}>{t('tournaments.delete')}</button>
                 </div>}
                 {detached && (
-                  <button onClick={handleDelete} disabled={busy} className={`${btn} hover:bg-red-900`}>{t('tournaments.delete')}</button>
+                  <button onClick={handleDelete} disabled={busy} className={`${btn} hover:bg-danger-soft hover:text-danger`}>{t('tournaments.delete')}</button>
                 )}
                 {viewer?.isModerator && !detached && (
                   <div className="border-t border-line pt-3 space-y-2">
                     <p className="text-xs text-faint">{t('tournaments.detachHint')}</p>
-                    <button onClick={handleDetach} disabled={busy} className={`${btn} text-red-400 hover:bg-red-900`}>{t('tournaments.detach')}</button>
+                    <button onClick={handleDetach} disabled={busy} className={`${btn} text-danger hover:bg-danger-soft hover:text-danger`}>{t('tournaments.detach')}</button>
                   </div>
                 )}
               </section>

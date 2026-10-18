@@ -30,7 +30,7 @@ export default function TournamentUniqueFields({ uniques, onChange, uniqueSuppor
   return (
     <div className="space-y-3">
       <p className="text-sm text-ink2">{t('tournaments.tournamentUniquesTitle')}</p>
-      {!uniqueSupport && <p className="text-xs text-accent2">{t('tournaments.uniquesUnsupported')}</p>}
+      {!uniqueSupport && <p className="text-xs text-accent-ink">{t('tournaments.uniquesUnsupported')}</p>}
       <div className="flex items-center justify-between gap-3">
         <span className="text-sm text-ink2">{t('tournaments.uniquesInBoosters')}</span>
         <Stepper value={uniqueSupport ? uniques.inBoosters : 0} onChange={v => set({ inBoosters: v })} disabled={off} />
