@@ -296,6 +296,21 @@ export async function updateDeckSummary(poolId, { deckId, name, heroRef, faction
   return rows[0] ?? null
 }
 
+/**
+ * The pools bound to a BGA tournament id without a declared tournament, grouped by their
+ * format snapshot (input of tournamentConfig.legacyFormatForBgaTournament).
+ */
+export async function legacyFormatsForBgaId(bgaId) {
+  const { rows } = await query(
+    `SELECT set_code, unique_count, even_factions, heroes_in_pool, guaranteed_uniques, count(*)::int AS count
+     FROM sealed_pools
+     WHERE kind = 'tournament' AND tournament_ref IS NULL AND tournament_id = $1
+     GROUP BY set_code, unique_count, even_factions, heroes_in_pool, guaranteed_uniques`,
+    [String(bgaId)],
+  )
+  return rows
+}
+
 /** Pool count per tournament id, for the public list. Missing ids are absent (treat as 0). */
 export async function countPoolsByTournament(ids) {
   if (!ids.length) return {}

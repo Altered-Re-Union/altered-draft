@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { validateTournamentConfig, configFromLegacyFormat, legacyColumnsFromConfig } from './tournamentConfig.js'
+import { validateTournamentConfig, configFromLegacyFormat, legacyColumnsFromConfig, legacyFormatForBgaTournament } from './tournamentConfig.js'
 
 const valid = {
   format: 'sealed',
@@ -77,5 +77,23 @@ describe('validateTournamentConfig evenFactions', () => {
     expect(one.config.uniques.evenFactions).toBe(false)
     const two = validateTournamentConfig({ ...valid, uniques: { inBoosters: 1, guaranteed: 1, evenFactions: true } })
     expect(two.config.uniques.evenFactions).toBe(true)
+  })
+})
+
+describe('legacyFormatForBgaTournament', () => {
+  const cols = { set_code: 'EOLE', unique_count: 1, even_factions: false, heroes_in_pool: false, guaranteed_uniques: 1 }
+
+  it('is null when no legacy pool is bound to the BGA id', () => {
+    expect(legacyFormatForBgaTournament([])).toBeNull()
+  })
+
+  it('imposes the legacy pools\' format when they all share it', () => {
+    expect(legacyFormatForBgaTournament([{ ...cols, count: 2 }, { ...cols, count: 1 }])).toEqual({
+      pools: 3, mixed: false, config: configFromLegacyFormat(cols),
+    })
+  })
+
+  it('reports mixed formats (no config) when the legacy pools differ', () => {
+    expect(legacyFormatForBgaTournament([{ ...cols, count: 2 }, { ...cols, set_code: 'CYCLONE', count: 1 }])).toEqual({ pools: 3, mixed: true, config: null })
   })
 })

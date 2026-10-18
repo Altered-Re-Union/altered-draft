@@ -4,11 +4,11 @@
 import { verifyUser, bearerToken } from '../_lib/auth.js'
 import { jsonBody } from '../_lib/request.js'
 import { validateTournamentFields } from '../../src/lib/tournamentRules.js'
-import { validateTournamentConfig } from '../../src/lib/tournamentConfig.js'
+import { validateTournamentConfig, legacyFormatForBgaTournament } from '../../src/lib/tournamentConfig.js'
 import {
   getTournament, updateTournament, countPoolsForTournament, deleteTournamentIfNoPools, detachTournament, toTournamentJson,
 } from '../../src/lib/tournamentStore.js'
-import { getPoolForTournament, countPoolsByOrigin } from '../../src/lib/poolStore.js'
+import { getPoolForTournament, countPoolsByOrigin, legacyFormatsForBgaId } from '../../src/lib/poolStore.js'
 
 const ACTIONS = {
   cancel: { cancelledAt: () => new Date() },
@@ -86,6 +86,13 @@ export default async function handler(req, res) {
       configResult = validateTournamentConfig(body.config)
       if (!configResult.ok) return res.status(400).json({ error: 'invalid_request', config: configResult.errors })
       fields.config = configResult.config
+    }
+
+    // Moving to a BGA id already played with legacy pools: same rule as on creation.
+    if (fields.bgaTournamentId && fields.bgaTournamentId !== row.bga_tournament_id) {
+      const legacy = legacyFormatForBgaTournament(await legacyFormatsForBgaId(fields.bgaTournamentId))
+      if (legacy?.mixed) return res.status(409).json({ error: 'bga_tournament_mixed_formats' })
+      if (legacy) fields.config = validateTournamentConfig(legacy.config).config ?? legacy.config
     }
 
     const touchesLocked = body.config !== undefined || body.bgaUrl !== undefined

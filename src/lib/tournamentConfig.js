@@ -86,3 +86,20 @@ export function legacyColumnsFromConfig(config) {
     guaranteed_uniques: config.uniques.guaranteed,
   }
 }
+
+/**
+ * The format a declaration of a BGA tournament must take when pools are already bound to
+ * that BGA id without a declared tournament (players already playing it with the generic
+ * format, spec §6): those pools can't be swapped, so the declaration takes their format.
+ * @param {{ set_code, unique_count, even_factions, heroes_in_pool, guaranteed_uniques, count }[]} groups
+ *   the legacy pools of that BGA id grouped by their snapshot columns (poolStore.legacyFormatsForBgaId)
+ * @returns {null | { pools: number, mixed: boolean, config: object | null }} null = none;
+ *   mixed = they don't share one format, and the declaration is refused
+ */
+export function legacyFormatForBgaTournament(groups) {
+  if (!groups?.length) return null
+  const pools = groups.reduce((n, g) => n + Number(g.count), 0)
+  const key = g => JSON.stringify(legacyColumnsFromConfig(configFromLegacyFormat(g)))
+  const mixed = new Set(groups.map(key)).size > 1
+  return { pools, mixed, config: mixed ? null : configFromLegacyFormat(groups[0]) }
+}

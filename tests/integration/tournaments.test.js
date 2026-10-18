@@ -599,3 +599,58 @@ describe('GET /api/tournaments?mine=1 (my created tournaments)', () => {
     expect((await call(tournamentsIndex, { query: { mine: '1' }, auth: false })).statusCode).toBe(401)
   })
 })
+
+describe('declaring a BGA tournament already played with legacy pools (option A)', () => {
+  // A legacy pool bound to a BGA id, with explicit snapshot columns (the generic format of the day).
+  const legacyPool = (sub, bgaId, setCode = 'EOLE') => query(
+    `INSERT INTO sealed_pools (sub, kind, set_code, unique_count, even_factions, heroes_in_pool, guaranteed_uniques, nonce, tournament_id, tournament_name, bound_at, cards, boosters, created_by)
+     VALUES ($1, 'tournament', $2, 1, false, false, 1, $3, $4, 'BGA name', now(), '{"X":1}', '[]', 'bga') RETURNING id`,
+    [sub, setCode, `n-${sub}-${bgaId}`, bgaId])
+  const body = bgaId => ({ name: 'Late cup', bgaUrl: `https://boardgamearena.com/tournament?id=${bgaId}`, startsAt: inDays(3).toISOString(), config: CONFIG })
+
+  it('POST adopts every legacy pool at once and takes their format, locked from the start', async () => {
+    await legacyPool('carol', '515151'); await legacyPool('dave', '515151')
+    asUser(ALICE)
+    const res = await call(tournamentsIndex, { method: 'POST', body: body('515151') })
+    expect(res.statusCode).toBe(201)
+    expect(res.body.config).toMatchObject({ source: { setCode: 'EOLE' }, heroes: 'free', uniques: { inBoosters: 1, guaranteed: 1 } })
+    expect(res.body).toMatchObject({ poolCount: 2, locked: true })
+    const { rows } = await query('SELECT tournament_ref, tournament_name FROM sealed_pools WHERE tournament_id = $1', ['515151'])
+    expect(rows).toEqual([{ tournament_ref: res.body.id, tournament_name: 'Late cup' }, { tournament_ref: res.body.id, tournament_name: 'Late cup' }])
+    // carol's page now sees her pool right away
+    asUser({ ...ALICE, sub: 'carol' })
+    expect((await call(tournamentsItem, { query: { id: res.body.id } })).body.viewer.hasPool).toBe(true)
+  })
+
+  it('POST refuses when the legacy pools of that BGA id do not share one format', async () => {
+    await legacyPool('carol', '525252', 'EOLE'); await legacyPool('dave', '525252', 'CYCLONE')
+    asUser(ALICE)
+    const res = await call(tournamentsIndex, { method: 'POST', body: body('525252') })
+    expect(res.statusCode).toBe(409)
+    expect(res.body).toEqual({ error: 'bga_tournament_mixed_formats' })
+    expect((await query("SELECT count(*)::int AS n FROM tournaments WHERE bga_tournament_id = '525252'")).rows[0].n).toBe(0)
+  })
+
+  it('PATCH to a BGA link with legacy pools adopts them and takes their format', async () => {
+    const t = await mkTournament({ organizerSub: 'alice' })
+    await legacyPool('carol', '535353')
+    asUser(ALICE)
+    const res = await call(tournamentsItem, { method: 'PATCH', query: { id: t.id }, body: { bgaUrl: 'https://boardgamearena.com/tournament?id=535353', config: CONFIG } })
+    expect(res.statusCode).toBe(200)
+    expect(res.body).toMatchObject({ bgaTournamentId: '535353', poolCount: 1, locked: true, config: { source: { setCode: 'EOLE' } } })
+    await legacyPool('dave', '545454', 'EOLE'); await legacyPool('erin', '545454', 'CYCLONE')
+    const u = await mkTournament({ organizerSub: 'alice' })
+    expect((await call(tournamentsItem, { method: 'PATCH', query: { id: u.id }, body: { bgaUrl: 'https://boardgamearena.com/tournament?id=545454' } })).body)
+      .toEqual({ error: 'bga_tournament_mixed_formats' })
+  })
+
+  it('the ?bgaId= lookup reports the imposed (or mixed) legacy format to the form', async () => {
+    await legacyPool('carol', '555555')
+    verifyUser.mockResolvedValue(null)
+    const one = await call(tournamentsIndex, { query: { bgaId: '555555' }, auth: false })
+    expect(one.body).toMatchObject({ tournaments: [], legacy: { pools: 1, mixed: false, config: { source: { setCode: 'EOLE' } } } })
+    await legacyPool('dave', '555555', 'CYCLONE')
+    expect((await call(tournamentsIndex, { query: { bgaId: '555555' }, auth: false })).body.legacy).toEqual({ pools: 2, mixed: true, config: null })
+    expect((await call(tournamentsIndex, { query: { bgaId: '565656' }, auth: false })).body.legacy).toBeNull()
+  })
+})

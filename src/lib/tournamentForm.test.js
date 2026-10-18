@@ -53,3 +53,11 @@ describe('tournamentFormIssues', () => {
       .toEqual([{ field: 'uniques', code: 'uniques.unsupportedSet' }])
   })
 })
+
+describe('tournamentFormIssues (BGA tournament already played with mixed legacy formats)', () => {
+  it('blocks the link when its legacy pools have mixed formats', () => {
+    const mixedBgaIds = new Set(['7'])
+    expect(tournamentFormIssues({ body, config, now: NOW, isCreate: true, mixedBgaIds })).toEqual([{ field: 'bgaUrl', code: 'mixed_formats' }])
+    expect(tournamentFormIssues({ body: { ...body, bgaUrl: 'https://boardgamearena.com/tournament?id=8' }, config, now: NOW, isCreate: true, mixedBgaIds })).toEqual([])
+  })
+})

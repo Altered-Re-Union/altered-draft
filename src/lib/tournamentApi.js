@@ -90,10 +90,15 @@ export async function listMyTournaments() {
   return handle(res)
 }
 
-/** The live declaration of a BGA tournament id (whatever its status), or null. Public. */
-export async function findTournamentByBgaId(bgaId) {
+/**
+ * What a BGA tournament id already has here: `holder` = its live declaration (whatever its
+ * status) or null; `legacy` = the pools already bound to it without a declaration, i.e. the
+ * format a new declaration must take (`{ pools, mixed, config }`), or null. Public.
+ */
+export async function checkBgaTournament(bgaId) {
   const res = await fetch(`/api/tournaments?bgaId=${encodeURIComponent(bgaId)}`, { headers: await optionalAuthHeaders() })
-  return (await handle(res)).tournaments?.[0] ?? null
+  const data = await handle(res)
+  return { holder: data.tournaments?.[0] ?? null, legacy: data.legacy ?? null }
 }
 
 export async function getTournament(id) {

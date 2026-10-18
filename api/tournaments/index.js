@@ -3,9 +3,9 @@
 import { verifyUser, bearerToken } from '../_lib/auth.js'
 import { jsonBody, queryParam } from '../_lib/request.js'
 import { validateTournamentFields, MAX_OPEN_TOURNAMENTS } from '../../src/lib/tournamentRules.js'
-import { validateTournamentConfig } from '../../src/lib/tournamentConfig.js'
+import { validateTournamentConfig, legacyFormatForBgaTournament } from '../../src/lib/tournamentConfig.js'
 import { listTournaments, listTournamentsByOrganizer, createTournament, countOpenTournaments, getTournamentByBgaId, toTournamentJson } from '../../src/lib/tournamentStore.js'
-import { countPoolsByTournament, poolSummariesForTournaments } from '../../src/lib/poolStore.js'
+import { countPoolsByTournament, poolSummariesForTournaments, legacyFormatsForBgaId } from '../../src/lib/poolStore.js'
 
 const STATUSES = ['open', 'upcoming', 'ongoing', 'all']
 
@@ -46,6 +46,9 @@ export default async function handler(req, res) {
         },
       } : {}),
     }))
+    // The form also needs to know whether that BGA tournament is already being played with
+    // legacy pools: their format will be imposed (or the declaration refused if mixed).
+    if (bgaId) return res.status(200).json({ tournaments, legacy: legacyFormatForBgaTournament(await legacyFormatsForBgaId(bgaId)) })
     return res.status(200).json({ tournaments })
   }
 
@@ -59,6 +62,12 @@ export default async function handler(req, res) {
     if (!fields.ok || !config.ok) {
       return res.status(400).json({ error: 'invalid_request', fields: fields.errors, config: config.errors })
     }
+    // A BGA tournament already played with legacy pools: its declaration takes their format
+    // (they can't be swapped mid-tournament) and adopts them; mixed formats are refused.
+    const legacy = legacyFormatForBgaTournament(await legacyFormatsForBgaId(fields.values.bgaTournamentId))
+    if (legacy?.mixed) return res.status(409).json({ error: 'bga_tournament_mixed_formats' })
+    const finalConfig = legacy ? validateTournamentConfig(legacy.config).config ?? legacy.config : config.config
+
     if (!user.isModerator && (await countOpenTournaments(user.sub)) >= MAX_OPEN_TOURNAMENTS) {
       return res.status(429).json({ error: 'too_many_open_tournaments' })
     }
@@ -74,15 +83,16 @@ export default async function handler(req, res) {
         endsAt: fields.values.endsAt,
         organizerSub: user.sub,
         organizerName: user.name,
-        config: config.config,
+        config: finalConfig,
       })
     } catch (e) {
       if (e.code === 'bga_tournament_taken') return res.status(409).json({ error: 'bga_tournament_taken' })
       throw e
     }
-    return res.status(201).json(toTournamentJson(row, {
-      poolCount: 0,
-      locked: false,
+    const { adopted_pools: adopted = 0, ...created } = row
+    return res.status(201).json(toTournamentJson(created, {
+      poolCount: adopted,
+      locked: adopted > 0,
       viewer: { isOrganizer: true, isModerator: user.isModerator, hasPool: false, poolId: null, deck: null },
     }))
   }

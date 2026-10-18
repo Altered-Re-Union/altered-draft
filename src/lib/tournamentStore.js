@@ -5,13 +5,27 @@ import { tournamentStatus } from './tournamentRules.js'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
+// Pools bound to the tournament's BGA id with no declared tournament (players already
+// playing it with the generic format) are ADOPTED in the same statement as the INSERT /
+// the link change: attached, renamed to the altered-draft name. The caller imposes their
+// format on the tournament beforehand (spec §6, "declared after the fact").
+const ADOPT_LEGACY = (src) => `adopted AS (
+       UPDATE sealed_pools p SET tournament_ref = ${src}.id, tournament_name = ${src}.name
+       FROM ${src}
+       WHERE p.kind = 'tournament' AND p.tournament_ref IS NULL AND p.tournament_id = ${src}.bga_tournament_id
+       RETURNING 1
+     )`
+
 export async function createTournament({ name, description, bgaUrl, bgaTournamentId, startsAt, endsAt, organizerSub, organizerName, config }) {
   try {
     const { rows } = await query(
-      `INSERT INTO tournaments
-         (name, description, bga_url, bga_tournament_id, starts_at, ends_at, organizer_sub, organizer_name, config)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-       RETURNING *`,
+      `WITH t AS (
+         INSERT INTO tournaments
+           (name, description, bga_url, bga_tournament_id, starts_at, ends_at, organizer_sub, organizer_name, config)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         RETURNING *
+       ), ${ADOPT_LEGACY('t')}
+       SELECT t.*, (SELECT count(*)::int FROM adopted) AS adopted_pools FROM t`,
       [name, description ?? '', bgaUrl, bgaTournamentId, startsAt, endsAt ?? null, organizerSub, organizerName, JSON.stringify(config)],
     )
     return rows[0]
@@ -97,8 +111,13 @@ export async function updateTournament(id, fields, { requireUnlocked = false } =
   const lock = requireUnlocked ? 'AND NOT EXISTS (SELECT 1 FROM sealed_pools WHERE tournament_ref = $1)' : ''
   let rows
   try {
-    ({ rows } = await query(
-      `UPDATE tournaments SET ${sets.join(', ')} WHERE id = $1 ${lock} RETURNING *`,
+    // A link change also adopts the legacy pools of the new BGA id (see ADOPT_LEGACY).
+    const adopt = Object.prototype.hasOwnProperty.call(fields, 'bgaTournamentId')
+    ;({ rows } = await query(
+      adopt
+        ? `WITH u AS (UPDATE tournaments SET ${sets.join(', ')} WHERE id = $1 ${lock} RETURNING *), ${ADOPT_LEGACY('u')}
+           SELECT u.*, (SELECT count(*)::int FROM adopted) AS adopted_pools FROM u`
+        : `UPDATE tournaments SET ${sets.join(', ')} WHERE id = $1 ${lock} RETURNING *`,
       params,
     ))
   } catch (e) {

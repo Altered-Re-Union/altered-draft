@@ -6,7 +6,7 @@ import { parseBgaTournamentUrl } from '../lib/bgaUrl.js'
 import { tournamentFormIssues } from '../lib/tournamentForm.js'
 import { validateTournamentConfig } from '../lib/tournamentConfig.js'
 import { hasFactionRanges } from '../lib/uniqueFactionRanges.js'
-import { createTournament, updateTournament, getTournament, findTournamentByBgaId } from '../lib/tournamentApi.js'
+import { createTournament, updateTournament, getTournament, checkBgaTournament } from '../lib/tournamentApi.js'
 import TopNav from '../components/TopNav.jsx'
 import Footer from '../components/Footer.jsx'
 import SetPresetGrid from '../components/SetPresetGrid.jsx'
@@ -50,7 +50,7 @@ function issueMessage({ field, code }, t) {
   switch (field) {
     case 'name': return t('tournaments.errName')
     case 'description': return t('tournaments.errDescription')
-    case 'bgaUrl': return code === 'taken' ? t('tournaments.errBgaTaken') : t('tournaments.errBgaUrl')
+    case 'bgaUrl': return code === 'taken' ? t('tournaments.errBgaTaken') : code === 'mixed_formats' ? t('tournaments.errBgaMixed') : t('tournaments.errBgaUrl')
     case 'startsAt': return code === 'must_be_before_end' ? t('tournaments.errStartsAtBeforeEnd') : t('tournaments.errStartsAt')
     case 'endsAt': return t('tournaments.errEndsAt')
     case 'setCode': return t('tournaments.errSelectSet')
@@ -70,7 +70,7 @@ export default function TournamentForm() {
   const { id } = useParams() // present in edit mode
   const navigate = useNavigate()
   const { user, login, loading: authLoading } = useAuth()
-  const { t } = useLang()
+  const { t, tc } = useLang()
   const isEdit = !!id
 
   const [name, setName] = useState('')
@@ -90,6 +90,7 @@ export default function TournamentForm() {
   const [serverError, setServerError] = useState('') // non-field failure of the last submit
   const [touched, setTouched] = useState(() => new Set())
   const [takenBgaIds, setTakenBgaIds] = useState(() => new Map()) // BGA id -> live tournament id
+  const [legacyByBgaId, setLegacyByBgaId] = useState(() => new Map()) // BGA id -> { pools, mixed, config }
 
   const touch = field => setTouched(prev => (prev.has(field) ? prev : new Set(prev).add(field)))
   // Wraps a setter: any edit clears the last server error and marks the field touched.
@@ -121,20 +122,26 @@ export default function TournamentForm() {
     return () => { cancelled = true }
   }, [id, isEdit, navigate, t, user, authLoading])
 
-  // Is the pasted link already declared? One targeted lookup per BGA id, debounced while
-  // typing (GET /api/tournaments?bgaId=). The server's unique index + 409 on submit stay the
-  // real guard, for a tournament declared between this check and the submit.
+  // Is the pasted link already declared, or already played with legacy pools (whose format
+  // the tournament must then take)? One targeted lookup per BGA id, debounced while typing
+  // (GET /api/tournaments?bgaId=). The server re-checks both on submit.
   const bgaParsedId = parseBgaTournamentUrl(bgaUrl)?.id ?? null
   useEffect(() => {
     if (!bgaParsedId || locked) return
     let cancelled = false
     const timer = setTimeout(() => {
-      findTournamentByBgaId(bgaParsedId)
-        .then(holder => {
+      checkBgaTournament(bgaParsedId)
+        .then(({ holder, legacy }) => {
           if (cancelled) return
           setTakenBgaIds(prev => {
             const next = new Map(prev)
             if (holder) next.set(bgaParsedId, holder.id)
+            else next.delete(bgaParsedId)
+            return next
+          })
+          setLegacyByBgaId(prev => {
+            const next = new Map(prev)
+            if (legacy) next.set(bgaParsedId, legacy)
             else next.delete(bgaParsedId)
             return next
           })
@@ -143,6 +150,17 @@ export default function TournamentForm() {
     }, 350)
     return () => { cancelled = true; clearTimeout(timer) }
   }, [bgaParsedId, locked])
+
+  // Players already have pools for this BGA tournament: its format is imposed (theirs).
+  const legacy = !locked && bgaParsedId ? legacyByBgaId.get(bgaParsedId) ?? null : null
+  const imposed = !!legacy && !legacy.mixed
+  useEffect(() => {
+    if (!imposed) return
+    const c = legacy.config
+    setSetCode(c.source.setCode); setHeroes(c.heroes); setUniques(c.uniques); setExcludeBanlist(!!c.excludeBanlist)
+  }, [imposed, legacy])
+  const mixedBgaIds = new Set([...legacyByBgaId].filter(([, l]) => l.mixed).map(([bgaId]) => bgaId))
+  const configFrozen = locked || imposed
 
   const bgaParsed = useMemo(() => parseBgaTournamentUrl(bgaUrl), [bgaUrl])
   const uniqueSupport = !setCode || hasFactionRanges(setCode)
@@ -156,7 +174,7 @@ export default function TournamentForm() {
     excludeBanlist,
   }
   const body = { name, description, bgaUrl, startsAt: fromLocalInput(startsAt), endsAt: fromLocalInput(endsAt) }
-  const issues = tournamentFormIssues({ body, config, isCreate: !isEdit, locked, takenBgaIds, ownId: id ?? null })
+  const issues = tournamentFormIssues({ body, config, isCreate: !isEdit, locked, takenBgaIds, ownId: id ?? null, mixedBgaIds })
   const fieldIssue = field => (touched.has(field) ? issues.find(i => i.field === field) : null)
   const blocked = issues.length > 0 || saving || loading || !!loadError
 
@@ -184,6 +202,10 @@ export default function TournamentForm() {
       if (err.status === 409 && err.data?.error === 'bga_tournament_taken' && bgaParsed) {
         // Declared meanwhile: remember it so the live check shows it from now on.
         setTakenBgaIds(prev => new Map(prev).set(bgaParsed.id, 'taken'))
+        touch('bgaUrl')
+        focusField('bgaUrl')
+      } else if (err.status === 409 && err.data?.error === 'bga_tournament_mixed_formats' && bgaParsed) {
+        setLegacyByBgaId(prev => new Map(prev).set(bgaParsed.id, { pools: 0, mixed: true, config: null }))
         touch('bgaUrl')
         focusField('bgaUrl')
       } else if (err.status === 400 && err.data?.fields && Object.keys(err.data.fields).length) {
@@ -295,15 +317,16 @@ export default function TournamentForm() {
         <section id="tn-cards" tabIndex={-1} className="bg-surface rounded-xl border border-line p-5 space-y-4 focus:outline-none">
           <h2 className="font-semibold">{t('tournaments.sectionCards')}</h2>
           {locked && <p className="text-xs text-accent2">{t('tournaments.lockedNotice')}</p>}
+          {imposed && <p className="text-sm text-accent2" role="status">{tc('tournaments.legacyImposed', legacy.pools)}</p>}
           <p className="text-sm text-muted">{t('tournaments.cardsHint')}</p>
-          <SetPresetGrid selected={setCode} onSelect={edit('setCode', setSetCode)} disabled={locked || saving} />
+          <SetPresetGrid selected={setCode} onSelect={edit('setCode', setSetCode)} disabled={configFrozen || saving} />
           <ErrorLine field="setCode" />
         </section>
 
         {/* Section 3 — settings */}
         <section id="tn-settings" tabIndex={-1} className="bg-surface rounded-xl border border-line p-5 space-y-6 focus:outline-none">
           <h2 className="font-semibold">{t('tournaments.sectionSettings')}</h2>
-          <fieldset disabled={locked || saving} className="space-y-6 disabled:opacity-60">
+          <fieldset disabled={configFrozen || saving} className="space-y-6 disabled:opacity-60">
             <SettingsFields
               mode="sealed"
               showLang={false}
@@ -312,7 +335,7 @@ export default function TournamentForm() {
               excludeBanlist={excludeBanlist} setExcludeBanlist={setExcludeBanlist}
               showBanlist
             />
-            <TournamentUniqueFields uniques={uniques} onChange={setUniques} uniqueSupport={uniqueSupport} disabled={locked || saving} />
+            <TournamentUniqueFields uniques={uniques} onChange={setUniques} uniqueSupport={uniqueSupport} disabled={configFrozen || saving} />
           </fieldset>
         </section>
 

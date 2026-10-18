@@ -18,9 +18,10 @@ const FIELD_ORDER = ['name', 'description', 'bgaUrl', 'startsAt', 'endsAt', 'set
  * @param {boolean} [p.locked] - pools exist: the link and the config are not sent, so not checked
  * @param {Map<string, string>} [p.takenBgaIds] - BGA id -> id of the live tournament declaring it
  * @param {string|null} [p.ownId] - the tournament being edited (its own link is not "taken")
+ * @param {Set<string>} [p.mixedBgaIds] - BGA ids already played with legacy pools of different formats (refused)
  * @returns {{ field: string, code: string }[]}
  */
-export function tournamentFormIssues({ body, config, now = new Date(), isCreate, locked = false, takenBgaIds = null, ownId = null }) {
+export function tournamentFormIssues({ body, config, now = new Date(), isCreate, locked = false, takenBgaIds = null, ownId = null, mixedBgaIds = null }) {
   const issues = []
   const checked = { ...body }
   if (locked) delete checked.bgaUrl
@@ -31,6 +32,10 @@ export function tournamentFormIssues({ body, config, now = new Date(), isCreate,
     const parsed = parseBgaTournamentUrl(body.bgaUrl)
     const holder = parsed && takenBgaIds.get(parsed.id)
     if (holder && holder !== ownId) issues.push({ field: 'bgaUrl', code: 'taken' })
+  }
+  if (!locked && !fields.errors.bgaUrl && mixedBgaIds?.size) {
+    const parsed = parseBgaTournamentUrl(body.bgaUrl)
+    if (parsed && mixedBgaIds.has(parsed.id)) issues.push({ field: 'bgaUrl', code: 'mixed_formats' })
   }
 
   if (!locked) {
