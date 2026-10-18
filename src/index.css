@@ -59,6 +59,17 @@
   .card-hover-glow {
     @apply transition-transform duration-150 hover:scale-105 hover:shadow-lg hover:shadow-white/10;
   }
+
+  /* Thin, rounded, gold scrollbar (theme accent) for small horizontal scrollers such as
+     tab bars. Firefox reads scrollbar-*, WebKit/Blink the pseudo-elements. */
+  .scrollbar-gold {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--c-accent) / 0.6) transparent;
+  }
+  .scrollbar-gold::-webkit-scrollbar { height: 6px; width: 6px; }
+  .scrollbar-gold::-webkit-scrollbar-track { background: transparent; }
+  .scrollbar-gold::-webkit-scrollbar-thumb { background: rgb(var(--c-accent) / 0.6); border-radius: 9999px; }
+  .scrollbar-gold::-webkit-scrollbar-thumb:hover { background: rgb(var(--c-accent)); }
 }
 
 /* Holographic zoom effect — ported from simeydotme's pokemon-cards-css

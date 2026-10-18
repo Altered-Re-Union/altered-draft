@@ -469,7 +469,7 @@ export default {
     tabOngoing: 'Ongoing',
     tabOngoingHint: 'Tournaments that have started. You can still prepare your pool until they end.',
     tabPools: 'My pools',
-    tabPoolsHint: 'Your sealed pools, one per tournament: declared tournaments first, then the BGA tournaments nobody declared here (those appear after their first game).',
+    tabPoolsHint: 'Your sealed pools, one per tournament. First those of the tournaments declared here. Then those of BGA tournaments that are not declared here: a pool prepared with “Prepare my next tournament” below shows up once you have played your first game of that tournament on BGA.',
     tabCreated: 'My created tournaments',
     tabCreatedHint: 'The tournaments you declared, whatever their status. Open one to edit, cancel, close or delete it.',
     noOngoing: 'No ongoing tournament.',

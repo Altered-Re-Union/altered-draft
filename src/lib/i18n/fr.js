@@ -467,7 +467,7 @@ export default {
     tabOngoing: 'En cours',
     tabOngoingHint: 'Les tournois commencés. Vous pouvez encore y préparer votre pool jusqu’à leur fin.',
     tabPools: 'Mes pools',
-    tabPoolsHint: 'Vos pools scellés, un par tournoi : d’abord les tournois déclarés ici, puis les tournois BGA que personne n’a déclarés (ils apparaissent après leur première partie).',
+    tabPoolsHint: 'Vos pools scellés, un par tournoi. D’abord ceux des tournois déclarés ici. Ensuite ceux des tournois BGA qui ne sont pas déclarés ici : un pool préparé avec « Préparer mon prochain tournoi » (plus bas) apparaît dès que vous avez joué votre première partie de ce tournoi sur BGA.',
     tabCreated: 'Mes tournois créés',
     tabCreatedHint: 'Les tournois que vous avez déclarés, quel que soit leur statut. Ouvrez-en un pour le modifier, l’annuler, le clore ou le supprimer.',
     noOngoing: 'Aucun tournoi en cours.',

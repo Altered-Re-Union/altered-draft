@@ -154,11 +154,11 @@ export default function TournamentMenu() {
         )}
 
         <section className="space-y-4">
-          <div role="tablist" aria-label={t('tournamentPages.menuTitle')} className="flex gap-1 border-b border-line overflow-x-auto">
+          <div role="tablist" aria-label={t('tournamentPages.menuTitle')} className="flex gap-1 border-b border-line overflow-x-auto overflow-y-hidden scrollbar-gold">
             {TABS.map(key => (
               <button key={key} type="button" role="tab" id={`tab-${key}`} aria-selected={tab === key} aria-controls={`panel-${key}`}
                 onClick={() => setTab(key)}
-                className={`shrink-0 px-3 py-2 text-sm -mb-px border-b-2 transition-colors ${tab === key ? 'border-accent text-ink font-semibold' : 'border-transparent text-muted hover:text-ink'}`}>
+                className={`shrink-0 whitespace-nowrap px-3 py-2 text-sm border-b-2 transition-colors ${tab === key ? 'border-accent text-ink font-semibold' : 'border-transparent text-muted hover:text-ink'}`}>
                 {t(TAB_LABEL[key])}
                 {counts[key] != null && counts[key] !== false && <span className="ml-1.5 text-xs text-faint tabular-nums">{counts[key]}</span>}
               </button>
