@@ -7,7 +7,13 @@ import { getAccessToken } from './reunion.js'
 
 async function authHeaders() {
   const token = await getAccessToken()
-  if (!token) throw new Error('Not signed in to Re:Union. Reconnect your account.')
+  if (!token) {
+    // Same shape as a server 401, so callers can offer a reconnect instead of a raw error.
+    const err = new Error('Not signed in to Re:Union. Reconnect your account.')
+    err.status = 401
+    err.code = 'not_signed_in'
+    throw err
+  }
   return { Authorization: `Bearer ${token}`, Accept: 'application/json' }
 }
 

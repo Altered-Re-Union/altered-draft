@@ -88,6 +88,7 @@ export default function TournamentForm() {
   const [loadError, setLoadError] = useState('')
   const [saving, setSaving] = useState(false)
   const [serverError, setServerError] = useState('') // non-field failure of the last submit
+  const [sessionExpired, setSessionExpired] = useState(false)
   const [touched, setTouched] = useState(() => new Set())
   const [takenBgaIds, setTakenBgaIds] = useState(() => new Map()) // BGA id -> live tournament id
   const [legacyByBgaId, setLegacyByBgaId] = useState(() => new Map()) // BGA id -> { pools, mixed, config }
@@ -95,6 +96,37 @@ export default function TournamentForm() {
   const touch = field => setTouched(prev => (prev.has(field) ? prev : new Set(prev).add(field)))
   // Wraps a setter: any edit clears the last server error and marks the field touched.
   const edit = (field, setter) => value => { setter(value); setServerError(''); touch(field) }
+
+  // A session that expired while the form was being filled: the reconnect goes through
+  // Keycloak (full page load), so what was typed is parked in sessionStorage and put back
+  // when the form comes back (create mode: on mount; edit mode: over the server values).
+  const draftKey = `tournament_form_draft:${id ?? 'new'}`
+  const readDraft = () => {
+    try {
+      const raw = sessionStorage.getItem(draftKey)
+      if (raw) sessionStorage.removeItem(draftKey)
+      return raw ? JSON.parse(raw) : null
+    } catch { return null }
+  }
+  const applyDraft = (d, { withConfig }) => {
+    setName(d.name ?? ''); setDescription(d.description ?? ''); setStartsAt(d.startsAt ?? ''); setEndsAt(d.endsAt ?? '')
+    if (withConfig) {
+      setBgaUrl(d.bgaUrl ?? ''); if (d.setCode !== undefined) setSetCode(d.setCode)
+      if (d.heroes) setHeroes(d.heroes); if (d.uniques) setUniques(d.uniques); setExcludeBanlist(!!d.excludeBanlist)
+    }
+  }
+  function reconnect() {
+    try {
+      sessionStorage.setItem(draftKey, JSON.stringify({ name, description, bgaUrl, startsAt, endsAt, setCode, heroes, uniques, excludeBanlist }))
+    } catch { /* storage unavailable: the reconnect still works, the draft is lost */ }
+    login(isEdit ? `/tournament/t/${id}/edit` : '/tournament/new')
+  }
+  useEffect(() => {
+    if (isEdit) return
+    const d = readDraft()
+    if (d) applyDraft(d, { withConfig: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, on mount
+  }, [])
 
   // Edit mode: prefill from the tournament; only its organizer or a moderator may be here.
   // Logged out, wait: the page shows the Connect prompt instead (the viewer block, which
@@ -116,6 +148,8 @@ export default function TournamentForm() {
         setSetCode(tn.config.source.setCode); setHeroes(tn.config.heroes)
         setUniques(tn.config.uniques); setExcludeBanlist(!!tn.config.excludeBanlist)
         setLocked(!!tn.locked)
+        const d = readDraft()
+        if (d) applyDraft(d, { withConfig: !tn.locked })
       })
       .catch(e => { if (!cancelled) setLoadError(e.status === 404 ? t('tournaments.notFound') : t('tournaments.errGeneric', { msg: e.message })) })
       .finally(() => { if (!cancelled && !redirected) setLoading(false) })
@@ -185,7 +219,7 @@ export default function TournamentForm() {
       focusField(issues[0].field)
       return
     }
-    setServerError('')
+    setServerError(''); setSessionExpired(false)
     setSaving(true)
     try {
       const cfg = validateTournamentConfig(config)
@@ -214,6 +248,7 @@ export default function TournamentForm() {
         focusField(first)
       } else if (err.status === 409 && err.data?.error === 'tournament_locked') setServerError(t('tournaments.errLocked'))
       else if (err.status === 429) setServerError(t('tournaments.errTooMany'))
+      else if (err.status === 401) setSessionExpired(true)
       else setServerError(t('tournaments.errGeneric', { msg: err.message }))
     } finally {
       setSaving(false)
@@ -342,6 +377,15 @@ export default function TournamentForm() {
         {/* Action bar, stuck to the bottom of the viewport */}
         <div className="sticky bottom-0 z-20 -mx-4 px-4 pt-3 pb-4 bg-base/95 backdrop-blur border-t border-line space-y-2">
           {serverError && <p className="text-sm text-danger" role="alert">{serverError}</p>}
+          {sessionExpired && (
+            <div className="flex flex-wrap items-center gap-3" role="alert">
+              <p className="text-sm text-danger">{t('tournaments.errSessionExpired')}</p>
+              <button type="button" onClick={reconnect}
+                className="text-sm px-3 py-1.5 rounded-lg bg-surface2 hover:bg-surface3 text-ink border border-line transition-colors">
+                {t('tournaments.reconnectKeep')}
+              </button>
+            </div>
+          )}
           {issues.length > 0 && !loading && (
             <div className="text-sm">
               <p className="text-muted mb-1">{isEdit ? t('tournaments.issuesTitleSave') : t('tournaments.issuesTitleCreate')}</p>
