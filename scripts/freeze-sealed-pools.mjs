@@ -4,7 +4,7 @@
 // anymore (docs/tournaments/user-tournaments-spec.md §10). Needs DATABASE_URL and network
 // access to the card data. Run once after the lot-1 migration, once the new app container
 // serves (old code would keep creating rows without cards meanwhile):
-//   docker exec <altered-draft container> node scripts/freeze-sealed-pools.mjs   (deployed)
+//   docker exec altered-draft node scripts/freeze-sealed-pools.mjs   (deployed, AlteredOps)
 //   make db-freeze-pools                                                    (local dev)
 import { fileURLToPath } from 'node:url'
 import { query, getPool } from '../src/lib/db.js'

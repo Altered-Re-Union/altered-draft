@@ -40,7 +40,7 @@ COPY api ./api
 COPY src ./src
 COPY server ./server
 # One-shot maintenance scripts run inside the container (e.g. the lot-1 pool freeze:
-# `docker exec <container> node scripts/freeze-sealed-pools.mjs`, env already set).
+# `docker exec altered-draft node scripts/freeze-sealed-pools.mjs`, env already set).
 COPY scripts ./scripts
 EXPOSE 8080
 ENV PORT=8080

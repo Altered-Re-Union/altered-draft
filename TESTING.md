@@ -81,7 +81,7 @@ link in a second tab as a 2nd player). Locally there is no Realtime: pages poll 
 - [ ] Schemas applied on the target DB (the AlteredOps migrations image applies them on deploy; the Re:Union fork is not deployed on Vercel).
 - [ ] **Active format drawable** (on the target DB, before deploying): `SELECT * FROM current_format ORDER BY created_at DESC, id DESC LIMIT 1;` must not name a set outside `CORE`, `COREKS`, `ALIZE`, `BISE`, `CYCLONE`, `DUSTER`, `EOLE` with `unique_count > 0` or `guaranteed_uniques > 0` (no faction-range data: the unique draw throws, every new normal / pending pool would fail).
 - [ ] **Legacy rows freezable** (tournaments lot 1, before the freeze): `SELECT count(*) FROM sealed_pools WHERE cards IS NULL AND set_code NOT IN ('CORE','COREKS','ALIZE','BISE','CYCLONE','DUSTER','EOLE') AND (unique_count > 0 OR guaranteed_uniques > 0);` → 0 (those rows would fail to regenerate).
-- [ ] **Freeze, once, after the stored-pools migration**, when the new container serves: `docker exec <altered-draft app container> node scripts/freeze-sealed-pools.mjs` → `frozen N/N pools (0 failed)` (locally: `make db-freeze-pools`). Re-running is harmless.
+- [ ] **Freeze, once, after the stored-pools migration**, when the new container serves: `docker exec altered-draft node scripts/freeze-sealed-pools.mjs` → `frozen N/N pools (0 failed)` (locally: `make db-freeze-pools`). Re-running is harmless.
 - [ ] New env vars set (`.env.example` lists them); on AlteredOps they must also be in the service's explicit `environment:` list (`TOURNAMENT_MODERATOR_ROLE`, `TOURNAMENT_MODERATORS`).
 
 ## Open verifications (need someone outside this repo)

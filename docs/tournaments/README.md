@@ -990,8 +990,8 @@ signature, `server/index.js` mounts them.
    (idempotent and additive, safe to replay; the integration suite applies it twice on a
    populated DB), then the new app container starts.
 3. **Freeze, once the new container serves:**
-   `docker exec <altered-draft app container> node scripts/freeze-sealed-pools.mjs` →
-   `frozen N/N pools (0 failed)`. Re-running it is harmless (`frozen 0/0`).
+   `docker exec altered-draft node scripts/freeze-sealed-pools.mjs` →
+   `frozen N/N pools (0 failed)` (`altered-draft` is the app's `container_name` in the AlteredOps compose, on each host). Re-running it is harmless (`frozen 0/0`).
 4. **Moderators (optional):** `TOURNAMENT_MODERATORS` and/or `TOURNAMENT_MODERATOR_ROLE` in
    the AlteredOps env of the service (§8.4). Without them, nobody can detach.
 
@@ -1204,7 +1204,7 @@ so a card-data failure writes nothing. Reads go through `loadPool(sub, row)`
 (`api/_lib/tournamentPool.js`): stored contents when `row.cards` is set, else §4's
 regeneration (legacy rows). `scripts/freeze-sealed-pools.mjs` stores the older rows once after
 the migration — from then on no pool depends on the upstream set file's order. Idempotent.
-Deployed: `docker exec <altered-draft app container> node scripts/freeze-sealed-pools.mjs`
+Deployed: `docker exec altered-draft node scripts/freeze-sealed-pools.mjs`
 (the image ships `scripts/`, the container already has `DATABASE_URL`), once the new
 container serves, since the old code keeps creating rows without cards until then. Local:
 `make db-freeze-pools` (honours a `DB_PORT` override). §10.1 has the whole rollout.
