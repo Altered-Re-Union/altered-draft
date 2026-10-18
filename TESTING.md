@@ -11,8 +11,8 @@ per-campaign recette, not here.
 a throwaway Postgres, needs Docker) must be green; `npm run build` must succeed.
 
 **Where to test.** Locally with `make dev` (+ `../altered-dev-environment` for login: users
-`alice` / `bob`, password `TestPassword1234`; Chrome or Firefox), or on the deployed site
-(https://altered-draft.vercel.app). Multiplayer items need **two browsers / tabs** (open the room
+`alice` / `bob`, password `TestPassword1234`; Chrome or Firefox), or on preprod
+(https://altered-draft-preprod.altered.re, AlteredOps). Multiplayer items need **two browsers / tabs** (open the room
 link in a second tab as a 2nd player). Locally there is no Realtime: pages poll every 1.5 s.
 
 ---
@@ -78,10 +78,9 @@ link in a second tab as a 2nd player). Locally there is no Realtime: pages poll 
 ---
 
 ## Before deploying
-- [ ] Schemas applied on the target DB (Supabase SQL editor for Vercel; the AlteredOps migrations image applies them on deploy).
+- [ ] Schemas applied on the target DB (the AlteredOps migrations image applies them on deploy; the Re:Union fork is not deployed on Vercel).
 - [ ] After the stored-pools migration (tournaments lot 1), once: `node --env-file=.env scripts/freeze-sealed-pools.mjs` (or `make db-freeze-pools`) → `frozen N/N pools (0 failed)`. Before it, on prod, `SELECT count(*) FROM sealed_pools WHERE cards IS NULL AND set_code NOT IN ('CORE','COREKS','ALIZE','BISE','CYCLONE','DUSTER','EOLE') AND (unique_count > 0 OR guaranteed_uniques > 0);` must return 0 (those legacy rows would fail to regenerate).
 - [ ] New env vars set on both targets (`.env.example` lists them).
-- [ ] Vercel preview: new API routes answer, including nested dynamic ones (e.g. `api/tournaments/[id]/pool.js`, only exercised through Express in the tests).
 
 ## Open verifications (need someone outside this repo)
 - [ ] **Re:Union, on a real multi-stage BGA tournament**: the public URL's `id` equals the `tournamentParentId` altered-bga-api forwards (organizer panel: "created by BGA games" > 0 after round 1).

@@ -957,9 +957,9 @@ Frontend, through the same-origin proxies `api/decks/index.js` (GET list, POST c
 
 Deployments: **prod** `https://altered-draft.altered.re`, **preprod**
 `https://altered-draft-preprod.altered.re` (AlteredOps, Docker, `server/index.js`, GitOps
-pull ~5 min after a push to `main` of the Re:Union fork). The Vercel deployment
-(`altered-draft.vercel.app`) runs the same handlers but is not the one altered-bga-api
-points at.
+pull ~5 min after a push to `main` of the Re:Union fork). The Re:Union fork is deployed
+**only through AlteredOps** (no Vercel deployment); the handlers keep the Vercel function
+signature, `server/index.js` mounts them.
 
 ### 10.2 altered-bga-api
 

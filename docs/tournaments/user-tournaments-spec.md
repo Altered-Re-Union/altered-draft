@@ -390,16 +390,17 @@ Theming: semantic tokens only (`surface`, `ink`, `accent`, …), as in `CLAUDE.m
 
 - `sealed-pools-schema.sql`: the DDL of §4, idempotent, plus
   `update sealed_pools set created_by = 'legacy' where created_by is null`. Applied on both
-  targets by the existing mechanism (`make dev`, the AlteredOps one-shot migration image,
-  Supabase SQL editor for Vercel).
+  targets by the existing mechanism (`make dev`, the AlteredOps one-shot migration image).
+  The Re:Union fork is deployed through AlteredOps only (no Vercel deployment).
 - `scripts/freeze-sealed-pools.mjs` (one-shot, run once after the migration, idempotent):
   for every `sealed_pools` row with `cards is null`, regenerate with the legacy path and store
   `cards` + `boosters`. From then on no pool depends on the upstream set file's order anymore.
   Requires `DATABASE_URL` and network access to the set files; logs a count; safe to re-run.
 - New env vars (all optional): `TOURNAMENT_MODERATOR_ROLE`, `TOURNAMENT_MODERATORS`.
 - `server/index.js`: mount `/api/tournaments`, `/api/tournaments/:id`,
-  `/api/tournaments/:id/pool` (via `routeWithParam`). Vercel picks the files up by path
-  (`api/tournaments/index.js`, `api/tournaments/[id].js`, `api/tournaments/[id]/pool.js`).
+  `/api/tournaments/:id/pool` (via `routeWithParam`). The files keep Vercel's path convention
+  (`api/tournaments/index.js`, `api/tournaments/[id].js`, `api/tournaments/[id]/pool.js`), but
+  the Re:Union fork is not deployed on Vercel.
 - Docs: this folder's `README.md`, `CLAUDE.md` and `ROADMAP.md` updated when lot 1 ships.
 
 ## 11. Lots
@@ -423,9 +424,9 @@ waiting on Re:Union.
 2. **Moderator role.** The dev realm export has no admin role; decks-api and AlteredOwnership
    use a local DB flag. Re:Union must create/assign a realm role, or we run on the env
    allowlist.
-3. **Vercel function timeout.** Pool creation is a few hundred ms for lot 1 (set file fetch +
-   generation), seconds in lot 2 with live uniques and cubes. Fine on the Express deployment;
-   keep an eye on Vercel's default 10 s limit.
+3. **Pool creation time.** A few hundred ms for lot 1 (set file fetch + generation), seconds in
+   lot 2 with live uniques and cubes. Fine on the Express deployment (AlteredOps), the only one
+   for the Re:Union fork; the Vercel 10 s function limit no longer applies.
 4. **Lobby refactor (lot 2)** is the regression risk. Replay `TESTING.md`.
 5. **Concurrency** is handled by unique indexes + `ON CONFLICT DO NOTHING` + re-select, the
    pattern already in `poolStore.js`.

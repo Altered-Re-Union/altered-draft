@@ -901,7 +901,7 @@ erDiagram
 <tr><td><code>TOURNAMENT_MODERATOR_ROLE</code>, <code>TOURNAMENT_MODERATORS</code></td><td>Optional. Moderators of declared tournaments: a Keycloak realm role name, and/or a comma-separated allowlist of subs (<a href="#s14">§14</a>).</td></tr>
 <tr><td><code>SEALED_ATTESTATION_SECRET</code></td><td>Provisioned on AlteredOps, <strong>not read by any code</strong>.</td></tr>
 </table>
-<p>Deployments: <strong>prod</strong> <code>https://altered-draft.altered.re</code>, <strong>preprod</strong> <code>https://altered-draft-preprod.altered.re</code> (AlteredOps, Docker, <code>server/index.js</code>, GitOps pull ~5 min after a push to <code>main</code> of the Re:Union fork). The Vercel deployment runs the same handlers but is not the one altered-bga-api points at.</p>
+<p>Deployments: <strong>prod</strong> <code>https://altered-draft.altered.re</code>, <strong>preprod</strong> <code>https://altered-draft-preprod.altered.re</code> (AlteredOps, Docker, <code>server/index.js</code>, GitOps pull ~5 min after a push to <code>main</code> of the Re:Union fork). The Re:Union fork is deployed <strong>only through AlteredOps</strong> (no Vercel deployment); the handlers keep the Vercel function signature, <code>server/index.js</code> mounts them.</p>
 <h3>altered-bga-api</h3>
 <table class="wrap">
 <tr><th>Setting (env form)</th><th>Purpose</th></tr>

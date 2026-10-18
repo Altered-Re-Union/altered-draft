@@ -359,7 +359,7 @@ export default function TournamentForm() {
           )}
           <span className="block" title={issues.length ? issuesText.join('\n') : undefined}>
             <button type="submit" disabled={blocked}
-              className="w-full py-2.5 bg-accent hover:bg-accent2 text-on-accent font-bold rounded-lg transition-colors disabled:bg-surface3 disabled:text-muted disabled:cursor-not-allowed">
+              className="w-full py-2.5 bg-accent hover:bg-accent2 text-on-accent font-bold rounded-lg transition-colors border border-transparent disabled:bg-surface2 disabled:border-line disabled:text-ink/45 disabled:cursor-not-allowed">
               {submitLabel}
             </button>
           </span>
