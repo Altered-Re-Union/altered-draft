@@ -70,7 +70,7 @@ Outcome of the 2026-10-16 design discussion. Each line is a decision, not an opt
 | Tournament name vs BGA name | For declared tournaments the altered-draft name is authoritative; the BGA call never overwrites it (it still refreshes the name of legacy-bound pools). |
 | Config edits | Frozen as soon as the first pool exists. Name, description, dates stay editable. The BGA link is editable only while no pool exists. |
 | Cancelled / ended tournaments | **Stay editable** by the organizer and moderators in every status: name, description, dates, and the actions (restore, reopen). The lock on the BGA link and the config depends only on pool existence, never on status. Reusing a BGA link therefore means restoring the cancelled tournament and editing it, not creating a second one. |
-| Squatting (decided after the lot-1 review) | Anyone can declare any BGA id, so a declaration can hijack a tournament someone else organizes. A **moderator-only "detach"** action deletes **every** pool of that declaration (played or not; decided 2026-10-16: all players restart on the real organizer's config), marks it `detached_at`, and frees its BGA id; the BGA path ignores detached declarations. The row stays as a read-only trace. Decks already saved on decks-api are left orphaned. |
+| Squatting (decided after the lot-1 review) | Anyone can declare any BGA id, so a declaration can hijack a tournament someone else organizes. A **moderator-only "detach"** action deletes the pools **created for** that declaration (played or not; their decks on decks-api are left orphaned), **releases** the pools it **adopted** (already bound to that BGA id before it: `tournament_ref`/`adopted_at` back to NULL, contents and deck kept, so the real organizer's declaration re-adopts them with their format; decided 2026-10-18 after the PR review, replacing "delete every pool"), marks it `detached_at`, and frees its BGA id; the BGA path ignores detached declarations. The row stays as a read-only trace. |
 | Declared after BGA started (decided 2026-10-18, after the recette) | If players already have pools bound to that BGA id without a declared tournament (they are already playing it with the default format), the declaration **takes their format** (the submitted config is replaced, the form shows it locked as soon as the link is pasted) and **adopts those pools in the same statement**, so the tournament is locked from the start. If those pools do not all share one format, the declaration is refused (409 `bga_tournament_mixed_formats`). Rationale: a pool already played can't be swapped, so the only way every player of the BGA tournament plays the same format is for the declaration to take the format already in play. Lazy adoption on each player's next BGA call (§6 step 2) stays as a safety net for pools bound between the check and the insert. |
 | Start date | Must be in the future at creation. Editable afterwards. Stored as `timestamptz`; entered in the organizer's browser timezone, displayed in the viewer's with the timezone shown. |
 
@@ -103,7 +103,7 @@ upcoming    otherwise
 | Edit config | organizer, moderator | zero pools (checked atomically in the UPDATE), any status | updated |
 | Cancel / restore | organizer, moderator | not detached | `cancelled_at` set / cleared; pools untouched |
 | Close / reopen | organizer, moderator | not detached | `ended_at` set / cleared; reopen also clears an `ends_at` already reached (else the tournament would stay `ended`) |
-| Detach | moderator only | not detached | every pool of the declaration deleted, `detached_at` set, BGA id freed; no edit possible afterwards (409 `tournament_detached`), delete still allowed |
+| Detach | moderator only | not detached | pools created for the declaration deleted, adopted pools released (§2), `detached_at` set, BGA id freed; no edit possible afterwards (409 `tournament_detached`), delete still allowed |
 | Delete | organizer, moderator | zero pools | hard delete |
 | Prepare pool (page) | logged-in player | status `upcoming` or `ongoing` | get-or-create the player's pool |
 | Pool via BGA call | altered-bga-api | tournament exists, **any status** | get-or-create (§6) |
@@ -169,7 +169,7 @@ create table if not exists tournaments (
 -- One live altered-draft tournament per BGA tournament, cancelled ones included: a cancelled
 -- tournament's pools still answer BGA for that id, so a second declaration would split the
 -- players between two configs. Reuse = restore the cancelled one. Detached declarations
--- (moderator action, pools deleted) don't count.
+-- (moderator action) don't count.
 create unique index if not exists tournaments_bga_tournament_id_live
   on tournaments (bga_tournament_id) where detached_at is null;
 create index if not exists tournaments_organizer on tournaments (organizer_sub);
@@ -180,8 +180,14 @@ alter table sealed_pools add column if not exists config   jsonb;   -- config sn
 alter table sealed_pools add column if not exists cards    jsonb;   -- { ref: count }, full pool
 alter table sealed_pools add column if not exists boosters jsonb;   -- string[][] (pack-by-pack view)
 alter table sealed_pools add column if not exists created_by text;  -- 'page' | 'bga' | 'legacy' (organizer panel stat)
+alter table sealed_pools add column if not exists adopted_at timestamptz; -- set when a declaration adopted it (detach releases those)
 create unique index if not exists sealed_pools_one_per_sub_per_tournament_ref
   on sealed_pools (sub, tournament_ref) where tournament_ref is not null;
+-- per-declaration lookups (counts, rename, detach, FK check) and legacy pools by BGA id (adoption)
+create index if not exists sealed_pools_by_tournament_ref
+  on sealed_pools (tournament_ref) where tournament_ref is not null;
+create index if not exists sealed_pools_legacy_by_bga_id
+  on sealed_pools (tournament_id) where tournament_ref is null and tournament_id is not null;
 ```
 
 How registered pools sit in the **existing** `sealed_pools` columns (no index change needed):
@@ -282,9 +288,13 @@ and `api/tournament-pool-counts.js`, becomes:
 1. `SELECT … WHERE sub = $1 AND tournament_ref = $2` → return.
 2. `SELECT … WHERE sub = $1 AND tournament_id = $bgaId` (a legacy pool bound **before** the
    tournament was declared, i.e. the player already played games with it) → **adopt it**:
-   `UPDATE … SET tournament_ref = $2` and return. Its contents keep coming from regeneration.
+   `UPDATE … SET tournament_ref = $2, adopted_at = now()` and return. Its contents keep coming from regeneration
+   (or its stored copy once frozen). A pool still attached to a detached declaration is adopted the same way.
 3. Else build from `tournament.config` with a fresh nonce and insert (§5.2), re-select on
-   conflict.
+   conflict. The insert is conditional on the tournament row (`FOR SHARE`) being live and still
+   holding the config the pool was built from; otherwise re-read the tournament and retry (3
+   attempts), then 409. A config edit or a detach that commits during generation thus never
+   leaves a pool built from a stale config.
 
 Step 2 is only a safety net since 2026-10-18: declaring a tournament (or moving it to a BGA id)
 adopts every legacy pool of that BGA id at once and takes their format (§2, "Declared after BGA
@@ -396,7 +406,13 @@ Theming: semantic tokens only (`surface`, `ink`, `accent`, …), as in `CLAUDE.m
   for every `sealed_pools` row with `cards is null`, regenerate with the legacy path and store
   `cards` + `boosters`. From then on no pool depends on the upstream set file's order anymore.
   Requires `DATABASE_URL` and network access to the set files; logs a count; safe to re-run.
-- New env vars (all optional): `TOURNAMENT_MODERATOR_ROLE`, `TOURNAMENT_MODERATORS`.
+  Deployed, it runs inside the app container once the new version serves
+  (`docker exec <container> node scripts/freeze-sealed-pools.mjs`; the image ships `scripts/`).
+- Before deploying: the latest `current_format` row must not name a set without faction-range
+  data with uniques (the unique draw now throws there); same check on the legacy rows to freeze.
+  The full rollout is in `README.md` §10.1.
+- New env vars (all optional): `TOURNAMENT_MODERATOR_ROLE`, `TOURNAMENT_MODERATORS`. On
+  AlteredOps they must be added to the service's explicit `environment:` list.
 - `server/index.js`: mount `/api/tournaments`, `/api/tournaments/:id`,
   `/api/tournaments/:id/pool` (via `routeWithParam`). The files keep Vercel's path convention
   (`api/tournaments/index.js`, `api/tournaments/[id].js`, `api/tournaments/[id]/pool.js`), but
@@ -431,6 +447,7 @@ waiting on Re:Union.
 5. **Concurrency** is handled by unique indexes + `ON CONFLICT DO NOTHING` + re-select, the
    pattern already in `poolStore.js`.
 6. **Squatting.** Any account can declare any BGA id. Mitigation: the moderator-only detach
-   (§2, §3.2). Its cost: every player of that declaration loses their pool and starts over.
+   (§2, §3.2). Its cost: the players whose pool was created for that declaration lose it and
+   start over; pools that already existed on BGA before it are kept.
 7. Non-goals restated: draft tournaments, notifications, BGA registration checks, nominative
    participant lists, card language as a setting, automatic expiry.
