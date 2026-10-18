@@ -37,11 +37,12 @@ function TournamentCard({ tn, t, tc }) {
 }
 
 // A card that opens a page as a whole AND carries its own "Change my deck" button: the
-// card link is stretched over the card (a link can't contain another link).
-function CardWithDeckCta({ to, deckTo, t, children }) {
+// card link is stretched over the card (a link can't contain another link). It is a real,
+// focusable link labelled with the card's title, so a screen reader gets two clear links.
+function CardWithDeckCta({ to, deckTo, label, t, children }) {
   return (
     <div className={`${cardCls} flex items-center justify-between gap-3`}>
-      <Link to={to} className="absolute inset-0 rounded-lg" aria-hidden="true" tabIndex={-1} />
+      <Link to={to} aria-label={label} className="absolute inset-0 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-accent" />
       <div className="min-w-0">{children}</div>
       <Link to={deckTo} className={ctaCls}>{t('tournamentPages.changeMyDeck')}</Link>
     </div>
@@ -141,7 +142,7 @@ export default function TournamentMenu() {
             <p className="text-xs text-faint">{t('tournaments.myOngoingHint')}</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {myOngoing.map(tn => (
-                <CardWithDeckCta key={tn.id} to={`/tournament/t/${tn.id}`} deckTo={`/tournament/t/${tn.id}/pool`} t={t}>
+                <CardWithDeckCta key={tn.id} to={`/tournament/t/${tn.id}`} deckTo={`/tournament/t/${tn.id}/pool`} label={tn.name} t={t}>
                   <p className="font-semibold text-sm truncate">{tn.name}</p>
                   <p className="text-xs text-ink2">{t('tournaments.startsAt', { date: formatDateTime(tn.startsAt) })}</p>
                   <p className="text-xs text-faint truncate">
@@ -180,7 +181,7 @@ export default function TournamentMenu() {
                   ?? pools.map(p => (
                     // A declared tournament has a page; a pool bound to an undeclared BGA
                     // tournament doesn't, so its card opens the pool itself.
-                    <CardWithDeckCta key={p.id} t={t}
+                    <CardWithDeckCta key={p.id} t={t} label={p.tournamentName || t('tournamentPages.sealedPoolFallback', { set: p.setCode })}
                       to={p.tournament ? `/tournament/t/${p.tournament.id}` : `/tournament/pools/${p.id}`}
                       deckTo={p.tournament ? `/tournament/t/${p.tournament.id}/pool` : `/tournament/pools/${p.id}`}>
                       <p className="font-semibold text-sm flex items-center gap-2 flex-wrap">
