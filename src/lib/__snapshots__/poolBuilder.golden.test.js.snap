@@ -1,0 +1,3 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`legacy pool regeneration (golden) > the draw for the current format is frozen 1`] = `"b7d467043eef4531f9d8b2bd729c7375a16b83ae48e89673a712fda79c8cdabe"`;
