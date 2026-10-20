@@ -1,4 +1,5 @@
 import { UNIQUES_EN } from './uniquesData.js'
+import { endpoints } from './endpoints.js'
 
 const BASE_URL = 'https://raw.githubusercontent.com/PolluxTroy0/Altered-TCG-Card-Database/main/SETS'
 
@@ -8,7 +9,7 @@ const BASE_URL = 'https://raw.githubusercontent.com/PolluxTroy0/Altered-TCG-Card
 // the card reference — deterministic, no per-card hash: /cards/<lang>/<SET>/<REF>.webp
 // (CORS: Access-Control-Allow-Origin: *). The old `imagePath` field in the community DB and
 // the cards API both point at the now-dead buckets, so we IGNORE it and build the URL here.
-const IMG_HOST = 'https://cdn.alteredcore.org/cards'
+const IMG_HOST = `${endpoints().cdnUrl}/cards`
 const IMG_LANG = { EN: 'en', FR: 'fr', ES: 'es', DE: 'de', IT: 'it' }
 
 // Build a card image URL from its reference. Uniques (…_U_<serial>) aren't on the CDN, but a
@@ -168,7 +169,7 @@ export async function fetchUnique(reference, lang = 'EN') {
     for (let attempt = 0; attempt < attempts && !card; attempt++) {
       try {
         // Filter by reference (the /api/cards/<id> path expects a numeric id, not a ref).
-        const res = await fetch(`https://cards.alteredcore.org/api/cards?reference=${encodeURIComponent(reference)}`, { headers: { Accept: 'application/json' } })
+        const res = await fetch(`${endpoints().cardsApiUrl}/api/cards?reference=${encodeURIComponent(reference)}`, { headers: { Accept: 'application/json' } })
         if (!res.ok) throw new Error(`Failed to fetch unique ${reference}: ${res.status}`)
         const raw = (await res.json()).member?.[0]
         if (!raw) throw new Error(`Unique ${reference} not found`)
@@ -226,7 +227,7 @@ export async function fetchUniques(references, lang = 'EN') {
 export async function fetchRandomUniques(setCode, count = 50, lang = 'EN') {
   const loc = (LOCALE[lang] ?? 'en-us').slice(0, 2)
   try {
-    const url = `https://cards.alteredcore.org/api/cards?rarity=UNIQUE&set.reference=${encodeURIComponent(setCode)}&random=1&itemsPerPage=${count}`
+    const url = `${endpoints().cardsApiUrl}/api/cards?rarity=UNIQUE&set.reference=${encodeURIComponent(setCode)}&random=1&itemsPerPage=${count}`
     const res = await fetch(url, { headers: { Accept: 'application/json' } })
     if (!res.ok) throw new Error(`uniques ${setCode}: ${res.status}`)
     const members = (await res.json()).member ?? []

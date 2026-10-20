@@ -158,9 +158,26 @@ describe('fetchUnique', () => {
     expect(card.name).toBe('Kelon Elemental') // the EN snapshot, as a fallback
   })
 
-  it('throws when the live fetch fails for a reference with no bundled fallback', async () => {
-    global.fetch.mockRejectedValueOnce(new Error('network down'))
-    await expect(fetchUnique('ALT_EOLE_B_YZ_99_U_9999', 'FR')).rejects.toThrow()
+  it('retries, then returns a placeholder built from the reference when there is no bundled fallback', async () => {
+    vi.useFakeTimers()
+    try {
+      global.fetch.mockRejectedValue(new Error('network down'))
+      const pending = fetchUnique('ALT_EOLE_B_YZ_99_U_9999', 'FR')
+      await vi.runAllTimersAsync() // skip the retry backoff
+      const card = await pending
+
+      expect(global.fetch).toHaveBeenCalledTimes(3)
+      expect(card).toMatchObject({
+        reference: 'ALT_EOLE_B_YZ_99_U_9999',
+        name: 'ALT_EOLE_B_YZ_99_U_9999',
+        faction: 'XX',
+        rarity: 'U',
+        // uniques aren't on the CDN — the image falls back to the base rare's art
+        imagePath: 'https://cdn.alteredcore.org/cards/fr/EOLE/ALT_EOLE_B_YZ_99_R1.webp',
+      })
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
 

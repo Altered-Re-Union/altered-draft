@@ -4,8 +4,9 @@
 import { verifySub } from './_lib/auth.js'
 import { getOrCreateNormalPool, resetNormalPool, countGamesPlayed } from '../src/lib/poolStore.js'
 import { regeneratePool, poolResponse } from './_lib/tournamentPool.js'
+import { endpoints } from '../src/lib/endpoints.js'
 
-const DECKS_API = 'https://decks.alteredcore.org/api/decks'
+const DECKS_API = `${endpoints().decksApiUrl}/api/decks`
 
 // Best-effort: a reset pool can never validate its old deck again anyway (deck_id is
 // already cleared), so a failed delete here just leaves an orphaned deck behind rather

@@ -1,4 +1,6 @@
-const CDN = 'https://cdn.alteredcore.org/marketing'
+import { endpoints } from './endpoints.js'
+
+const CDN = `${endpoints().cdnUrl}/marketing`
 
 export const FACTION_ICONS = {
   AX: `${CDN}/game_assets/faction_icons/AXIOM-faction-icon.png`,

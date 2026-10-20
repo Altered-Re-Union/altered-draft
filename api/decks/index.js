@@ -2,7 +2,9 @@
 // (which sends no browser CORS, so direct frontend calls are blocked). GET = list the
 // user's decks, POST = create a deck. The user's access token is the credential here —
 // the Keycloak client secret is NOT used. Fixed upstream host (not an open proxy).
-const DECKS_API = 'https://decks.alteredcore.org/api/decks'
+import { endpoints } from '../../src/lib/endpoints.js'
+
+const DECKS_API = `${endpoints().decksApiUrl}/api/decks`
 
 export default async function handler(req, res) {
   const auth = req.headers.authorization

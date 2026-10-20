@@ -62,19 +62,31 @@ Login is strictly additive: logged out, `user` is `null` and everything works an
 
 ## Running locally
 
-```bash
-npm install
-cp .env.example .env    # fill in DATABASE_URL (+ Supabase keys if using Supabase — see below)
-npm run dev             # http://localhost:5173 — frontend only, see note below
-```
-
-⚠️ **`npm run dev` (plain Vite) does not serve `/api/*`** — it's a frontend-only dev server, and room create/read/write now goes through `api/rooms/*.js`, not straight to the DB from the browser. To actually create/join a room locally, run the API layer too:
+**Prerequisites:** Docker, GNU make, and Node **≥ 20.6** — **22** recommended (pinned in `.nvmrc`, same as the Docker image; `nvm use`, and the Makefile picks nvm's Node 22 by itself if you have it).
 
 ```bash
-vercel dev              # runs the frontend + every api/*.js handler together
+make dev        # → http://localhost:5173
 ```
 
-(Re:Union login/save additionally need the Keycloak config below, on top of that.)
+One command brings up a working local stack:
+
+1. installs dependencies (`npm ci`, only when `package-lock.json` changed);
+2. creates/completes `.env` with local defaults (never overwrites a value you set);
+3. starts Postgres in Docker (`docker-compose.yml`, db/user/password `altered-draft`) and applies the idempotent schemas (`sealed-pools-schema.sql`, `draft-rooms-schema.sql` — incl. the default tournament format). Card data is fetched live from the community sources, nothing to import;
+4. registers the `altered-draft` client in the local Keycloak (see below — skipped with a warning if it isn't running);
+5. runs the API (`server/index.js` on `:8080`, restarts on changes in `api/`, `src/lib/`, `server/`) and Vite (`:5173`, HMR, proxies `/api` to the API).
+
+Ctrl+C stops the API and Vite; Postgres keeps running. Other targets: `make db-down`, `make db-reset` (wipe + recreate), `make db-shell`, `make test`, `make api` / `make web` (one half only).
+
+**No Realtime locally.** Without a Realtime config the app polls the room every 1.5s instead (`src/lib/realtime.js`), so multiplayer works locally — just not instantly.
+
+### Re:Union services (optional)
+
+Anonymous play needs nothing more. For login, deck save/load and the tournament pages, run the Re:Union services from [altered-dev-environment](https://github.com/Altered-Community/altered-dev-environment) (`./run.sh` there — Keycloak on `:18080`, decks-api on `:8001`). `make dev` points `.env` at them and (re)registers the `altered-draft` client in the local realm — the realm is re-imported on every Keycloak restart, so re-run `make keycloak-client` after restarting it.
+
+- Test users: `alice` / `bob`, password `TestPassword1234`.
+- Use Chrome or Firefox: the session cookies are `Secure`, which Safari rejects on `http://localhost`.
+- Every Re:Union / Community service URL is overridable — Keycloak, decks API, deckbuilder, altered.re, cards API, CDN. They default to prod; see `.env.example` to point any of them at a local version (`src/lib/endpoints.js`).
 
 ---
 
@@ -142,10 +154,10 @@ The exact same handler code also ships as a Docker image (`build/Dockerfile`'s `
 Skip this if you don't need it — the app runs fully without it, on either deployment target. To enable "Connect Re:Union" (load decks as cubes, save pool/deck):
 
 1. Register a **Keycloak** OIDC client in the Re:Union `players` realm (confidential; the project uses client id `altered-draft`) with a redirect URI for every origin you actually deploy to, e.g. `https://your-app.vercel.app/auth/callback` and `http://localhost:5173/auth/callback` (and, self-hosted, your own domain's `/auth/callback`).
-2. Set the client secret as a **server-side env var only** — `KEYCLOAK_CLIENT_SECRET` (a Vercel project env var, or a secret injected into the container on a self-hosted deployment). **Never** put it in `.env`, the bundle, or git.
-3. Public OIDC config (issuer, realm, client id) is inline in `api/token.js` / `src/lib/reunion.js` — adjust if your realm differs.
+2. Set the client secret as a **server-side env var only** — `KEYCLOAK_CLIENT_SECRET` (a Vercel project env var, or a secret injected into the container on a self-hosted deployment). **Never** commit a real secret or put it in the bundle (the local dev stack's `.env` only holds the dev client's throwaway secret).
+3. Public OIDC config defaults to Re:Union prod (`src/lib/endpoints.js`); override `KEYCLOAK_ISSUER` / `KEYCLOAK_CLIENT_ID` if your realm differs.
 
-The decks API is reached through `api/decks/*` (same-origin proxy). No extra config needed beyond a logged-in user's token.
+The decks API is reached through `api/decks/*` (same-origin proxy, target `DECKS_API_URL`). No extra config needed beyond a logged-in user's token.
 
 ---
 
