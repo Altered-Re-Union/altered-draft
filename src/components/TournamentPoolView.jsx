@@ -1,7 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { Link } from 'react-router-dom'
 import { fetchSet, fetchUniques, isUniqueRef } from '../lib/cardData.js'
 import { createDeck, updateDeck, toDeckCards, getDeck, deckCardsToRefs } from '../lib/decks.js'
 import { syncPoolDeck } from '../lib/tournamentApi.js'
+import { syncDeckToPool } from '../lib/poolDeckSync.js'
+import { createSerialRunner } from '../lib/serialRunner.js'
 import { buildRandomDeck } from '../lib/randomDeck.js'
 import { useLang } from '../lib/i18n/i18n.jsx'
 import PoolGrid from './PoolGrid.jsx'
@@ -38,7 +41,7 @@ function revealKey(pool) {
  * a deck is created in the background via decks-api and kept in sync on every
  * add/remove, throttled to one call per 2s.
  */
-export default function TournamentPoolView({ title, load, reset }) {
+export default function TournamentPoolView({ title, load, reset, backTo = null }) {
   const { t } = useLang()
   const [pool, setPool] = useState(null)
   const [cardMap, setCardMap] = useState({})
@@ -143,77 +146,71 @@ export default function TournamentPoolView({ title, load, reset }) {
     }
   }
 
-  const scheduleSync = useCallback(() => {
+  // One sync at a time, reading the pool and the deck when it RUNS (not when it was
+  // scheduled): a timer-deferred run used to reuse the pool captured at schedule time —
+  // still without a deck for a brand-new pool — and two overlapping runs each created a
+  // deck on decks-api. The runner folds requests made during a run into one more run.
+  const syncOnceRef = useRef(null)
+  syncOnceRef.current = async () => {
     const currentPool = poolRef.current
     if (!currentPool) return
-    const totalInDeck = Object.values(deckRef.current).reduce((a, b) => a + b, 0)
-    if (totalInDeck === 0) return // nothing to create/sync yet
-
-    const run = async () => {
-      lastSyncAtRef.current = Date.now()
-      setSyncing(true)
-      try {
-        const refs = Object.entries(deckRef.current).flatMap(([ref, qty]) => Array(qty).fill(ref))
-        const deckCards = toDeckCards(refs)
-        const heroRef = refs.find(r => cardMap[r]?.cardType === 'HERO')
-        const deckFactions = new Set(refs.map(r => cardMap[r]?.faction).filter(Boolean))
-        const deckHeroCount = refs.filter(r => cardMap[r]?.cardType === 'HERO').length
-        const isValid = refs.length >= 30 && deckFactions.size <= 3 && deckHeroCount <= 1
-        // "Invalid " is a literal token the BGA-side integration matches on to flag the
-        // deck explicitly, instead of failing opaquely on the next decks-api call — do not
-        // route it through t()/translate it, same rule as ensureDeck's "Random " prefix.
-        // The base name itself always tracks the tournament this pool is/will be bound to
-        // (no date): the real tournament name once bound, else a generic placeholder for
-        // the still-pending preparation pool or the out-of-tournament normal pool.
-        const namePrefix = isValid ? '' : 'Invalid '
-        const baseName = currentPool.kind === 'tournament'
-          ? (currentPool.tournamentName || t('tournamentPoolView.nextTournamentDeckName'))
-          : t('tournamentPoolView.normalDeckName')
-        const summary = {
-          name: `${namePrefix}${baseName}`,
-          deckCards,
-          isDraft: !isValid,
-          format: 'sealed',
-        }
-        let deckId = currentPool.deck?.id
-        if (deckId) {
-          try {
-            await updateDeck(deckId, summary)
-          } catch (e) {
-            // The deck we last synced to was deleted server-side (e.g. from
-            // deckbuilder.alteredcore.org) — recreate it instead of repeating this same
-            // 404 on every future edit (syncPoolDeck below re-links the pool to the new id).
-            if (e.status !== 404) throw e
-            const created = await createDeck(summary)
-            deckId = created.id
-          }
-        } else {
-          const created = await createDeck(summary)
-          deckId = created.id
-        }
-        const updatedPool = await syncPoolDeck(currentPool.id, {
-          deckId,
-          name: summary.name,
-          heroRef: heroRef ?? null,
-          faction: heroRef ? cardMap[heroRef]?.faction : null,
-          cardQuantity: refs.length,
-        })
-        poolRef.current = updatedPool
-        setPool(updatedPool)
-      } catch (e) {
-        setError(e.message || t('tournamentPoolView.couldNotSyncDeck'))
-      } finally {
-        setSyncing(false)
+    if (Object.values(deckRef.current).reduce((a, b) => a + b, 0) === 0) return
+    lastSyncAtRef.current = Date.now()
+    setSyncing(true)
+    try {
+      const refs = Object.entries(deckRef.current).flatMap(([ref, qty]) => Array(qty).fill(ref))
+      const deckCards = toDeckCards(refs)
+      const heroRef = refs.find(r => cardMap[r]?.cardType === 'HERO')
+      const deckFactions = new Set(refs.map(r => cardMap[r]?.faction).filter(Boolean))
+      const deckHeroCount = refs.filter(r => cardMap[r]?.cardType === 'HERO').length
+      const isValid = refs.length >= 30 && deckFactions.size <= 3 && deckHeroCount <= 1
+      // "Invalid " is a literal token the BGA-side integration matches on to flag the
+      // deck explicitly, instead of failing opaquely on the next decks-api call — do not
+      // route it through t()/translate it, same rule as ensureDeck's "Random " prefix.
+      // The base name itself always tracks the tournament this pool is/will be bound to
+      // (no date): the real tournament name once bound, else a generic placeholder for
+      // the still-pending preparation pool or the out-of-tournament normal pool.
+      const namePrefix = isValid ? '' : 'Invalid '
+      const baseName = currentPool.kind === 'tournament'
+        ? (currentPool.tournamentName || t('tournamentPoolView.nextTournamentDeckName'))
+        : t('tournamentPoolView.normalDeckName')
+      const summary = {
+        name: `${namePrefix}${baseName}`,
+        deckCards,
+        isDraft: !isValid,
+        format: 'sealed',
       }
+      // New decks: draft → link → flip (see poolDeckSync.js for why the order matters).
+      const updatedPool = await syncDeckToPool({
+        poolId: currentPool.id,
+        deckId: currentPool.deck?.id ?? null,
+        summary,
+        heroRef: heroRef ?? null,
+        faction: heroRef ? cardMap[heroRef]?.faction : null,
+        cardQuantity: refs.length,
+      }, { createDeck, updateDeck, syncPoolDeck })
+      poolRef.current = updatedPool
+      setPool(updatedPool)
+    } catch (e) {
+      setError(e.message || t('tournamentPoolView.couldNotSyncDeck'))
+    } finally {
+      setSyncing(false)
     }
+  }
+  const runSyncRef = useRef(null)
+  if (!runSyncRef.current) runSyncRef.current = createSerialRunner(() => syncOnceRef.current())
 
+  // Throttled (one call per SYNC_THROTTLE_MS). Stable: everything it needs is in refs.
+  const scheduleSync = useCallback(() => {
+    if (!poolRef.current) return
+    if (Object.values(deckRef.current).reduce((a, b) => a + b, 0) === 0) return // nothing to create/sync yet
     const elapsed = Date.now() - lastSyncAtRef.current
     if (elapsed >= SYNC_THROTTLE_MS) {
-      run()
+      runSyncRef.current()
     } else if (!syncTimerRef.current) {
-      syncTimerRef.current = setTimeout(() => { syncTimerRef.current = null; run() }, SYNC_THROTTLE_MS - elapsed)
+      syncTimerRef.current = setTimeout(() => { syncTimerRef.current = null; runSyncRef.current() }, SYNC_THROTTLE_MS - elapsed)
     }
-  }, [cardMap, t])
+  }, [])
 
   useEffect(() => {
     if (skipNextSyncRef.current) { skipNextSyncRef.current = false; return }
@@ -285,6 +282,11 @@ export default function TournamentPoolView({ title, load, reset }) {
         />
       )}
       <div className="w-full px-4 py-4 flex-1 flex flex-col">
+        {backTo && (
+          <Link to={backTo.to} className="text-xs text-muted hover:text-ink transition-colors mb-2 inline-block">
+            ← {backTo.label}
+          </Link>
+        )}
         <div className="flex items-center gap-3 mb-3 flex-wrap">
           <h1 className="text-xl font-display">{pool?.tournamentName || title}</h1>
           {loading ? (
@@ -294,11 +296,11 @@ export default function TournamentPoolView({ title, load, reset }) {
             </div>
           ) : (
             <div className={`flex flex-wrap items-center gap-3 px-3 py-1.5 rounded-lg border-2 text-base font-semibold ${
-              isValid ? 'border-green-700 bg-green-900/25' : 'border-red-800 bg-red-950/25'}`}>
-              <span className={isEnough ? 'text-green-400' : 'text-red-400'}>{isEnough ? '✓' : '✗'} {t('deckValidity.cardsOf30Plus', { n: deckTotal })}</span>
-              <span className={isValidFactions ? 'text-green-400' : 'text-red-400'}>{isValidFactions ? '✓' : '✗'} {t('deckValidity.factionsOf3', { n: deckFactions.size })}</span>
-              <span className={isValidHero ? (deckHeroCount === 1 ? 'text-green-400' : 'text-faint') : 'text-red-400'}>{isValidHero ? '✓' : '✗'} {t('deckValidity.heroOf1', { n: deckHeroCount })}</span>
-              <span className={`font-bold ${isValid ? 'text-green-400' : 'text-red-400'}`}>
+              isValid ? 'border-ok/50 bg-ok-soft' : 'border-danger/40 bg-danger-soft'}`}>
+              <span className={isEnough ? 'text-ok' : 'text-danger'}>{isEnough ? '✓' : '✗'} {t('deckValidity.cardsOf30Plus', { n: deckTotal })}</span>
+              <span className={isValidFactions ? 'text-ok' : 'text-danger'}>{isValidFactions ? '✓' : '✗'} {t('deckValidity.factionsOf3', { n: deckFactions.size })}</span>
+              <span className={isValidHero ? (deckHeroCount === 1 ? 'text-ok' : 'text-faint') : 'text-danger'}>{isValidHero ? '✓' : '✗'} {t('deckValidity.heroOf1', { n: deckHeroCount })}</span>
+              <span className={`font-bold ${isValid ? 'text-ok' : 'text-danger'}`}>
                 {isValid ? t('deckValidity.valid') : t('deckValidity.notValid')}
               </span>
             </div>
@@ -311,7 +313,7 @@ export default function TournamentPoolView({ title, load, reset }) {
               {t('tournamentPoolView.makeRandomDeck')}
             </button>
             <button onClick={handleResetDeck} disabled={loading || deckTotal === 0}
-              className="text-xs px-3 py-1.5 rounded bg-surface2 hover:bg-red-900 disabled:opacity-40 transition-colors">
+              className="text-xs px-3 py-1.5 rounded bg-surface2 hover:bg-danger-soft hover:text-danger disabled:opacity-40 transition-colors">
               {t('tournamentPoolView.resetDeck')}
             </button>
             {reset && (
@@ -322,7 +324,7 @@ export default function TournamentPoolView({ title, load, reset }) {
             )}
           </div>
         </div>
-        {error && <p className="text-red-400 text-sm mb-2">{error}</p>}
+        {error && <p className="text-danger text-sm mb-2">{error}</p>}
 
         {/* Deckbuilding is always the full pool — the pack-by-pack experience is the
             first-open reveal overlay, not a persistent tab (avoids a "which tab?" step). */}

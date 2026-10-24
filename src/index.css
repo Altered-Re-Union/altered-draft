@@ -21,6 +21,13 @@
   --c-accent:     201 168 76;    /* #C9A84C — bright gold on dark */
   --c-accent2:    212 175 107;   /* #D4AF6B */
   --c-on-accent:   20 18 30;     /* near-black, reads on gold */
+  /* Status colours (text on surfaces / soft pill & panel backgrounds). Dark: the usual
+     Tailwind 400 hues; the soft ones are pre-mixed over the surface. */
+  --c-ok:          74 222 128;   /* #4ADE80 green-400 */
+  --c-ok-soft:     19 39 35;     /* green-900 at 30% over surface */
+  --c-danger:     248 113 113;   /* #F87171 red-400 */
+  --c-danger-soft: 38 16 23;     /* red-950 at 40% over surface */
+  --c-accent-ink: 201 168 76;    /* gold used as TEXT: same as accent on dark */
 }
 
 :root[data-theme="light"] {
@@ -35,7 +42,13 @@
   --c-line:       221 208 179;   /* #DDD0B3 sand-300 */
   --c-accent:     184 149 47;    /* #B8952F primary-500 */
   --c-accent2:    160 122 32;    /* #A07A20 primary-600 */
-  --c-on-accent:   44 36 22;     /* #2C2416 dark text on gold */
+  --c-on-accent:   26 20 10;     /* #1A140A: AA on accent (6.4:1) and on accent2 hover (4.6:1) */
+  /* Status colours, darker for the parchment background (all >= 4.5:1 on surface). */
+  --c-ok:          22 101 52;    /* #166534 green-800 (6.3:1 on ok-soft, 6.9:1 on surface) */
+  --c-ok-soft:    238 244 228;   /* #EEF4E4 warm sage tint, blends with the parchment */
+  --c-danger:     185 28 28;     /* #B91C1C red-700 */
+  --c-danger-soft: 250 234 228;  /* #FAEAE4 warm rose tint (danger text 5.5:1) */
+  --c-accent-ink: 122 90 14;     /* #7A5A0E: gold as TEXT (the 500/600 golds are < 4.5:1 here) */
 }
 
 /* Fan Content badge is black artwork on a transparent background — invert it in dark
@@ -59,6 +72,17 @@
   .card-hover-glow {
     @apply transition-transform duration-150 hover:scale-105 hover:shadow-lg hover:shadow-white/10;
   }
+
+  /* Thin, rounded, gold scrollbar (theme accent) for small horizontal scrollers such as
+     tab bars. Firefox reads scrollbar-*, WebKit/Blink the pseudo-elements. */
+  .scrollbar-gold {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--c-accent) / 0.6) transparent;
+  }
+  .scrollbar-gold::-webkit-scrollbar { height: 6px; width: 6px; }
+  .scrollbar-gold::-webkit-scrollbar-track { background: transparent; }
+  .scrollbar-gold::-webkit-scrollbar-thumb { background: rgb(var(--c-accent) / 0.6); border-radius: 9999px; }
+  .scrollbar-gold::-webkit-scrollbar-thumb:hover { background: rgb(var(--c-accent)); }
 }
 
 /* Holographic zoom effect — ported from simeydotme's pokemon-cards-css

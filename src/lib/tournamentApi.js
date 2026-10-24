@@ -2,15 +2,34 @@ import { getAccessToken } from './reunion.js'
 
 // Frontend client for the new tournament sealed endpoints (api/tournament-*.js).
 // See ROADMAP.md "Set 6 preview". Requires a Re:Union session — every call throws if
-// logged out, same convention as decks.js.
+// logged out, same convention as decks.js — except the public tournament reads
+// (listTournaments, getTournament), which work anonymously.
 
 async function authHeaders() {
   const token = await getAccessToken()
-  if (!token) throw new Error('Not signed in to Re:Union. Reconnect your account.')
+  if (!token) {
+    // Same shape as a server 401, so callers can offer a reconnect instead of a raw error.
+    const err = new Error('Not signed in to Re:Union. Reconnect your account.')
+    err.status = 401
+    err.code = 'not_signed_in'
+    throw err
+  }
   return { Authorization: `Bearer ${token}`, Accept: 'application/json' }
 }
 
+// Public endpoints accept an optional bearer (it only adds the `viewer` block): attach
+// one when a session exists, never fail when logged out.
+async function optionalAuthHeaders() {
+  try {
+    const token = await getAccessToken()
+    return token ? { Authorization: `Bearer ${token}`, Accept: 'application/json' } : { Accept: 'application/json' }
+  } catch {
+    return { Accept: 'application/json' }
+  }
+}
+
 async function handle(res) {
+  if (res.status === 204) return {}
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
     const err = new Error(data.message || data.error || `Request failed (HTTP ${res.status}).`)
@@ -60,5 +79,65 @@ export async function syncPoolDeck(id, { deckId, name, heroRef, faction, cardQua
     headers: { ...(await authHeaders()), 'Content-Type': 'application/json' },
     body: JSON.stringify({ deckId, name, heroRef, faction, cardQuantity }),
   })
+  return handle(res)
+}
+
+// ---- User-created tournaments (api/tournaments/*) ---------------------------------
+
+/** @param {'open'|'upcoming'|'ongoing'|'all'} status */
+export async function listTournaments(status = 'open') {
+  const res = await fetch(`/api/tournaments?status=${encodeURIComponent(status)}`, { headers: await optionalAuthHeaders() })
+  return handle(res)
+}
+
+/** The tournaments the caller organizes, every status. Requires a session. */
+export async function listMyTournaments() {
+  const res = await fetch('/api/tournaments?mine=1', { headers: await authHeaders() })
+  return handle(res)
+}
+
+/**
+ * What a BGA tournament id already has here: `holder` = its live declaration (whatever its
+ * status) or null; `legacy` = the pools already bound to it without a declaration, i.e. the
+ * format a new declaration must take (`{ pools, mixed, config }`), or null. Public.
+ */
+export async function checkBgaTournament(bgaId) {
+  const res = await fetch(`/api/tournaments?bgaId=${encodeURIComponent(bgaId)}`, { headers: await optionalAuthHeaders() })
+  const data = await handle(res)
+  return { holder: data.tournaments?.[0] ?? null, legacy: data.legacy ?? null }
+}
+
+export async function getTournament(id) {
+  const res = await fetch(`/api/tournaments/${encodeURIComponent(id)}`, { headers: await optionalAuthHeaders() })
+  return handle(res)
+}
+
+export async function createTournament(body) {
+  const res = await fetch('/api/tournaments', {
+    method: 'POST',
+    headers: { ...(await authHeaders()), 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  return handle(res)
+}
+
+/** Partial update, or `{ action: 'cancel'|'restore'|'close'|'reopen' }`. */
+export async function updateTournament(id, body) {
+  const res = await fetch(`/api/tournaments/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { ...(await authHeaders()), 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  return handle(res)
+}
+
+export async function deleteTournament(id) {
+  const res = await fetch(`/api/tournaments/${encodeURIComponent(id)}`, { method: 'DELETE', headers: await authHeaders() })
+  return handle(res)
+}
+
+/** Get-or-create the caller's pool for a tournament. 409 `tournament_closed` when creation is no longer allowed. */
+export async function fetchTournamentPool(id) {
+  const res = await fetch(`/api/tournaments/${encodeURIComponent(id)}/pool`, { headers: await authHeaders() })
   return handle(res)
 }

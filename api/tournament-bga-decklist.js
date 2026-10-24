@@ -5,7 +5,9 @@
 // altered-bga-api can relay it to BGA verbatim.
 //
 // `tournamentId` absent -> normal (casual) mode: the player's single normal pool.
-// `tournamentId` present -> lazily binds it (+ `tournamentName`, informative only) to the
+// `tournamentId` of a tournament declared on altered-draft resolves to (or creates) the
+// player's pool for THAT tournament; other ids bind the legacy pending pool.
+// `tournamentId` present otherwise -> lazily binds it (+ `tournamentName`, informative only) to the
 // player's pending preparation pool (idempotent — every game inside the same tournament
 // re-triggers this and gets the same binding back) and returns THAT pool's deck.
 // `gameId`, when present, records one play of this pool for the "games played with this
@@ -35,9 +37,17 @@ export default async function handler(req, res) {
   const tournamentName = queryParam(req, 'tournamentName')
   const gameId = queryParam(req, 'gameId')
 
-  let pool = tournamentId
-    ? await bindTournamentId(sub, tournamentId, tournamentName || null)
-    : await getOrCreateNormalPool(sub)
+  let pool
+  try {
+    pool = tournamentId
+      ? await bindTournamentId(sub, tournamentId, tournamentName || null)
+      : await getOrCreateNormalPool(sub, { createdBy: 'bga' })
+  } catch (e) {
+    // A declared tournament changed under a racing call (poolStore.getOrCreateTournamentPool):
+    // a retry from BGA settles it.
+    if (e.code === 'tournament_unavailable' || e.code === 'pool_unavailable') return res.status(409).json({ error: e.code })
+    throw e
+  }
 
   if (gameId) {
     await recordGamePlayed(pool.id, gameId)

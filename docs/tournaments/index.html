@@ -1,0 +1,1313 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sealed Tournaments Docs</title>
+<meta name="description" content="How sealed tournaments on BGA work across altered-draft, altered-bga-api and decks-api: functional flows, architecture, data model, code map, API contracts.">
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --bg: #f6f3ec;
+    --surface: #fffdf8;
+    --surface2: #efe9dc;
+    --ink: #1f1b14;
+    --ink2: #4a4538;
+    --muted: #6f6a5c;
+    --line: #d9d2c2;
+    --accent: #a4761a;
+    --accent-soft: #f3e6c6;
+    --code-bg: #f1ede3;
+    --ok: #2f7a3e;
+    --warn: #b0571a;
+    --bad: #a62d2d;
+    --shadow: 0 1px 2px rgba(0,0,0,.06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #15130f;
+      --surface: #1d1a15;
+      --surface2: #26221b;
+      --ink: #ece6d8;
+      --ink2: #c9c2b2;
+      --muted: #978f7c;
+      --line: #3a3429;
+      --accent: #d9a84a;
+      --accent-soft: #3a2f16;
+      --code-bg: #221e17;
+      --ok: #6fc07f;
+      --warn: #e09a5a;
+      --bad: #e07676;
+      --shadow: 0 1px 2px rgba(0,0,0,.4);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #15130f;
+    --surface: #1d1a15;
+    --surface2: #26221b;
+    --ink: #ece6d8;
+    --ink2: #c9c2b2;
+    --muted: #978f7c;
+    --line: #3a3429;
+    --accent: #d9a84a;
+    --accent-soft: #3a2f16;
+    --code-bg: #221e17;
+    --ok: #6fc07f;
+    --warn: #e09a5a;
+    --bad: #e07676;
+    --shadow: 0 1px 2px rgba(0,0,0,.4);
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  a { color: var(--accent); }
+  code, pre, kbd {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    font-size: .9em;
+  }
+  code { background: var(--code-bg); padding: .1em .35em; border-radius: 4px; }
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 12px 14px;
+    overflow-x: auto;
+    line-height: 1.45;
+  }
+  pre code { background: none; padding: 0; font-size: .85rem; }
+
+  .layout { display: grid; grid-template-columns: 280px minmax(0, 1fr); min-height: 100vh; }
+  nav.side {
+    position: sticky; top: 0; height: 100vh; overflow-y: auto;
+    background: var(--surface); border-right: 1px solid var(--line);
+    padding: 20px 18px 40px;
+  }
+  nav.side .brand { font-weight: 700; letter-spacing: .02em; margin-bottom: 4px; }
+  nav.side .sub { color: var(--muted); font-size: .8rem; margin-bottom: 16px; }
+  nav.side ol { list-style: none; padding: 0; margin: 0; }
+  nav.side li { margin: 2px 0; }
+  nav.side a {
+    display: block; padding: 5px 8px; border-radius: 6px; color: var(--ink2);
+    text-decoration: none; font-size: .92rem;
+  }
+  nav.side a:hover { background: var(--surface2); color: var(--ink); }
+  nav.side a.active { background: var(--accent-soft); color: var(--ink); font-weight: 600; }
+  nav.side .num { color: var(--muted); display: inline-block; width: 1.6em; }
+
+  main { padding: 28px 40px 80px; max-width: 1080px; }
+  header.top {
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    flex-wrap: wrap; margin-bottom: 8px;
+  }
+  header.top h1 { margin: 0; font-size: 1.9rem; line-height: 1.2; }
+  .meta { color: var(--muted); font-size: .9rem; margin: 6px 0 22px; }
+  .toggle {
+    border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+    border-radius: 999px; padding: 6px 12px; cursor: pointer; font-size: .85rem;
+  }
+  section { margin-top: 44px; scroll-margin-top: 16px; }
+  h2 { font-size: 1.5rem; margin: 0 0 12px; padding-bottom: 6px; border-bottom: 2px solid var(--line); }
+  h3 { font-size: 1.12rem; margin: 26px 0 8px; }
+  h4 { font-size: 1rem; margin: 18px 0 6px; color: var(--ink2); }
+  p { margin: 8px 0 12px; }
+  ul, ol { padding-left: 1.4em; }
+  li { margin: 3px 0; }
+
+  table { border-collapse: collapse; width: 100%; margin: 10px 0 18px; font-size: .92rem; }
+  th, td { border: 1px solid var(--line); padding: 7px 10px; vertical-align: top; text-align: left; }
+  th { background: var(--surface2); font-weight: 600; }
+  tr:nth-child(even) td { background: color-mix(in srgb, var(--surface) 60%, var(--bg)); }
+  td code { white-space: nowrap; }
+  .wrap td code { white-space: normal; }
+
+  .callout {
+    border-left: 4px solid var(--accent); background: var(--surface);
+    padding: 10px 14px; border-radius: 0 8px 8px 0; margin: 14px 0; box-shadow: var(--shadow);
+  }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout.bad { border-left-color: var(--bad); }
+  .callout.ok { border-left-color: var(--ok); }
+  .callout strong:first-child { display: block; margin-bottom: 2px; }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; margin: 12px 0 18px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; box-shadow: var(--shadow); }
+  .card h4 { margin: 0 0 6px; color: var(--ink); }
+  .card p { margin: 0; font-size: .92rem; color: var(--ink2); }
+
+  .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: .78rem; font-weight: 600; border: 1px solid var(--line); background: var(--surface2); }
+  .pill.get { color: var(--ok); } .pill.post { color: var(--warn); } .pill.patch { color: var(--accent); } .pill.del { color: var(--bad); }
+
+  figure.diagram { position: relative; margin: 14px 0 20px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px; overflow-x: auto; }
+  figure.diagram figcaption { color: var(--muted); font-size: .85rem; margin-top: 6px; }
+  figure.diagram .render { cursor: zoom-in; }
+  figure.diagram .render svg { max-width: 100%; height: auto; }
+  figure.diagram pre.fallback { display: none; margin: 0; }
+  figure.diagram.failed pre.fallback { display: block; }
+  figure.diagram.failed .render { display: none; }
+  figure.diagram .zoom-btn {
+    position: absolute; top: 8px; right: 8px; z-index: 2;
+    border: 1px solid var(--line); background: var(--surface2); color: var(--ink2);
+    border-radius: 6px; padding: 3px 9px; font-size: .78rem; cursor: pointer; opacity: .85;
+  }
+  figure.diagram .zoom-btn:hover { opacity: 1; color: var(--ink); }
+  figure.diagram.failed .zoom-btn { display: none; }
+
+  /* Diagram lightbox: full-screen pan/zoom view of one rendered SVG. */
+  .lightbox { position: fixed; inset: 0; z-index: 1000; display: flex; flex-direction: column; background: var(--bg); }
+  .lightbox[hidden] { display: none; }
+  .lb-bar { display: flex; align-items: center; gap: 12px; padding: 8px 14px; border-bottom: 1px solid var(--line); background: var(--surface); flex-wrap: wrap; }
+  .lb-title { font-weight: 600; }
+  .lb-hint { color: var(--muted); font-size: .8rem; flex: 1; }
+  .lb-tools { display: flex; gap: 6px; align-items: center; margin-left: auto; }
+  .lb-tools button {
+    border: 1px solid var(--line); background: var(--surface2); color: var(--ink);
+    border-radius: 6px; padding: 4px 10px; font-size: .9rem; cursor: pointer; min-width: 2.2em;
+  }
+  .lb-tools button:hover { background: var(--accent-soft); }
+  .lb-zoom { min-width: 3.6em; text-align: center; font-variant-numeric: tabular-nums; color: var(--ink2); font-size: .85rem; }
+  .lb-stage { flex: 1; overflow: hidden; position: relative; touch-action: none; cursor: grab; user-select: none; -webkit-user-select: none; }
+  .lb-stage.dragging { cursor: grabbing; }
+  .lb-canvas { position: absolute; top: 0; left: 0; transform-origin: 0 0; will-change: transform; }
+  .lb-canvas svg { display: block; background: var(--surface); border-radius: 8px; }
+  @media (max-width: 900px) { .lb-hint { display: none; } }
+
+  .kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; font-size: .93rem; }
+  .kv dt { color: var(--muted); } .kv dd { margin: 0; }
+
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; }
+    nav.side { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+    nav.side ol { display: grid; grid-template-columns: 1fr 1fr; }
+    main { padding: 20px 16px 60px; }
+    header.top h1 { font-size: 1.5rem; }
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+<nav class="side" aria-label="Sections">
+  <div class="brand">Sealed tournaments</div>
+  <div class="sub">altered-draft · altered-bga-api · decks-api</div>
+  <ol id="toc">
+    <li><a href="#s1"><span class="num">1</span>What the feature is</a></li>
+    <li><a href="#s2"><span class="num">2</span>Functional description</a></li>
+    <li><a href="#s3"><span class="num">3</span>Architecture</a></li>
+    <li><a href="#s4"><span class="num">4</span>Pool generation</a></li>
+    <li><a href="#s5"><span class="num">5</span>Pool lifecycle &amp; binding</a></li>
+    <li><a href="#s6"><span class="num">6</span>Deck sync &amp; naming</a></li>
+    <li><a href="#s7"><span class="num">7</span>Database schema</a></li>
+    <li><a href="#s8"><span class="num">8</span>Code map</a></li>
+    <li><a href="#s9"><span class="num">9</span>API contracts</a></li>
+    <li><a href="#s10"><span class="num">10</span>Config &amp; deployment</a></li>
+    <li><a href="#s11"><span class="num">11</span>Local dev &amp; testing</a></li>
+    <li><a href="#s12"><span class="num">12</span>Invariants &amp; recipes</a></li>
+    <li><a href="#s13"><span class="num">13</span>History</a></li>
+    <li><a href="#s14"><span class="num">14</span>User-created tournaments</a></li>
+    <li><a href="#s15"><span class="num">15</span>Glossary</a></li>
+  </ol>
+</nav>
+
+<main>
+<header class="top">
+  <h1>Sealed tournaments on BGA</h1>
+  <button class="toggle" id="themeToggle" type="button" aria-label="Toggle theme">☀ / ☾</button>
+</header>
+<p class="meta">Feature documentation for developers. Same content as <code>docs/tournaments/README.md</code> (the AI-oriented Markdown). Written against the code as of 2026-10-18 (altered-draft branch <code>feat/user-tournaments</code>, altered-bga-api <code>main</code> at "Shift Stage 1 group parent to the tournament root", AlteredBGA <code>main</code> at <code>19beb5f2</code>, decks-api checkout). Click any diagram to open it full screen (scroll to zoom, drag to pan).</p>
+
+<!-- ───────────────────────── 1 ───────────────────────── -->
+<section id="s1">
+<h2>1. What the feature is</h2>
+<p>Re:Union runs <strong>online sealed tournaments</strong> of the Altered TCG. The tournament (pairings, rounds, results) lives on <strong>BoardGameArena (BGA)</strong>. The sealed part, opening a pool of boosters and building a deck from it, lives on <strong>altered-draft</strong> (<code>altered-draft.altered.re</code>). When a BGA game starts, BGA asks for the player's deck through <strong>altered-bga-api</strong> (<code>bga-api.altered.re</code>), which answers the sealed deck <em>list</em> straight from altered-draft, while the deck <em>content</em> still comes from <strong>altered-core-decks-api</strong> (<code>decks.alteredcore.org</code>), which validates the deck against the player's pool by calling altered-draft back.</p>
+
+<h3>Two ways a sealed configuration is chosen</h3>
+<ul>
+<li><strong>Declared tournaments</strong> (<a href="#s14">§14</a>): an organizer declares a BGA tournament on altered-draft with its own configuration (7 boosters of one set, heroes, uniques, ban list). Its players get a pool built from that configuration.</li>
+<li><strong>The current competitive format</strong> (a row in <code>current_format</code>, seeded by <code>sealed-pools-schema.sql</code>) for the two generic flows: the casual "normal" pool and the "prepare my next tournament" pool used for BGA tournaments nobody declared.</li>
+</ul>
+<h3>The seeded current format</h3>
+<table>
+<tr><th>Field</th><th>Value</th><th>Meaning</th></tr>
+<tr><td><code>type</code></td><td><code>sealed</code></td><td>Only sealed is supported; draft is explicitly deferred.</td></tr>
+<tr><td><code>set_code</code></td><td><code>EOLE</code></td><td>Set 6, <em>Roots of Corruption</em>.</td></tr>
+<tr><td><code>unique_count</code></td><td><code>1</code></td><td>One unique <strong>inside</strong> the boosters (replaces a rare slot).</td></tr>
+<tr><td><code>guaranteed_uniques</code></td><td><code>1</code></td><td>One extra unique handed out <strong>outside</strong> the boosters.</td></tr>
+<tr><td><code>even_factions</code></td><td><code>false</code></td><td>Uniques drawn freely across factions.</td></tr>
+<tr><td><code>heroes_in_pool</code></td><td><code>false</code></td><td>Heroes are not opened in boosters; <strong>every hero of the set is appended to the pool</strong>.</td></tr>
+</table>
+<p>So a pool of the current format is <strong>7 boosters × 12 cards</strong> (9 commons + 3 rares, one of the 21 rare slots swapped for a unique) <strong>+ 1 guaranteed unique + all EOLE heroes</strong>.</p>
+
+<h3>The two cheating vectors</h3>
+<div class="cards">
+  <div class="card"><h4>Re-rolling the pool</h4><p>Killed by a <strong>one-shot commitment</strong>: a player gets exactly one pool per declared tournament (unique <code>(sub, tournament_ref)</code>), and can hold only one <em>pending</em> generic tournament pool at a time, unlocked (a new one becomes mintable) only once a real BGA tournament binds to it.</p></div>
+  <div class="card"><h4>Playing cards outside the pool</h4><p>Killed by <strong>server-side validation</strong>: the pool is generated once from a seed and <strong>stored</strong> on the row (<code>cards</code>, <code>boosters</code>); decks-api checks <code>deck ⊆ pool</code> against it before handing deck content to BGA. Invalid → HTTP 422 → BGA shows "This deck is not legal".</p></div>
+</div>
+<div class="callout warn"><strong>Not built</strong>Draft tournaments, a signed attestation (the <code>SEALED_ATTESTATION_SECRET</code> env var is provisioned on AlteredOps but unused by any code), an end signal for BGA tournaments nobody declared (declared ones have an end date and a manual close), automated cleanup of old pools.</div>
+</section>
+
+<!-- ───────────────────────── 2 ───────────────────────── -->
+<section id="s2">
+<h2>2. Functional description</h2>
+<h3>2.1 Actors</h3>
+<table>
+<tr><th>Actor</th><th>Role</th></tr>
+<tr><td>Player</td><td>Has a Re:Union account (Keycloak, realm <code>players</code>). Logs into altered-draft with it.</td></tr>
+<tr><td>Organizer</td><td>Any logged-in player who declares a tournament (<a href="#s14">§14</a>). Edits, cancels, closes or deletes the tournaments they declared; at most 10 open at a time.</td></tr>
+<tr><td>Moderator</td><td>Organizer powers on every tournament, no creation limit, plus <strong>detach</strong> (<a href="#s14">§14.5</a>). A Keycloak realm role (<code>TOURNAMENT_MODERATOR_ROLE</code>) and/or an allowlist of subs (<code>TOURNAMENT_MODERATORS</code>).</td></tr>
+<tr><td>altered-draft</td><td>Declared tournaments (<code>tournaments</code>), pool generation and storage, the deckbuilder; owns all tournament state (<code>sealed_pools</code>).</td></tr>
+<tr><td>altered-core-decks-api</td><td>Stores the actual deck (card list) under the player's account. Validates sealed decks.</td></tr>
+<tr><td>altered-bga-api</td><td>Gateway in front of decks-api for BGA. Short-circuits the sealed deck list to altered-draft. Also ingests end-of-game stats (separate feature).</td></tr>
+<tr><td>BGA (AlteredBGA game + platform)</td><td>Runs the tournament and the games. The game code (PHP, <code>modules/php/States/SetupTrait.php</code>) builds the envelope and calls BGA's platform proxy, which forwards to altered-bga-api with the player's bearer token and appends <code>tournamentId</code>/<code>gameId</code>. The game client (<code>altered.js</code>) drives the sealed-specific screens.</td></tr>
+<tr><td>Keycloak (<code>auth.altered.re</code>)</td><td>Identity. Every tournament endpoint verifies the player's bearer token against userinfo.</td></tr>
+<tr><td>Card data sources</td><td>Set files from the PolluxTroy0 GitHub DB, uniques from <code>cards.alteredcore.org</code>, images from <code>cdn.alteredcore.org</code>.</td></tr>
+</table>
+
+<h3>2.2 Pages in altered-draft</h3>
+<p>All tournament pages require a Re:Union login, except the public list of declared tournaments (<code>/tournament</code>) and a tournament's page (<code>/tournament/t/:id</code>). Logged-out visitors get a "Connect" button that returns them to the same page after login.</p>
+<table class="wrap">
+<tr><th>Route</th><th>Component</th><th>What the player sees</th></tr>
+<tr><td><code>/</code></td><td><code>Home.jsx</code></td><td>A <strong>"Sealed set 6"</strong> block with two image buttons: <strong>Tournaments</strong> → <code>/tournament</code> and <strong>Normal mode</strong> → <code>/tournament/normal</code>.</td></tr>
+<tr><td><code>/tournament</code></td><td><code>TournamentMenu.jsx</code></td><td>Header (title, "Create a tournament", BGA registration notice); <strong>"My ongoing tournaments"</strong> (logged in, when any): a grid of the started tournaments the player has a pool in, each card opening the tournament page with a direct "Change my deck" button; then <strong>tabs</strong>, each with a one-line explanation, the active one kept in the URL (<code>?tab=upcoming|ongoing|pools|created</code>): <strong>Upcoming</strong> (default, public), <strong>Ongoing</strong> (public: pools can still be prepared until the end), <strong>My pools</strong> (every bound pool, declared tournaments first; a card opens the tournament page, or the pool itself for a BGA tournament nobody declared, plus "Change my deck"; the generic "Prepare my next tournament" block sits at the bottom of this tab), <strong>My created tournaments</strong> (<code>GET /api/tournaments?mine=1</code>, every status, grouped: ongoing then upcoming, each chronological, then a folded "Ended and cancelled (N)" block with the ended, cancelled and detached ones). The two personal tabs show a Connect box when logged out.</td></tr>
+<tr><td><code>/tournament/new</code></td><td><code>TournamentForm.jsx</code></td><td>Declare a tournament (<a href="#s14">§14</a>).</td></tr>
+<tr><td><code>/tournament/t/:id</code></td><td><code>TournamentDetail.jsx</code></td><td>A declared tournament: description, dates, 3-step checklist, organizer panel (<a href="#s14">§14</a>). Public.</td></tr>
+<tr><td><code>/tournament/t/:id/edit</code></td><td><code>TournamentForm.jsx</code></td><td>Edit a declared tournament (organizer / moderator).</td></tr>
+<tr><td><code>/tournament/t/:id/pool</code></td><td><code>TournamentPoolPage.jsx</code> → <code>TournamentPoolView</code></td><td>The player's pool for a declared tournament (get-or-create).</td></tr>
+<tr><td><code>/tournament/prep</code></td><td><code>TournamentPrep.jsx</code> → <code>TournamentPoolView</code></td><td>The player's single <em>pending</em> tournament pool. <strong>No reset button</strong>: the one-shot commitment.</td></tr>
+<tr><td><code>/tournament/normal</code></td><td><code>TournamentNormal.jsx</code> → <code>TournamentPoolView</code></td><td>The single casual pool (non-tournament BGA sealed games). <strong>"Reset pool"</strong> with a <strong>30-minute cooldown</strong> and a live countdown.</td></tr>
+<tr><td><code>/tournament/pools/:id</code></td><td><code>TournamentBoundDetail.jsx</code> → <code>TournamentPoolView</code></td><td>One bound tournament pool, to edit the deck between games. Title = tournament name.</td></tr>
+<tr><td><code>/edit/deck/:deckId</code></td><td><code>EditDeckRedirect.jsx</code></td><td>Deep link from a decks-api deck id (BGA, altered.re). Resolves the caller's own pool for that deck and redirects to <code>/tournament/normal</code> or <code>/tournament/pools/:id</code>. Unknown or foreign deck → "Deck not found".</td></tr>
+</table>
+
+<h4>The shared pool screen (<code>TournamentPoolView.jsx</code>)</h4>
+<ul>
+<li><strong>First-open pack reveal</strong> (<code>PackReveal.jsx</code>): full-screen overlay through the 7 boosters, then an <strong>8th "booster" holding the guaranteed unique</strong>. Once per pool (localStorage <code>pool_reveal_seen:&lt;poolId&gt;:&lt;resetAt&gt;</code>), skippable (button or Escape). Images are preloaded per pack.</li>
+<li><strong>Full-pool deckbuilder</strong> (<code>PoolGrid</code>): every card with +/- controls, filters, grouping. Heroes appear in the full pool, not in any booster.</li>
+<li><strong>Validity badge</strong>: <code>≥ 30 cards</code>, <code>≤ 3 factions</code>, <code>≤ 1 hero</code> → Valid / Not valid.</li>
+<li><strong>Random deck</strong> (only when the deck is empty): a 30-card, ≤3-faction, 1-hero deck from the pool (<code>randomDeck.js</code>).</li>
+<li><strong>Reset deck</strong> (with confirmation) empties the deck; the pool is untouched.</li>
+<li><strong>Reset pool</strong> (normal mode only): new pool, deck deleted, 30-minute cooldown.</li>
+<li><strong>Background deck sync</strong>: as soon as the deck is non-empty, a deck is created on decks-api and kept in sync on every change, throttled to one call per 2 s (see §6).</li>
+</ul>
+
+<h3>2.3 Player journeys</h3>
+<h4>Declared tournament journey (<a href="#s14">§14</a>)</h4>
+<ol>
+<li>An organizer declares the tournament on <code>/tournament/new</code> with the BGA link and its sealed configuration. It shows in the public "Upcoming" list of <code>/tournament</code>.</li>
+<li>The player opens the tournament page (<code>/tournament/t/:id</code>) and follows its checklist: register on BGA (remembered in the browser, BGA registration can't be verified) → <strong>Open my pool</strong> (one stored pool per player, built from the tournament's config, created <strong>pre-bound</strong> to the tournament's BGA id) → build the deck (synced to decks-api).</li>
+<li>When a game starts, the BGA deck-list call lands on that pool directly (<a href="#s14">§14.2</a>). A player who never opened altered-draft gets the pool created by that first call, with a random deck, like in the generic journey below.</li>
+</ol>
+<h4>Generic tournament journey (BGA tournaments nobody declared)</h4>
+<ol>
+<li>The player opens <code>/tournament/prep</code> any time before the tournament. A pending pool is minted on first visit and stays locked. They build a deck; it is saved under their Re:Union account as a <code>sealed</code>-format deck.</li>
+<li>They register to the tournament on BGA. BGA's schedule is the start of the rounds, so the deck has to be built before.</li>
+<li>The first game starts. BGA asks altered-bga-api for the deck list with <code>format: SEALED</code> and the tournament id. altered-bga-api calls altered-draft, which <strong>binds</strong> the pending pool to that id (one-time write), records the game, and returns the linked deck summary. If the player never built a deck, altered-draft <strong>mints a random legal deck</strong> named <code>Random …</code> so the game can start. On the BGA side the sealed format skips the preconstructed-deck wizard and goes straight to the fetch flow; the single returned deck is auto-selected. A name starting with <code>Random</code> shows a warning ("You didn't build your deck before the matches started…"); a name starting with <code>Invalid</code> stops there with a link to fix the deck on altered-draft; an empty list shows "No Sealed deck found" with a link to altered-draft.</li>
+<li>The pool now appears under <strong>"My pools"</strong>, and a <em>new</em> pending pool is available for the next tournament. The player may edit the bound deck between games; every BGA deck-content fetch re-validates it.</li>
+<li>BGA fetches the deck content through altered-bga-api → decks-api. decks-api validates <code>deck ⊆ pool</code> by asking altered-draft for the pool linked to that deck id. Invalid → 422 → "This deck is not legal".</li>
+</ol>
+<h4>Normal (casual) journey</h4>
+<p>Same screen, for non-tournament BGA sealed games. A BGA deck-list call <strong>without</strong> a tournament id resolves to the player's normal pool. The player can reset the pool every 30 minutes; resetting deletes the linked deck on decks-api (best-effort) so decks-api never validates against a stale pool.</p>
+
+<h3>2.4 Interactions with other Re:Union surfaces</h3>
+<ul>
+<li><strong>altered.re / deckbuilder.alteredcore.org</strong>: the synced deck is a regular deck in the account (<code>format: sealed</code>, <code>isDraft</code> reflecting validity). Editing it there goes through decks-api's generic save, which validates against the pool too (by deck id). decks-api refuses to change a deck's format to or from <code>sealed</code>.</li>
+<li><strong>BGA</strong>: only through altered-bga-api (§9.2). The BGA table option "Deck format = Sealed" (option 155, value 7, <code>OPTION_DF_SEALED</code> in AlteredBGA) selects the format; its description tells players decks must be built on altered-draft.altered.re. The BGA client links to <code>https://altered-draft.altered.re/edit/deck/&lt;deckId&gt;</code> ("change your deck between games", "fix it"), which is the <code>/edit/deck/:deckId</code> deep link above.</li>
+<li><strong>End-of-game stats</strong> (altered-bga-api <code>POST /games/register</code>): separate feature that stores games per BGA tournament id. Not wired to sealed pools, but keyed on the same ids as <code>sealed_pools.tournament_id</code>, so a join is possible later.</li>
+</ul>
+
+<h3>2.5 Known functional limits</h3>
+<ul>
+<li>"My pools" only grows: pools are never archived. Declared tournaments show their status (upcoming / ongoing / ended / cancelled) next to the pool; generic ones have none.</li>
+<li>Validity differs slightly between altered-draft (<code>≤ 1</code> hero) and decks-api (<code>exactly 1</code> hero). A 30-card deck without a hero shows "Valid" in the app but is rejected by decks-api and BGA (§12).</li>
+<li>The pool contents are visible to the player before the tournament, by design: only the validated deck counts.</li>
+</ul>
+</section>
+
+<!-- ───────────────────────── 3 ───────────────────────── -->
+<section id="s3">
+<h2>3. Architecture</h2>
+<h3>3.1 Components</h3>
+<figure class="diagram">
+<script type="text/x-mermaid">
+flowchart LR
+  subgraph Player
+    B[Browser<br/>altered-draft SPA]
+  end
+  subgraph alteredDraft["altered-draft (altered-draft.altered.re)"]
+    API[api/tournament-*.js + api/tournaments/*<br/>Vercel-style handlers<br/>mounted by server/index.js]
+    PG[(Postgres<br/>tournaments<br/>current_format<br/>sealed_pools<br/>sealed_pool_games)]
+    API --> PG
+  end
+  KC[Keycloak<br/>auth.altered.re<br/>realm players]
+  DA[altered-core-decks-api<br/>decks.alteredcore.org]
+  BGAAPI[altered-bga-api<br/>bga-api.altered.re]
+  BGA[BGA platform +<br/>AlteredBGA game]
+  CARDS[Card data<br/>GitHub set JSON · cards.alteredcore.org · cdn.alteredcore.org]
+
+  B -- "Bearer token" --> API
+  B -- "/api/decks proxy" --> API
+  API -- "userinfo" --> KC
+  API -- "decks CRUD (player token)" --> DA
+  API -- "fetchSet / fetchUniques" --> CARDS
+  B -- "card data + images" --> CARDS
+  BGA -- "GET /api/bga/decks (envelope)" --> BGAAPI
+  BGA -- "GET /api/bga/decks/{id} (envelope)" --> BGAAPI
+  BGAAPI -- "SEALED list → /api/tournament-bga-decklist" --> API
+  BGAAPI -- "content → /api/bga/decks/{id}" --> DA
+  DA -- "/api/tournament-pool-by-deck" --> API
+  DA -- "token check" --> KC
+</script>
+<div class="render"></div><pre class="fallback"></pre>
+<figcaption>Components and the calls between them. altered-draft is the only owner of tournament state.</figcaption>
+</figure>
+
+<h3>3.2 State ownership</h3>
+<table class="wrap">
+<tr><th>State</th><th>Owner</th><th>Where</th></tr>
+<tr><td>Declared tournaments (name, BGA id, dates, organizer, config, status timestamps)</td><td>altered-draft</td><td><code>tournaments</code></td></tr>
+<tr><td>Active competitive format (generic flows)</td><td>altered-draft</td><td><code>current_format</code> (append-only)</td></tr>
+<tr><td>Per-player pools (nonce, config snapshot, <strong>stored cards + boosters</strong>, binding, deck summary)</td><td>altered-draft</td><td><code>sealed_pools</code></td></tr>
+<tr><td>Games played per pool</td><td>altered-draft</td><td><code>sealed_pool_games</code></td></tr>
+<tr><td>The deck itself (card list, name, isDraft, legality)</td><td>decks-api</td><td><code>Deck</code> / <code>DeckCard</code></td></tr>
+<tr><td>Identity</td><td>Keycloak</td><td><code>sub</code> claim; altered-draft stores <code>sub</code> as the owner key</td></tr>
+<tr><td>Deck editor state</td><td>browser</td><td>React state, seeded from decks-api on load (no localStorage for tournament decks)</td></tr>
+<tr><td>Pack-reveal "seen" flag</td><td>browser</td><td>localStorage <code>pool_reveal_seen:&lt;id&gt;:&lt;resetAt&gt;</code></td></tr>
+<tr><td>Tournament metadata + games + player results</td><td>altered-bga-api</td><td><code>Tournaments</code>, <code>Games</code>, <code>PlayerGames</code> (end-of-game feature)</td></tr>
+</table>
+<div class="callout"><strong>The pool's card list is stored; the deck's is not</strong>altered-draft <strong>stores the pool's card list</strong> (<code>sealed_pools.cards</code> = <code>{ ref: count }</code>, <code>boosters</code> = the 7 packs), generated once when the row is created (<a href="#s4">§4</a>). Rows created before that change are regenerated from their seed until <code>scripts/freeze-sealed-pools.mjs</code> stores them. The <strong>deck's</strong> card list is never stored here: only a summary (id, name, hero, faction, card count); the deck lives on decks-api.</div>
+
+<h3>3.3 Sequence: preparing a pool and building a deck</h3>
+<p>The same flow for a declared tournament goes through <code>GET /api/tournaments/:id/pool</code> (<code>getOrCreateTournamentPool</code>, config from the <code>tournaments</code> row); see <a href="#s14">§14</a>.</p>
+<figure class="diagram">
+<script type="text/x-mermaid">
+sequenceDiagram
+  autonumber
+  participant P as Player (browser)
+  participant AD as altered-draft API
+  participant KC as Keycloak
+  participant DB as Postgres (altered-draft)
+  participant DA as decks-api
+
+  P->>AD: GET /api/tournament-prep-pool (Bearer)
+  AD->>KC: GET userinfo → sub
+  AD->>DB: SELECT pending tournament pool for sub
+  alt none pending
+    AD->>DB: SELECT latest current_format
+    AD->>AD: buildPool(sub, config, nonce) → cards + boosters (fetches the set)
+    AD->>DB: INSERT sealed_pools (kind=tournament, nonce, config, cards, boosters)
+  end
+  AD->>AD: loadPool(sub, row) → stored cards + boosters (legacy row: regenerated)
+  AD-->>P: { id, kind, cards, boosters, deck: null, ... }
+  P->>P: fetchSet(set) + fetchUniques(unique refs) → cardMap
+  P->>P: PackReveal (first open), then full-pool deckbuilder
+  P->>P: player adds a card (deck 0 → 1)
+  Note over P: throttled 2 s
+  P->>AD: POST /api/decks { name, format: sealed, isDraft, deckCards }
+  AD->>DA: POST /api/decks (player token)
+  DA-->>AD: { id: deckId, ... }
+  AD-->>P: deck
+  P->>AD: POST /api/tournament-pool?id=poolId { deckId, name, heroRef, faction, cardQuantity }
+  AD->>DB: UPDATE sealed_pools SET deck_* ...
+  AD-->>P: pool (with deck summary)
+  loop every further edit (throttled)
+    P->>AD: PATCH /api/decks/:id { name, deckCards, isDraft, format }
+    AD->>DA: PATCH (merge-patch+json)
+    P->>AD: POST /api/tournament-pool?id=... (summary)
+  end
+</script>
+<div class="render"></div><pre class="fallback"></pre>
+</figure>
+
+<h3>3.4 Sequence: a BGA game starts</h3>
+<figure class="diagram">
+<script type="text/x-mermaid">
+sequenceDiagram
+  autonumber
+  participant BGA as BGA (platform + game)
+  participant GW as altered-bga-api
+  participant AD as altered-draft API
+  participant DB as Postgres (altered-draft)
+  participant DA as decks-api
+
+  BGA->>GW: GET /api/bga/decks?eventFormat=envelope&tournamentId=605019&gameId=555111 (Bearer player token)
+  GW->>GW: BgaEnvelope.TryDecode → payload.format == "SEALED"
+  GW->>GW: tournamentId := payload.tournamentParentId ?? query tournamentId
+  GW->>AD: GET /api/tournament-bga-decklist?tournamentId=597924&tournamentName=…&gameId=555111 (same Bearer)
+  AD->>AD: verifySub (Keycloak userinfo)
+  AD->>DB: bindTournamentId(sub, 597924, name)
+  Note over AD,DB: 1. row (sub, tournament_id) exists → return it (BGA name refreshed on legacy rows only)<br/>2. declared tournament with that BGA id → getOrCreateTournamentPool (stored pool from its config)<br/>3. else bind the pending generic pool: UPDATE … SET tournament_id, bound_at
+  AD->>DB: INSERT sealed_pool_games (pool_id, game_id) ON CONFLICT DO NOTHING
+  AD->>DA: ensureDeck: GET /api/decks/{deck_id} (reconcile format / isDraft / name)
+  alt no deck, or deck gone (404)
+    AD->>AD: loadPool + buildRandomDeck
+    AD->>DA: POST /api/decks { name: "Random …", isDraft: true }
+    AD->>DB: updateDeckSummary(pool, deckId)
+    AD->>DA: PATCH { isDraft: false }
+  end
+  AD-->>GW: hydra collection with the one deck summary
+  GW-->>BGA: same body, byte for byte
+  BGA->>GW: GET /api/bga/decks/envelope { deckId, format: SEALED, tableId, tournamentName }
+  GW->>GW: rewrite path to /api/bga/decks/{deckId} + query eventFormat/tableId/tournamentName
+  GW->>DA: GET /api/bga/decks/{deckId} (decks-api-direct client, Bearer)
+  DA->>DA: BgaDeckController::item → format == sealed → SealedFormatValidator
+  DA->>AD: GET /api/tournament-pool-by-deck?deckId=… (Bearer, cached 1 h per (sub, deckId))
+  AD->>DB: SELECT sealed_pools WHERE sub AND deck_id
+  AD->>AD: loadPoolCounts: stored cards, or regenerated for a legacy row
+  AD-->>DA: { cards: { ref: count }, ... }
+  alt deck ⊆ pool and legal
+    DA-->>GW: 200 deck content (deckCardsByType, legality: true)
+    GW->>GW: alt-art ownership rewrite (fail-open)
+    GW-->>BGA: deck content
+  else invalid
+    DA-->>GW: 422 "Card X is not in your sealed pool."
+    GW-->>BGA: 422 → "This deck is not legal"
+  end
+</script>
+<div class="render"></div><pre class="fallback"></pre>
+<figcaption>Deck list (binding + auto-minted deck) then deck content (validation). The list never touches decks-api; the content never touches binding.</figcaption>
+</figure>
+
+<h3>3.5 Sequence: resetting the normal pool</h3>
+<figure class="diagram">
+<script type="text/x-mermaid">
+sequenceDiagram
+  autonumber
+  participant P as Player
+  participant AD as altered-draft API
+  participant DB as Postgres
+  participant DA as decks-api
+
+  P->>AD: POST /api/tournament-normal-pool (Bearer)
+  AD->>DB: SELECT normal pool for sub
+  alt reset_at within the last 30 min
+    AD-->>P: 429 { error: "cooldown", remainingMs }
+  else
+    AD->>AD: buildPool(sub, current format, new nonce)
+    AD->>DB: UPDATE sealed_pools SET nonce, config, cards, boosters, reset_at = now(), deck_* = NULL
+    AD->>DA: DELETE /api/decks/{previousDeckId} (best-effort, player token)
+    AD-->>P: new pool (cards, boosters, deck: null)
+  end
+</script>
+<div class="render"></div><pre class="fallback"></pre>
+</figure>
+</section>
+
+<!-- ───────────────────────── 4 ───────────────────────── -->
+<section id="s4">
+<h2>4. Pool generation: determinism and composition</h2>
+<p>One entry point: <code>buildPool(sub, { config, nonce })</code> in <code>src/lib/poolBuilder.js</code>, fed by <code>src/lib/prng.js</code>, <code>src/lib/uniqueFactionRanges.js</code>, <code>src/lib/packGenerator.js</code> (<code>generateTournamentSealedPool</code>) and <code>src/lib/banlist.js</code>. <code>config</code> is the sealed configuration object of spec §5.1 (<code>src/lib/tournamentConfig.js</code>): a declared tournament's <code>config</code>, or the current format converted by <code>configFromLegacyFormat</code>.</p>
+<div class="callout"><strong>Generate, then store</strong>Every pool is generated once, in memory, then inserted with its <code>cards</code> and <code>boosters</code> in one <code>INSERT … ON CONFLICT DO NOTHING RETURNING *</code> (<code>poolStore.insertPool</code>; a normal-pool reset does the same in its UPDATE). A card-data failure throws before anything is written; a lost insert race discards the generated pool and re-selects the winner's. Readers call <code>loadPool(sub, row)</code> (<code>api/_lib/tournamentPool.js</code>): the stored contents, or, for a row created before storage existed, <code>regeneratePool</code> (the same <code>buildPool</code> on the row's snapshot columns, bit for bit the old output).</div>
+<h3>4.1 Seed</h3>
+<pre><code>seedStr = sub | set_code | unique_count | even_factions | heroes_in_pool | guaranteed_uniques | nonce</code></pre>
+<ul>
+<li><code>sub</code> is the verified Keycloak subject; <code>nonce</code> is a <code>crypto.randomUUID()</code> minted when the row is inserted (or on a normal-pool reset).</li>
+<li><strong><code>tournament_id</code> is deliberately NOT part of the seed</strong>: a pool must have identical contents before and after binding (fixed 2026-08-12).</li>
+<li>Two PRNG streams derived with FNV-1a (<code>hashSeed</code>) + <code>mulberry32</code>: <code>mulberry32(hashSeed(seedStr))</code> for the booster draws and the unique-slot placement; <code>mulberry32(hashSeed(seedStr + '#uniques'))</code> for the unique draws.</li>
+</ul>
+<h3>4.2 Steps (<code>buildPool(sub, { config, nonce })</code>)</h3>
+<figure class="diagram">
+<script type="text/x-mermaid">
+flowchart TD
+  A[seedStr from sub + config + nonce] --> U[pickDeterministicUniques<br/>set, rng for uniques, uniqueCount = inBoosters + guaranteed,<br/>banned families skipped when excludeBanlist]
+  U --> U1[first inBoosters refs → booster uniques]
+  U --> U2[rest → outside uniques]
+  A --> S[fetchSet setCode<br/>B printings only, tokens excluded<br/>filterBanned when excludeBanlist]
+  S --> G[generateTournamentSealedPool cards, rng, uniqueRefs = booster uniques, includeHeroes when heroes = packs]
+  U1 --> G
+  G --> P[7 packs × 12 refs<br/>9 commons + 3 rares; unique injected into a rare slot chosen by the same rng]
+  P --> C[counts = flatten packs]
+  U2 --> C
+  C --> H{heroes}
+  H -- free --> H1[append every HERO card of the set ×1]
+  H -- packs --> H2[heroes already drawn in packs, 13-card packs]
+  H1 --> R[return counts + boosters]
+  H2 --> R
+</script>
+<div class="render"></div><pre class="fallback"></pre>
+</figure>
+<ul>
+<li><strong>Booster composition</strong> (<code>generateOnePack</code> with <code>rng</code>): optional hero slot (only if <code>includeHeroes</code>), 9 commons (1 per faction + 3 paired draws AX|BR, LY|MU, OR|YZ), 3 rares. No unique slot of its own. Pools deduped by <code>name+faction</code> in <code>splitPools</code>.</li>
+<li><strong>Unique injection</strong>: after the 7 packs are built, all <code>(pack, rareSlot)</code> positions (7×3) are shuffled with the booster rng and the first <code>uniqueRefs.length</code> receive the uniques.</li>
+<li><strong>Unique drawing</strong> (<code>pickDeterministicUniques</code>): uses the bundled tables <code>src/lib/data/factionRanges/&lt;SET&gt;.json</code> = <code>{ family_id: { faction: [[start, end], …] } }</code>, from real production data. Each rare <em>family</em> (e.g. <code>AX_106</code>) has a serial range split into non-contiguous windows between its home faction and exactly one out-of-faction pairing (per card, not a fixed axis). A draw picks a <code>(family, faction)</code> weighted by serial count, then a serial uniformly within that faction's windows, and composes <code>ALT_&lt;SET&gt;_B_&lt;family&gt;_U_&lt;serial&gt;</code>. <code>evenFactions: true</code> round-robins target factions (the config drops it below 2 uniques). Dedupes within one call (so booster and outside uniques never overlap); an optional <code>isAllowed(ref)</code> predicate redraws refused refs (the ban list). Sets covered: CORE, COREKS, ALIZE, BISE, CYCLONE, DUSTER, EOLE. <strong>FUGUE has no table</strong>: a declared tournament can't ask for uniques on it (config validation), and <code>buildPool</code> <strong>throws</strong> when fewer uniques than requested can be drawn instead of returning a smaller pool.</li>
+<li><strong>Guaranteed uniques</strong> and <strong>appended heroes</strong> belong to <code>counts</code> but to no booster. The frontend shows the guaranteed unique(s) as an "8th booster" ("unique refs in <code>cards</code> that are in no booster").</li>
+<li><code>loadPoolCounts</code> is the flat-counts-only variant used by validation callers.</li>
+<li><strong>Ban list</strong>: <code>excludeBanlist</code> (declared tournaments only; the current format leaves it off) removes banned cards from the set before generation and banned families from the unique draws.</li>
+<li>Card rendering resolves uniques live per ref (<code>fetchUniques</code> → <code>cards.alteredcore.org</code>; image = the base <code>_R1</code> art on the CDN).</li>
+</ul>
+<h3>4.3 Why pools are stored</h3>
+<p>The generation is deterministic (same seed → same pool), and pools used to be regenerated on every read. But the draws pick cards <strong>by index in the upstream set file's order</strong>: a card inserted or reordered upstream would silently change every regenerated pool mid-tournament and invalidate decks. Storing the generated pool removes that dependency for every new pool; <code>scripts/freeze-sealed-pools.mjs</code> (<code>make db-freeze-pools</code>, run once after the migration, idempotent) stores the older rows. Every consumer (pool pages, BGA deck list, decks-api validation) reads the same stored contents through <code>loadPool</code>.</p>
+</section>
+
+<!-- ───────────────────────── 5 ───────────────────────── -->
+<section id="s5">
+<h2>5. Pool lifecycle and tournament binding</h2>
+<p>A <code>sealed_pools</code> row is one of four things, distinguished by <code>kind</code>, <code>tournament_id</code> and <code>tournament_ref</code>:</p>
+<figure class="diagram">
+<script type="text/x-mermaid">
+flowchart LR
+  S((player)) -->|"GET /api/tournament-normal-pool<br/>(first call)"| N["<b>Normal pool</b><br/>kind = normal<br/>reset in place: new nonce + new stored pool,<br/>deck deleted, 30-min cooldown"]
+  S -->|"GET /api/tournament-prep-pool (first call),<br/>or first BGA call for an undeclared id"| P["<b>Pending pool</b><br/>kind = tournament<br/>tournament_id NULL"]
+  P -->|"BGA call for an undeclared BGA id<br/>bindTournamentId: UPDATE … WHERE tournament_id IS NULL"| B["<b>Bound legacy pool</b><br/>tournament_id = BGA id<br/>tournament_ref NULL"]
+  S -->|"Open my pool, or first BGA call<br/>for a declared BGA id<br/>getOrCreateTournamentPool"| A["<b>Attached pool</b><br/>tournament_ref + tournament_id<br/>set at creation"]
+  B -->|"tournament declared later<br/>on that BGA id: adopted<br/>(adopted_at = now)"| A
+  A -->|"moderator detach (§14.5):<br/>pool created for the declaration"| D["deleted"]
+  A -->|"moderator detach (§14.5):<br/>adopted pool released<br/>(tournament_ref, adopted_at NULL)"| B
+  NP["Partial unique index: at most ONE pending pool per sub.<br/>The one-shot commitment lock."] -.- P
+  NB["Unique (sub, tournament_id): one pool per player per BGA tournament.<br/>Unique (sub, tournament_ref): one pool per player per declared tournament.<br/>Immutable once created: nonce, config, cards, tournament_id."] -.- A
+  NB -.- B
+  classDef note fill:#4a4538,color:#fff,stroke:#4a4538
+  class NP,NB note
+</script>
+<div class="render"></div><pre class="fallback"></pre>
+</figure>
+<p>Every later BGA call for the same tournament returns the same row; nothing changes on it except the informative <code>tournament_name</code> of a bound legacy pool (a declared tournament keeps its altered-draft name).</p>
+<p>Rules implemented in <code>src/lib/poolStore.js</code>:</p>
+<ul>
+<li><code>getOrCreateNormalPool(sub)</code> / <code>getOrCreatePreparationPool(sub)</code>: SELECT, else build a pool from the latest <code>current_format</code> with a fresh nonce and INSERT it with its contents. Insert races absorbed by <code>ON CONFLICT … DO NOTHING</code> + re-select.</li>
+<li>Declaring a tournament (<code>tournamentStore.createTournament</code>), or moving it to another BGA id, <strong>adopts every legacy pool already bound to that BGA id in the same statement</strong> and the handler imposes their format on the tournament (mixed formats → 409 <code>bga_tournament_mixed_formats</code>); see §14.2.</li>
+<li><code>getOrCreateTournamentPool(sub, tournament, { createdBy })</code>: the attached pool, else a legacy pool already bound to the tournament's BGA id (<strong>adopted</strong>: <code>tournament_ref</code>, the altered-draft name and <code>adopted_at</code> set, contents unchanged, its deck is already in play), else a new stored pool from the tournament's config, created pre-bound (<code>tournament_id</code> = the BGA id, <code>bound_at</code> = now). Races on either unique index (<code>ON CONFLICT</code> on one, a caught 23505 on the other) re-select the winner. The INSERT only goes through while the tournament row is not detached and still holds the config the pool was built from (<code>INSERT … SELECT … FROM (SELECT 1 FROM tournaments … FOR SHARE)</code>), so a config edit or a detach committed during generation never leaves a pool with a stale config: the pool is rebuilt from the re-read tournament (3 attempts), else <code>tournament_unavailable</code> / <code>pool_unavailable</code>, which the handlers answer with a 409, never a 500.</li>
+<li><code>bindTournamentId(sub, tournamentId, tournamentName)</code> (the BGA path): (1) if a row <code>(sub, tournament_id)</code> exists → return it (refresh <code>tournament_name</code> only on a legacy row); (2) else, if a live declared tournament has that BGA id → <code>getOrCreateTournamentPool</code> (<code>createdBy: 'bga'</code>); (3) else take (or create) the pending pool and <code>UPDATE … SET tournament_id, tournament_name, bound_at = now() WHERE id = $1 AND tournament_id IS NULL</code>; lost race → re-select. <strong>Idempotent</strong>: every game of the same tournament re-triggers it. Binding frees the "pending" slot, so the next <code>/api/tournament-prep-pool</code> mints a new pool.</li>
+<li><code>resetNormalPool(sub)</code>: 30-minute cooldown on <code>reset_at</code>; new nonce; rebuilds and stores the pool from the active format; clears <code>deck_*</code>; returns <code>previousDeckId</code> for the handler to delete on decks-api.</li>
+<li><code>recordGamePlayed(poolId, gameId)</code> / <code>countGamesPlayed(poolId)</code>: deduped by the composite PK.</li>
+<li><code>getPoolById(sub, id)</code>, <code>getPoolByDeckId(sub, deckId)</code> and <code>getPoolForTournament(sub, id)</code> are always <strong>owner-scoped</strong> (never resolve a pool by id alone).</li>
+<li><code>listBoundTournamentPools(sub)</code>: "My pools", declared tournaments first, then most recent first, with the declared tournament's name / dates / status columns (LEFT JOIN).</li>
+</ul>
+<div class="callout"><strong>Which id gets bound</strong>altered-bga-api forwards BGA's <code>tournamentParentId</code> when the envelope carries one, else the stage's own <code>tournamentId</code>. A multi-stage BGA tournament (Stage 1 groups + Stage 2) therefore binds <strong>one</strong> pool for the whole event.</div>
+</section>
+
+<!-- ───────────────────────── 6 ───────────────────────── -->
+<section id="s6">
+<h2>6. Deck synchronisation and naming conventions</h2>
+<p>The deck lives on decks-api; altered-draft keeps only a summary on the pool row (<code>deck_id</code>, <code>deck_name</code>, <code>deck_hero_ref</code>, <code>deck_faction</code>, <code>deck_card_quantity</code>). Two writers keep both sides consistent.</p>
+<h3>Frontend sync (<code>TournamentPoolView.jsx</code>, throttled 2 s)</h3>
+<ul>
+<li>Runs after every deck change once the deck is non-empty. Skipped when the state is merely seeded from a load or a reset (<code>skipNextSyncRef</code>), so opening the page never renames a <code>Random …</code> deck.</li>
+<li>Computes validity and builds <code>{ name, deckCards, isDraft: !valid, format: 'sealed' }</code>.</li>
+<li><code>syncDeckToPool</code> (<code>src/lib/poolDeckSync.js</code>): <code>updateDeck(deckId)</code> then <code>syncPoolDeck(poolId, summary)</code> (<code>POST /api/tournament-pool?id=</code>) if the pool has a deck. A <strong>new</strong> deck (none yet, or a 404 because it was deleted from the deckbuilder) is created <strong>as a draft</strong>, linked with <code>syncPoolDeck</code>, and only then, if valid, PATCHed to <code>isDraft: false</code>: the same sequence as <code>ensureDeck</code> below. Creating an already-valid deck (&quot;Random deck&quot;: 30 cards at once) as non-draft made decks-api validate it before the link existed: the deck was stored as illegal (&quot;Could not verify your sealed pool&quot;) until a later edit (fixed 2026-10-17).</li>
+<li>One save at a time (<code>createSerialRunner</code>, <code>src/lib/serialRunner.js</code>): an edit while a save runs queues ONE more run, which reads the pool and the deck at run time (<code>syncOnceRef</code>). Two overlapping saves of a brand-new deck used to both see "no deck yet" and each create a deck on decks-api. If the flip off draft fails, the link is kept (the next save flips it) rather than reported as a failure that would create yet another deck (fixed 2026-10-18).</li>
+</ul>
+<h3>Backend reconciliation (<code>ensureDeck</code>, on every BGA deck-list call)</h3>
+<ul>
+<li>If the pool has a deck with cards: <code>GET</code> it on decks-api. 404 → gone, re-mint. Other failures → trust the cache.</li>
+<li>Re-derives from the live card list: <code>format</code> forced to <code>sealed</code>, <code>isDraft = !valid</code>, name rebuilt from the pool. Any drift is PATCHed and the summary refreshed.</li>
+<li>If there is no deck (or empty/gone): <code>buildRandomDeck</code> from the pool (<code>loadPool</code>), <code>POST</code> as <strong><code>isDraft: true</code> first</strong>, link it to the pool, then <code>PATCH { isDraft: false }</code>. decks-api validates non-draft decks by calling back <code>/api/tournament-pool-by-deck</code> and caches a failure for 30 s per deck id, so validating before the link exists would poison the cache.</li>
+</ul>
+<h3>Naming</h3>
+<table class="wrap">
+<tr><th>Situation</th><th>Name</th></tr>
+<tr><td>Tournament pool, bound or attached</td><td><code>&lt;tournament_name&gt;</code> (for a declared tournament: its altered-draft name, kept in sync on rename)</td></tr>
+<tr><td>Tournament pool, pending</td><td>frontend: <code>t('tournamentPoolView.nextTournamentDeckName')</code>; backend: <code>Next tournament sealed set 6</code></td></tr>
+<tr><td>Normal pool</td><td>frontend: <code>t('tournamentPoolView.normalDeckName')</code>; backend: <code>Sealed set 6 · out of tournament</code></td></tr>
+<tr><td>Deck not valid</td><td>prefix <strong><code>Invalid </code></strong>. The BGA client (<code>altered.js</code>) matches a name starting with <code>invalid</code> (case-insensitive): it skips the deck-content call and shows "Invalid deck" with a link to fix it on altered-draft.</td></tr>
+<tr><td>Auto-minted, unreviewed</td><td>prefix <strong><code>Random </code></strong> (dropped on the player's next edit, since the frontend recomputes the name from scratch). The BGA client matches a name starting with <code>random</code> and warns "You didn't build your deck before the matches started. A random deck was generated using your pool."</td></tr>
+</table>
+<p><code>isDraft</code> mirrors validity: <code>true</code> when invalid (decks-api skips validation and marks the deck not legal), <code>false</code> when valid (decks-api validates, incl. pool membership).</p>
+</section>
+
+<!-- ───────────────────────── 7 ───────────────────────── -->
+<section id="s7">
+<h2>7. Database schema</h2>
+<p>File: <code>sealed-pools-schema.sql</code> (idempotent; applied by <code>make dev</code>, by the AlteredOps <code>migrations</code> one-shot image, and by hand on any other Postgres). Requires <code>pgcrypto</code>.</p>
+<figure class="diagram">
+<script type="text/x-mermaid">
+erDiagram
+  current_format {
+    bigint id PK
+    text type "sealed | draft"
+    text set_code
+    int unique_count "uniques inside boosters"
+    boolean even_factions
+    boolean heroes_in_pool
+    int guaranteed_uniques "uniques outside boosters"
+    timestamptz created_at
+  }
+  sealed_pools {
+    uuid id PK
+    text sub "Keycloak subject (owner)"
+    text kind "normal | tournament"
+    text set_code "snapshot"
+    int unique_count "snapshot"
+    boolean even_factions "snapshot"
+    boolean heroes_in_pool "snapshot"
+    int guaranteed_uniques "snapshot"
+    text nonce "random uuid, part of the seed"
+    uuid tournament_ref FK "declared tournament (§14)"
+    timestamptz adopted_at "set when a declaration adopted it (§14.5)"
+    jsonb config "config snapshot (§14)"
+    jsonb cards "stored pool { ref: count } (§14)"
+    jsonb boosters "stored boosters string[][] (§14)"
+    text created_by "page | bga | legacy"
+    text tournament_id "null = pending; set once"
+    text tournament_name "informative, refreshable"
+    timestamptz bound_at
+    timestamptz reset_at "normal only, cooldown"
+    text deck_id "decks-api deck uuid"
+    text deck_name
+    text deck_hero_ref
+    text deck_faction
+    int deck_card_quantity
+    timestamptz created_at
+  }
+  tournaments {
+    uuid id PK
+    text name
+    text description
+    text format "sealed"
+    text bga_url "canonical link"
+    text bga_tournament_id "unique among live rows (partial index)"
+    timestamptz starts_at
+    timestamptz ends_at "optional"
+    text organizer_sub
+    text organizer_name
+    jsonb config
+    timestamptz cancelled_at
+    timestamptz ended_at "manual close"
+    timestamptz detached_at "moderator detach, frees the BGA id"
+    timestamptz created_at
+    timestamptz updated_at
+  }
+  sealed_pool_games {
+    uuid pool_id PK,FK
+    text game_id PK "BGA gameId"
+    timestamptz created_at
+  }
+  current_format ||..o{ sealed_pools : "snapshotted at insert (no FK)"
+  sealed_pools ||--o{ sealed_pool_games : "games played"
+  tournaments ||--o{ sealed_pools : "attached pools (tournament_ref)"
+</script>
+<div class="render"></div><pre class="fallback"></pre>
+</figure>
+<table class="wrap">
+<tr><th>Index</th><th>Definition</th><th>Enforces</th></tr>
+<tr><td><code>sealed_pools_one_normal_per_sub</code></td><td>unique <code>(sub) WHERE kind = 'normal'</code></td><td>One casual pool per player (reset updates in place).</td></tr>
+<tr><td><code>sealed_pools_one_pending_tournament_per_sub</code></td><td>unique <code>(sub) WHERE kind = 'tournament' AND tournament_id IS NULL</code></td><td><strong>One-shot commitment</strong>: one pending pool per player.</td></tr>
+<tr><td><code>sealed_pools_one_binding_per_sub_per_tournament</code></td><td>unique <code>(sub, tournament_id) WHERE tournament_id IS NOT NULL</code></td><td>One pool per player per tournament.</td></tr>
+<tr><td><code>sealed_pools_bound_tournaments</code></td><td><code>(sub, bound_at DESC) WHERE kind = 'tournament' AND tournament_id IS NOT NULL</code></td><td>"My pools" listing.</td></tr>
+<tr><td><code>sealed_pools_one_per_sub_per_tournament_ref</code></td><td>unique <code>(sub, tournament_ref) WHERE tournament_ref IS NOT NULL</code></td><td>One pool per player per declared tournament (<a href="#s14">§14</a>).</td></tr>
+<tr><td><code>sealed_pools_by_tournament_ref</code></td><td><code>(tournament_ref) WHERE tournament_ref IS NOT NULL</code></td><td>Per-declaration lookups: pool counts, rename, detach, the FK check on tournament delete.</td></tr>
+<tr><td><code>sealed_pools_legacy_by_bga_id</code></td><td><code>(tournament_id) WHERE tournament_ref IS NULL AND tournament_id IS NOT NULL</code></td><td>Legacy pools of a BGA id: adoption on declare, the <code>?bgaId=</code> imposed-format lookup.</td></tr>
+<tr><td><code>tournaments_bga_tournament_id_live</code></td><td>unique <code>(bga_tournament_id) WHERE detached_at IS NULL</code></td><td>One live declaration per BGA tournament, cancelled ones included; a detached one frees the id (<a href="#s14">§14.5</a>).</td></tr>
+<tr><td><code>sealed_pool_games</code> PK</td><td><code>(pool_id, game_id)</code></td><td>Games-played dedup.</td></tr>
+</table>
+<ul>
+<li><code>current_format</code> is <strong>append-only</strong>. Changing the format = <code>INSERT</code> a new row; the active one is <code>ORDER BY created_at DESC, id DESC LIMIT 1</code>. Existing pools keep their snapshot.</li>
+<li>Migration guards: <code>tournament_seed → tournament_id</code> rename, columns added with <code>IF NOT EXISTS</code>, indexes dropped and recreated. The whole file is replayed on every deploy; the integration suite applies it twice on a populated DB and checks the indexes and the <code>tournament_ref</code> FK come out once.</li>
+<li>The seed row (EOLE, 1 in-booster unique, 1 guaranteed, random factions, heroes appended) is inserted only when the table is empty.</li>
+<li><code>created_by</code> (<code>page</code> / <code>bga</code> / <code>legacy</code>) records where a pool was created; rows that predate the column are backfilled <code>legacy</code>. <code>tournaments</code> holds no status column: the status is derived from its timestamps (<a href="#s14">§14.4</a>).</li>
+<li>No cleanup job exists for <code>sealed_pools</code>.</li>
+</ul>
+<p><strong>Related tables in altered-bga-api</strong> (EF Core, Postgres <code>bgadb</code>), not part of the sealed flow but keyed on the same BGA ids: <code>Tournaments(TournamentId, Name, TournamentParentId, TournamentGroup)</code>, <code>Games(TableId PK, TournamentId, Format, Env, ReceivedAt)</code>, <code>PlayerGames(…, ReunionUserId, Deck, PlayedCards, IsWinner)</code>, <code>RequestLogs</code> (every request/response pair with <code>DecodedEnvelope</code> and an unverified <code>UserId</code>).</p>
+<p><strong>Related entity in decks-api</strong>: <code>Deck { id uuid, name (≤150), format enum incl. 'sealed', isDraft, isPublic, user, deckCards[], stats, formatErrors, legalityDetail }</code>.</p>
+</section>
+
+<!-- ───────────────────────── 8 ───────────────────────── -->
+<section id="s8">
+<h2>8. Code map and responsibilities</h2>
+<h3>8.1 altered-draft</h3>
+<table class="wrap">
+<tr><th>Path</th><th>Responsibility</th></tr>
+<tr><td><code>sealed-pools-schema.sql</code></td><td>Schema (incl. <code>tournaments</code>) + seed row + migration guards (<a href="#s7">§7</a>).</td></tr>
+<tr><td><code>src/lib/db.js</code></td><td><code>pg.Pool</code> from <code>DATABASE_URL</code> (max 5), SSL heuristic with <code>DATABASE_SSL</code> override. Server-side only.</td></tr>
+<tr><td><code>src/lib/poolStore.js</code></td><td>Data-access layer for pools: active format, generate-then-insert (<code>insertPool</code>), get-or-create (normal, pending, declared tournament with adoption), reset with cooldown, BGA binding order (<a href="#s5">§5</a>), listing, counters per tournament / origin, games played, owner-scoped lookups, deck summary update.</td></tr>
+<tr><td><code>src/lib/poolBuilder.js</code></td><td><code>buildPool</code> (the single generation entry point, <a href="#s4">§4</a>) and <code>buildPoolSeedString</code>.</td></tr>
+<tr><td><code>src/lib/tournamentConfig.js</code></td><td>The sealed config object: <code>validateTournamentConfig</code>, <code>configFromLegacyFormat</code>, <code>legacyColumnsFromConfig</code>. Pure.</td></tr>
+<tr><td><code>src/lib/tournamentRules.js</code></td><td><code>tournamentStatus</code> (derived status), <code>validateTournamentFields</code> (name, description, dates, BGA link), limits. Pure, shared by API and form.</td></tr>
+<tr><td><code>src/lib/bgaUrl.js</code></td><td><code>parseBgaTournamentUrl</code>: BGA link → canonical link + numeric id.</td></tr>
+<tr><td><code>src/lib/tournamentStore.js</code></td><td>SQL for <code>tournaments</code>: create / get / list by status / update (with the atomic "no pool" lock) / detach / delete-if-no-pools, <code>toTournamentJson</code>.</td></tr>
+<tr><td><code>src/lib/poolDeckSync.js</code></td><td><code>syncDeckToPool</code>: the frontend deck save + pool link (new deck: draft → link → flip, §6).</td></tr>
+<tr><td><code>src/lib/tournamentForm.js</code></td><td><code>tournamentFormIssues</code>: the form's live validation (API checks + duplicate link).</td></tr>
+<tr><td><code>api/_lib/auth.js</code></td><td><code>verifySub(req)</code>, <code>verifyUser(req)</code> (sub, display name, realm roles, moderator flag; roles read from the token only after userinfo accepted it), <code>isModerator</code>, <code>bearerToken(req)</code>.</td></tr>
+<tr><td><code>api/_lib/request.js</code></td><td><code>queryParam</code>, <code>jsonBody</code>: request helpers shared by Vercel and Express.</td></tr>
+<tr><td><code>api/_lib/tournamentPool.js</code></td><td><code>loadPool</code> / <code>loadPoolCounts</code> (stored, or <code>regeneratePool</code> for legacy rows, <a href="#s4">§4</a>), <code>ensureDeck</code> + <code>deckStillExists</code> (<a href="#s6">§6</a>), <code>poolResponse</code> (response shape), server-side decks-api calls.</td></tr>
+<tr><td><code>api/tournaments/index.js</code>, <code>api/tournaments/[id].js</code>, <code>api/tournaments/[id]/pool.js</code></td><td>Declared tournaments: public list / create, detail / edit / actions / delete, the player's get-or-create pool (<a href="#s14">§14.3</a>).</td></tr>
+<tr><td><code>scripts/freeze-sealed-pools.mjs</code></td><td>One-shot storage of legacy pools (<code>make db-freeze-pools</code>).</td></tr>
+<tr><td><code>api/tournament-normal-pool.js</code></td><td>GET get-or-create normal pool; POST reset (+ best-effort deck delete).</td></tr>
+<tr><td><code>api/tournament-prep-pool.js</code></td><td>GET get-or-create pending tournament pool. No reset.</td></tr>
+<tr><td><code>api/tournament-bound-pools.js</code></td><td>GET list of bound pools (summaries + games played + the declared tournament block).</td></tr>
+<tr><td><code>api/tournament-pool.js</code></td><td>GET one pool by id (owner-scoped, cards + boosters); POST update deck summary.</td></tr>
+<tr><td><code>api/tournament-bga-decklist.js</code></td><td>Called by altered-bga-api. Resolves the pool (<a href="#s5">§5</a> order), records game, <code>ensureDeck</code>, answers the hydra collection.</td></tr>
+<tr><td><code>api/tournament-pool-by-deck.js</code></td><td>Called by decks-api. Pool for <code>(sub, deckId)</code>, flat counts.</td></tr>
+<tr><td><code>api/tournament-pool-counts.js</code></td><td>Legacy, no caller today. Pool counts by <code>tournamentId</code>; <strong>also binds</strong> as a side effect.</td></tr>
+<tr><td><code>api/decks/index.js</code>, <code>api/decks/[id].js</code></td><td>Same-origin proxies to decks-api forwarding the player's token (list/create; get/patch).</td></tr>
+<tr><td><code>server/index.js</code></td><td>Express server for Docker: mounts every handler on <code>/api/*</code>. <strong>A new handler must be registered here too.</strong></td></tr>
+<tr><td><code>src/lib/prng.js</code></td><td><code>hashSeed</code> (FNV-1a), <code>mulberry32</code>, <code>seededRng</code>.</td></tr>
+<tr><td><code>src/lib/uniqueFactionRanges.js</code> + <code>src/lib/data/factionRanges/*.json</code></td><td>Deterministic unique drawing from per-family faction windows.</td></tr>
+<tr><td><code>src/lib/packGenerator.js</code></td><td><code>generateTournamentSealedPool</code>, <code>generateOnePack</code> with injectable rng, <code>splitPools</code>.</td></tr>
+<tr><td><code>src/lib/randomDeck.js</code></td><td><code>buildRandomDeck</code>: shared by the UI button and <code>ensureDeck</code>.</td></tr>
+<tr><td><code>src/lib/cardData.js</code></td><td><code>fetchSet</code>, <code>fetchUniques</code>, <code>isUniqueRef</code>, <code>cardImageUrl</code>.</td></tr>
+<tr><td><code>src/lib/tournamentApi.js</code></td><td>Frontend client for the tournament endpoints (adds the Bearer token, optional on the public tournament reads; throws with <code>.status</code>/<code>.data</code>).</td></tr>
+<tr><td><code>src/lib/decks.js</code></td><td>Frontend decks-api client via the proxies.</td></tr>
+<tr><td><code>src/components/TournamentPoolView.jsx</code></td><td>Shared pool/deckbuilder screen, validity, random deck, reset, throttled sync, reveal gating, optional back link.</td></tr>
+<tr><td><code>src/components/SetPresetGrid.jsx</code>, <code>TournamentUniqueFields.jsx</code>, <code>TournamentChecklist.jsx</code>, <code>TournamentBits.jsx</code></td><td>Set grid (shared with the Lobby), the tournament unique steppers, the 3-step checklist, status pill / date / config summary helpers.</td></tr>
+<tr><td><code>src/components/SettingsFields.jsx</code></td><td>Shared with the Lobby; <code>showLang={false}</code> hides the card-language row for tournaments.</td></tr>
+<tr><td><code>src/components/PackReveal.jsx</code></td><td>First-open pack-by-pack overlay (+ guaranteed-unique "8th booster").</td></tr>
+<tr><td><code>src/pages/TournamentMenu.jsx</code>, <code>TournamentForm.jsx</code>, <code>TournamentDetail.jsx</code>, <code>TournamentPoolPage.jsx</code>, <code>TournamentPrep.jsx</code>, <code>TournamentNormal.jsx</code>, <code>TournamentBoundDetail.jsx</code>, <code>EditDeckRedirect.jsx</code>, <code>Home.jsx</code>, <code>App.jsx</code></td><td>Routes and entry points (<a href="#s2">§2.2</a>).</td></tr>
+<tr><td><code>src/lib/i18n/en.js</code>, <code>fr.js</code></td><td><code>home.*</code>, <code>tournamentPages.*</code>, <code>tournaments.*</code> (declared tournaments), <code>tournamentPoolView.*</code>, <code>packReveal.*</code>, <code>deckValidity.*</code>.</td></tr>
+<tr><td><code>src/lib/banlist.js</code></td><td>Equinox ban list. Applied to a declared tournament's pools only when its organizer ticks <code>excludeBanlist</code>; never to the current-format pools. decks-api allows banned cards in sealed either way (pool membership is the only gate).</td></tr>
+<tr><td><code>src/lib/packGenerator.test.js</code>, <code>poolBuilder.test.js</code>, <code>tournamentConfig.test.js</code>, <code>tournamentRules.test.js</code>, <code>bgaUrl.test.js</code>, <code>tournamentForm.test.js</code>, <code>api/_lib/auth.test.js</code></td><td>Unit tests (determinism, config, rules, link parsing, form issues, moderator check).</td></tr>
+<tr><td><code>tests/integration/tournaments.test.js</code></td><td>Store + handlers against a real Postgres (<code>npm run test:integration</code>).</td></tr>
+<tr><td><code>ROADMAP.md</code> "Set 6 preview"</td><td>The design record (long, partly superseded).</td></tr>
+</table>
+
+<h3>8.2 altered-bga-api (.NET 10)</h3>
+<table class="wrap">
+<tr><th>Path</th><th>Responsibility</th></tr>
+<tr><td><code>Program.cs</code></td><td>Routes. <code>GET /api/bga/decks</code>: decode envelope → if <code>payload.format == "SEALED"</code> → <code>SealedDecklistHandler</code> (never falls through); else rewrite + YARP forward. <code>GET /api/bga/decks/{id}</code>: decode → <code>DeckContentHandler.TryRewrite</code> → <code>DeckOwnershipRewriteHandler</code>. Named <code>HttpClient("altered-draft")</code> with pooling, one retry, timing.</td></tr>
+<tr><td><code>Envelope/*</code></td><td>Envelope decoding (base64 or base64url, lenient JSON types).</td></tr>
+<tr><td><code>Decklist/DecklistPayload.cs</code></td><td><code>{ format, tableId, tournamentName, tournamentParentId }</code>.</td></tr>
+<tr><td><code>Decklist/SealedDecklistHandler.cs</code></td><td>Builds <code>GET {AlteredDraft:BaseUrl}/api/tournament-bga-decklist?tournamentId&amp;tournamentName&amp;gameId</code>, forwards <code>Authorization</code>, relays the response; 502 on missing config / unreachable.</td></tr>
+<tr><td><code>Decklist/DecklistHandler.cs</code></td><td>Non-sealed formats: rewrite <code>eventFormat</code> + add <code>tableId</code>/<code>tournamentName</code>, forward.</td></tr>
+<tr><td><code>DeckContent/*</code></td><td>Rewrite <code>{id}</code> envelope; fetch content from decks-api; alt-art rewrite (fail-open); 422 relayed unchanged.</td></tr>
+<tr><td><code>Upstream/*</code></td><td>Retry (connection errors, 502/503/504, 520–524; not 500, not timeouts) and pooling.</td></tr>
+<tr><td><code>RequestLogging/*</code></td><td>Persists request/response pairs; <code>GET /api/request-logs?apiKey=</code>.</td></tr>
+<tr><td><code>EndGame/*</code>, <code>GameSync/*</code>, <code>PlayerLookup/*</code>, <code>Data/*</code></td><td>End-of-game ingestion and feeds (separate feature).</td></tr>
+<tr><td><code>AlteredBgaApi.Tests/Decklist/SealedDecklistHandlerTests.cs</code>, <code>Integration/SealedDecklistEndpointTests.cs</code></td><td>Contract tests for the sealed short-circuit.</td></tr>
+<tr><td><code>appsettings.json</code></td><td><code>AlteredDraft:BaseUrl</code> default <code>https://altered-draft.altered.re</code>, <code>Upstream:BaseUrl</code> <code>https://decks.alteredcore.org</code>.</td></tr>
+</table>
+
+<h3>8.3 altered-core-decks-api (Symfony)</h3>
+<table class="wrap">
+<tr><th>Path</th><th>Responsibility</th></tr>
+<tr><td><code>src/Controller/BgaDeckController.php</code></td><td><code>collection()</code> (hydra list) and <code>item()</code>: for <code>format == sealed</code> runs <code>SealedFormatValidator</code> and throws 422 on errors; else returns <code>normalizeBga</code> content.</td></tr>
+<tr><td><code>src/Validator/Format/SealedFormatValidator.php</code></td><td>Exactly 1 hero, ≤3 factions, ≥29 non-hero cards, banned/suspended allowed, no set restriction, <strong>every card (hero included) ⊆ pool</strong>. Fails closed when the pool can't be fetched.</td></tr>
+<tr><td><code>src/Client/AlteredDraftSealedPoolClient.php</code></td><td><code>GET {ALTERED_DRAFT_URL}/api/tournament-pool-by-deck?deckId=</code> with the caller's Bearer; cache 1 h per <code>(keycloakId, deckId)</code>, 30 s on error.</td></tr>
+<tr><td><code>src/State/DeckStateProcessor.php</code></td><td>On save: <code>isDraft</code> → no validation; else validate by format. <code>assertSealedFormatIsImmutable</code>: a deck can't change format to or from <code>sealed</code>.</td></tr>
+<tr><td><code>src/Enum/DeckFormat.php</code>, <code>config/services.yaml</code>, <code>.env</code></td><td><code>sealed</code> enum value; <code>ALTERED_DRAFT_URL</code>.</td></tr>
+</table>
+
+<h3>8.4 AlteredOps (deployment)</h3>
+<table class="wrap">
+<tr><th>Path</th><th>Responsibility</th></tr>
+<tr><td><code>sync-with-servers/services/altered-draft/docker-compose.yml</code></td><td>Postgres (wal2json), one-shot <code>migrations</code> image (applies <code>*.sql</code>), app, realtime sidecar. <code>DATABASE_SSL=false</code>. The app's <code>environment:</code> list is explicit: <code>TOURNAMENT_MODERATOR_ROLE</code> / <code>TOURNAMENT_MODERATORS</code> must be listed there to reach the container.</td></tr>
+<tr><td><code>…/altered-draft/env/*.defaults</code>, <code>secrets.list</code></td><td>Domains, DB names; secrets <code>KEYCLOAK_CLIENT_SECRET</code>, <code>SEALED_ATTESTATION_SECRET</code> (unused), realtime secrets.</td></tr>
+<tr><td><code>…/bga-api/docker-compose.yml</code>, <code>env/*.defaults</code></td><td><code>AlteredDraft__BaseUrl</code> ← <code>ALTERED_DRAFT_BASE_URL</code> (per env), <code>Upstream__BaseUrl</code>.</td></tr>
+</table>
+
+<h3>8.5 AlteredBGA (the BGA game code)</h3>
+<table class="wrap">
+<tr><th>Path</th><th>Responsibility</th></tr>
+<tr><td><code>gameoptions.json</code> (option <code>155</code>, value <code>7</code>), <code>modules/php/constants.inc.php</code> (<code>OPTION_DF_SEALED</code>), <code>modules/php/Core/Globals.php</code></td><td>The "Sealed" deck-format table option → <code>setDeckFormat('SEALED')</code>.</td></tr>
+<tr><td><code>modules/php/States/SetupTrait.php</code> <code>actLoaAPIdDecks</code></td><td>Builds the deck-list envelope (<code>format</code>, <code>tableId</code>, <code>tournamentName</code>, <code>tournamentParentId</code>, <code>tournamentGroup</code>) into <code>eventFormat</code> and calls BGA's <code>get_player_decks</code>. Keeps <code>eventFormat</code> out of the request echoed to the client (base64 chars fail <code>validateJSonAlphaNum</code>).</td></tr>
+<tr><td><code>modules/php/States/SetupTrait.php</code> <code>actGetDeckInfos</code></td><td>Builds the deck-content envelope (<code>playerId</code>, <code>playerName</code>, <code>deckId</code>, <code>format</code>, <code>tableId</code>, <code>tournamentName</code>) as the <code>deck_id</code> of <code>get_player_deck_content</code>; throws "This deck is not legal" when <code>legality != true</code>; refuses uniques without <code>content</code>, with an unimplemented power, or named Moonlight Jellyfish.</td></tr>
+<tr><td><code>modules/php/States/EndGameTrait.php</code></td><td><code>register_game</code> call with <code>tournamentId</code>, <code>tournamentName</code>, <code>tournamentParentId</code>, <code>tournamentGroup</code>, players, decks, winner (the end-of-game feature of altered-bga-api).</td></tr>
+<tr><td><code>altered.js</code> (<code>isSealedDeckFormat</code>, <code>showAccountNotConfiguredDeckPickerContent</code>, <code>selectFetchedDeck</code>, <code>_getSealedDeckNoticesHtml</code>, <code>showInvalidFetchedDeckMessage</code>, <code>_getDeckEditLink</code>)</td><td>Sealed-only client flow: straight to the fetch flow, auto-select the single deck, <code>invalid</code>/<code>random</code> name prefixes, "No Sealed deck found" screen, links to <code>altered-draft.altered.re/edit/deck/&lt;id&gt;</code>.</td></tr>
+</table>
+<p>Tournament context comes from BGA's framework: <code>$this-&gt;bga-&gt;tournament-&gt;isTournament()</code> / <code>getInfo()</code> → <code>id</code>, <code>name</code>, <code>tournament_parent_id</code>, <code>tournament_group</code>.</p>
+</section>
+
+<!-- ───────────────────────── 9 ───────────────────────── -->
+<section id="s9">
+<h2>9. API contracts and exchanged data</h2>
+<h3>9.1 altered-draft tournament endpoints</h3>
+<p>Common to the endpoints below: <code>Authorization: Bearer &lt;Keycloak access token&gt;</code> verified via userinfo (<code>401 { "error": "unauthorized" }</code> otherwise); the declared-tournament endpoints (<code>/api/tournaments*</code>, public GETs with an optional bearer) are in <a href="#s14">§14.3</a>; JSON responses; <code>405</code> with <code>Allow</code> on wrong methods; unhandled errors → <code>500 { "error": "internal_error", "message" }</code> on the Express path.</p>
+<h4>Pool response shape (<code>poolResponse</code>)</h4>
+<pre><code>{
+  "id": "0b1e…-uuid",
+  "kind": "tournament",
+  "setCode": "EOLE",
+  "tournamentId": "597924",
+  "tournamentName": "Winter Cup",
+  "boundAt": "2026-09-22T18:02:11.000Z",
+  "resetAt": null,
+  "cards": { "ALT_EOLE_B_AX_12_C": 2, "ALT_EOLE_B_LY_7_R1": 1, "ALT_EOLE_B_AX_111_U_400": 1, "ALT_EOLE_B_AX_01_C": 1 },
+  "boosters": [["ALT_EOLE_B_AX_12_C", "…11 more refs"], ["…"], "… 7 arrays of 12"],
+  "gamesPlayed": 3,
+  "tournamentRef": "…-uuid (declared tournament only)",
+  "deck": { "id": "3fa85f64-…", "name": "Winter Cup", "heroRef": "ALT_EOLE_B_AX_01_C", "faction": "AX", "cardQuantity": 30 }
+}</code></pre>
+<p><code>cards</code> is <code>ref → count</code> (the full pool incl. guaranteed uniques and appended heroes); <code>boosters</code> only where noted; <code>deck</code> is <code>null</code> until a deck is linked; <code>tournamentRef</code> only on a pool attached to a declared tournament (and <code>/api/tournaments/:id/pool</code> adds <code>tournament: { id, name, status }</code>).</p>
+<table class="wrap">
+<tr><th>Endpoint</th><th>Method</th><th>Params</th><th>Response</th><th>Notes</th></tr>
+<tr><td><code>/api/tournament-normal-pool</code></td><td><span class="pill get">GET</span></td><td>—</td><td>pool + <code>boosters</code>, <code>gamesPlayed</code></td><td>Get-or-create the normal pool.</td></tr>
+<tr><td><code>/api/tournament-normal-pool</code></td><td><span class="pill post">POST</span></td><td>—</td><td>pool, or <code>429 { "error": "cooldown", "remainingMs" }</code></td><td>Reset. Deletes the previous deck on decks-api (best-effort).</td></tr>
+<tr><td><code>/api/tournament-prep-pool</code></td><td><span class="pill get">GET</span></td><td>—</td><td>pool + <code>boosters</code>, <code>gamesPlayed</code></td><td>Get-or-create the pending tournament pool.</td></tr>
+<tr><td><code>/api/tournament-bound-pools</code></td><td><span class="pill get">GET</span></td><td>—</td><td><code>{ "pools": [ { id, setCode, tournamentId, tournamentName, boundAt, gamesPlayed, tournament: { id, name, startsAt, status } | null, deck: { id, name, cardQuantity } | null } ] }</code></td><td>Declared tournaments first, then most recent first.</td></tr>
+<tr><td><code>/api/tournament-pool</code></td><td><span class="pill get">GET</span></td><td><code>id</code></td><td>pool + <code>boosters</code>, <code>gamesPlayed</code>; <code>400</code>; <code>404 not_found</code></td><td>Owner-scoped.</td></tr>
+<tr><td><code>/api/tournament-pool</code></td><td><span class="pill post">POST</span></td><td><code>id</code>; body <code>{ deckId, name, heroRef, faction, cardQuantity }</code></td><td>pool + <code>boosters</code>, <code>gamesPlayed</code></td><td>Updates the cached deck summary.</td></tr>
+<tr><td><code>/api/tournament-bga-decklist</code></td><td><span class="pill get">GET</span></td><td><code>tournamentId?</code>, <code>tournamentName?</code>, <code>gameId?</code></td><td>hydra collection (below)</td><td>For altered-bga-api. Resolves the pool (<a href="#s5">§5</a>), records the game, <code>ensureDeck</code>.</td></tr>
+<tr><td><code>/api/tournament-pool-by-deck</code></td><td><span class="pill get">GET</span></td><td><code>deckId</code></td><td>pool <strong>without</strong> <code>boosters</code> (+ <code>gamesPlayed</code>); <code>400</code>; <code>404</code></td><td>For decks-api.</td></tr>
+<tr><td><code>/api/tournament-pool-counts</code></td><td><span class="pill get">GET</span></td><td><code>tournamentId?</code></td><td><code>{ "id", "cards" }</code></td><td>Legacy. Binds when <code>tournamentId</code> is given.</td></tr>
+</table>
+<h4><code>/api/tournament-bga-decklist</code> response (relayed verbatim to BGA)</h4>
+<pre><code>{
+  "hydra:member": [
+    {
+      "alterator": { "reference": "ALT_EOLE_B_AX_01_C" },
+      "faction": { "reference": "AX" },
+      "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "name": "Winter Cup",
+      "cardQuantity": 30,
+      "format": "sealed"
+    }
+  ],
+  "hydra:totalItems": 1,
+  "hydra:view": { "@id": "/api/tournament-bga-decklist?tournamentId=597924&…", "@type": "hydra:PartialCollectionView" }
+}</code></pre>
+<p>Zero or one member. Empty only when a deck could not be minted at all (e.g. decks-api down).</p>
+
+<h3>9.2 BGA → altered-bga-api</h3>
+<p>The AlteredBGA game code (<code>modules/php/States/SetupTrait.php</code>) builds the envelope itself with <code>base64_encode(json_encode(...))</code> (standard base64 with padding; altered-bga-api accepts base64 and base64url alike) and calls BGA's platform functions <code>get_player_decks</code> / <code>get_player_deck_content</code>. BGA's platform then calls altered-bga-api with the player's Re:Union bearer token and <strong>appends <code>tournamentId</code> and <code>gameId</code> as raw query params</strong> (the game code never sets them). The only free-text fields the game code controls are <code>eventFormat</code> (deck list) and <code>{id}</code> (deck content), hence the envelope. <code>env</code> is the BGA game name (<code>altered</code>, or the test instance's name), <code>mode</code> is BGA table option 201 (the rating mode, hence sometimes a bare number). <code>tableId</code> is sent as a string.</p>
+<h4>Deck list</h4>
+<pre><code>GET /api/bga/decks?eventFormat=&lt;b64&gt;&amp;tournamentId=605019&amp;gameId=555111&amp;page=1&amp;name=&amp;faction.reference[]=…
+
+{ "v": 1, "env": "altered", "mode": 1,
+  "payload": { "format": "SEALED", "tableId": "123456", "tournamentName": "Winter Cup - Stage 2",
+               "tournamentParentId": 597924, "tournamentGroup": "A" } }</code></pre>
+<p><code>tournamentName</code> / <code>tournamentParentId</code> / <code>tournamentGroup</code> come from BGA's <code>$this-&gt;bga-&gt;tournament-&gt;getInfo()</code> (<code>name</code>, <code>tournament_parent_id</code>, <code>tournament_group</code>) and are <code>null</code> outside a tournament. altered-bga-api's <code>DecklistPayload</code> reads <code>format</code>, <code>tableId</code>, <code>tournamentName</code>, <code>tournamentParentId</code>; <code>tournamentGroup</code> is ignored on this call. The game code keeps <code>eventFormat</code> out of the request it echoes back to its client: the client replays that request on pagination and faction changes, and BGA's <code>validateJSonAlphaNum</code> guard rejects base64's <code>+ / =</code>.</p>
+<div class="callout warn"><strong>Asymmetry</strong><code>tournamentId</code> and <code>gameId</code> are raw query params added by BGA's platform on the request itself, not envelope fields. <code>tournamentParentId</code> only travels in the envelope (AlteredBGA #630). Reading <code>tournamentId</code> from the payload was the 2026-08-12 bug that made every sealed call fall back to the normal pool.</div>
+<h4>Deck content</h4>
+<pre><code>GET /api/bga/decks/&lt;b64&gt;
+
+{ "v": 1, "env": "altered", "mode": 1,
+  "payload": { "playerId": "96369700", "playerName": "Shiranui_8668",
+               "deckId": "3fa85f64-5717-4562-b3fc-2c963f66afa6", "format": "SEALED",
+               "tableId": "123456", "tournamentName": "Winter Cup - Stage 2" } }</code></pre>
+<p><code>playerId</code> / <code>playerName</code> are ignored by altered-bga-api's <code>DeckContentPayload</code>.</p>
+<p>Rewritten to <code>GET {Upstream}/api/bga/decks/3fa85f64-…?eventFormat=SEALED&amp;tableId=123456&amp;tournamentName=…</code>. Anything that is not a valid envelope (legacy plain <code>STANDARD</code>, plain deck uuid) forwards untouched.</p>
+
+<h3>9.3 altered-bga-api → altered-draft</h3>
+<p><code>GET {AlteredDraft:BaseUrl}/api/tournament-bga-decklist?tournamentId=&lt;parent or stage id&gt;&amp;tournamentName=&lt;name&gt;&amp;gameId=&lt;gameId&gt;</code> with the incoming <code>Authorization</code> header copied. Absent values are omitted. Response relayed with its status and content type. Failure modes: <code>502 { "error": "altered_draft_not_configured" }</code>, <code>502 { "error": "altered_draft_unreachable" }</code>. One automatic retry on connection errors / 502 / 503 / 504 / Cloudflare 520–524. A SEALED request <strong>never</strong> falls through to decks-api.</p>
+
+<h3>9.4 Deck content: altered-bga-api → decks-api → altered-draft</h3>
+<ul>
+<li>altered-bga-api → decks-api: <code>GET /api/bga/decks/{deckId}?eventFormat=SEALED&amp;tableId&amp;tournamentName</code> (Bearer copied).</li>
+<li>decks-api → altered-draft: <code>GET /api/tournament-pool-by-deck?deckId=&lt;deckId&gt;</code> (Bearer copied). Uses only <code>cards</code>. Cached 1 h per <code>(keycloakId, deckId)</code>; errors/404 cached 30 s and treated as "cannot validate" → invalid.</li>
+<li>decks-api → BGA: <code>200</code> deck content (<code>deckCardsByType</code>, <code>alterator</code>, <code>legality</code>, …) or <code>422</code> with the joined messages (<code>Card "X" is not in your sealed pool.</code>, <code>Card "X": only 1 in your pool, deck has 2.</code>, faction/hero/size errors). altered-bga-api relays non-200 bodies as-is; on 200 it may rewrite alt-art references (fail-open).</li>
+<li>AlteredBGA game code (<code>actGetDeckInfos</code>) throws "This deck is not legal" when <code>legality != true</code>.</li>
+</ul>
+
+<h3>9.5 altered-draft → decks-api</h3>
+<p>Server-side, always with the <strong>player's</strong> bearer token (never a service account):</p>
+<table class="wrap">
+<tr><th>Call</th><th>When</th></tr>
+<tr><td><span class="pill get">GET</span> <code>/api/decks/{id}</code></td><td><code>ensureDeck</code> existence + reconciliation check.</td></tr>
+<tr><td><span class="pill patch">PATCH</span> <code>/api/decks/{id}</code> (<code>application/merge-patch+json</code>)</td><td>Reconcile <code>format</code> / <code>isDraft</code> / <code>name</code>; flip the minted deck off draft.</td></tr>
+<tr><td><span class="pill post">POST</span> <code>/api/decks</code> <code>{ name, format: "sealed", isDraft: true, isPublic: false, deckCards: [{ cardReference, quantity }] }</code></td><td>Mint a random deck.</td></tr>
+<tr><td><span class="pill del">DELETE</span> <code>/api/decks/{id}</code></td><td>On normal-pool reset (best-effort).</td></tr>
+</table>
+<p>Frontend, through the same-origin proxies <code>api/decks/index.js</code> (GET list, POST create) and <code>api/decks/[id].js</code> (GET, PATCH): <code>createDeck</code>, <code>updateDeck</code>, <code>getDeck</code>.</p>
+</section>
+
+<!-- ───────────────────────── 10 ───────────────────────── -->
+<section id="s10">
+<h2>10. Configuration, environments, deployment</h2>
+<h3>altered-draft</h3>
+<table class="wrap">
+<tr><th>Variable</th><th>Purpose</th></tr>
+<tr><td><code>DATABASE_URL</code></td><td>Postgres with <code>sealed-pools-schema.sql</code> applied. Server-side only.</td></tr>
+<tr><td><code>DATABASE_SSL</code></td><td><code>true</code>/<code>false</code> override of the localhost heuristic (AlteredOps sets <code>false</code>).</td></tr>
+<tr><td><code>KEYCLOAK_ISSUER</code>, <code>KEYCLOAK_CLIENT_ID</code>, <code>KEYCLOAK_CLIENT_SECRET</code></td><td>Login + <code>verifySub</code> userinfo URL (<code>src/lib/endpoints.js</code>).</td></tr>
+<tr><td><code>DECKS_API_URL</code></td><td>decks-api base (default <code>https://decks.alteredcore.org</code>).</td></tr>
+<tr><td><code>CARDS_API_URL</code>, <code>CDN_URL</code></td><td>Unique resolution and images.</td></tr>
+<tr><td><code>TOURNAMENT_MODERATOR_ROLE</code>, <code>TOURNAMENT_MODERATORS</code></td><td>Optional. Moderators of declared tournaments: a Keycloak realm role name, and/or a comma-separated allowlist of subs (<a href="#s14">§14</a>).</td></tr>
+<tr><td><code>SEALED_ATTESTATION_SECRET</code></td><td>Provisioned on AlteredOps, <strong>not read by any code</strong>.</td></tr>
+</table>
+<p>Deployments: <strong>prod</strong> <code>https://altered-draft.altered.re</code>, <strong>preprod</strong> <code>https://altered-draft-preprod.altered.re</code> (AlteredOps, Docker, <code>server/index.js</code>, GitOps pull ~5 min after a push to <code>main</code> of the Re:Union fork). The Re:Union fork is deployed <strong>only through AlteredOps</strong> (no Vercel deployment); the handlers keep the Vercel function signature, <code>server/index.js</code> mounts them.</p>
+<p><strong>Rolling out the user-created tournaments (lot 1)</strong>, in this order:</p>
+<ol>
+<li><strong>Before deploying, on the target DB:</strong> the active format must be drawable. <code>SELECT * FROM current_format ORDER BY created_at DESC, id DESC LIMIT 1;</code> must not name a set without faction-range data (anything outside <code>CORE</code>, <code>COREKS</code>, <code>ALIZE</code>, <code>BISE</code>, <code>CYCLONE</code>, <code>DUSTER</code>, <code>EOLE</code>) with <code>unique_count &gt; 0</code> or <code>guaranteed_uniques &gt; 0</code>: the unique draw now throws there instead of silently drawing fewer uniques, so every new normal or pending pool would fail. Same check for the legacy rows the freeze will regenerate: <code>SELECT count(*) FROM sealed_pools WHERE cards IS NULL AND set_code NOT IN ('CORE','COREKS','ALIZE','BISE','CYCLONE','DUSTER','EOLE') AND (unique_count &gt; 0 OR guaranteed_uniques &gt; 0);</code> → 0.</li>
+<li><strong>Deploy</strong> (push to <code>main</code>): the <code>migrations</code> image applies <code>sealed-pools-schema.sql</code> (idempotent and additive, safe to replay; the integration suite applies it twice on a populated DB), then the new app container starts.</li>
+<li><strong>Freeze, once the new container serves:</strong> <code>docker exec altered-draft node scripts/freeze-sealed-pools.mjs</code> → <code>frozen N/N pools (0 failed)</code> (<code>altered-draft</code> is the app's <code>container_name</code> in the AlteredOps compose, on each host). Re-running it is harmless (<code>frozen 0/0</code>).</li>
+<li><strong>Moderators (optional):</strong> <code>TOURNAMENT_MODERATORS</code> and/or <code>TOURNAMENT_MODERATOR_ROLE</code> in the AlteredOps env of the service (<a href="#s8">§8.4</a>). Without them, nobody can detach.</li>
+</ol>
+<h3>altered-bga-api</h3>
+<table class="wrap">
+<tr><th>Setting (env form)</th><th>Purpose</th></tr>
+<tr><td><code>AlteredDraft__BaseUrl</code> (<code>ALTERED_DRAFT_BASE_URL</code> in AlteredOps)</td><td>Where sealed deck-list calls go. prod → <code>altered-draft.altered.re</code>, preprod → <code>altered-draft-preprod.altered.re</code>. Only required when a SEALED request is handled; a missing value must not crash startup.</td></tr>
+<tr><td><code>Upstream__BaseUrl</code></td><td>decks-api (<code>https://decks.alteredcore.org</code>, same in both envs).</td></tr>
+<tr><td><code>Upstream__Retries</code>, <code>Upstream__RetryDelayMs</code></td><td>Retry tunables (default 1, 250 ms + jitter).</td></tr>
+<tr><td><code>ConnectionStrings__bgadb</code>, <code>ApiKeys__*</code></td><td>DB and the other features.</td></tr>
+</table>
+<p>Deployments: <code>https://bga-api.altered.re</code> (prod), <code>https://bga-api-preprod.altered.re</code> (preprod). Images <code>ghcr.io/altered-re-union/altered-bga-api</code> (+ <code>-migrations</code>).</p>
+<h3>decks-api and Keycloak</h3>
+<p>decks-api: <code>ALTERED_DRAFT_URL</code> (default <code>https://altered-draft.altered.re</code>; tests use <code>http://altered-draft.mock</code>). Single deployment for all envs.</p>
+<p>Keycloak client <code>altered-draft</code> (confidential) must list every altered-draft origin's <code>/auth/callback</code>. Tokens from the <code>players</code> realm are accepted by altered-draft, decks-api and (unverified, label only) altered-bga-api's request logs.</p>
+</section>
+
+<!-- ───────────────────────── 11 ───────────────────────── -->
+<section id="s11">
+<h2>11. Local development and testing</h2>
+<p><strong>altered-draft</strong>: <code>make dev</code> starts Postgres (applies both schemas, incl. the <code>current_format</code> seed and the <code>tournaments</code> table), the API on <code>:8080</code> and Vite on <code>:5173</code>. Tournament pages need Keycloak + decks-api from the sibling <code>altered-dev-environment</code> repo (<code>./run.sh</code>; users <code>alice</code>/<code>bob</code>, password <code>TestPassword1234</code>; Chrome/Firefox only). <code>make dev</code> registers the <code>altered-draft</code> Keycloak client (re-run <code>make keycloak-client</code> after a Keycloak restart). decks-api calls altered-draft back through <code>host.docker.internal:8080</code>.</p>
+<p><strong>altered-bga-api</strong>: <code>dotnet run</code> with <code>AlteredDraft__BaseUrl=http://localhost:8080</code> and a Postgres. Simulate BGA:</p>
+<pre><code># envelope → base64url (no padding)
+ENV=$(printf '{"v":1,"env":"alteredtest","mode":"arena","payload":{"format":"SEALED","tableId":1,"tournamentName":"Local Cup"}}' \
+  | base64 | tr '+/' '-_' | tr -d '=\n')
+TOKEN=&lt;access token of alice from the local Keycloak&gt;
+curl -s "http://localhost:5176/api/bga/decks?eventFormat=$ENV&amp;tournamentId=42&amp;gameId=g1" \
+  -H "Authorization: Bearer $TOKEN" | jq
+
+# or altered-draft directly
+curl -s "http://localhost:8080/api/tournament-bga-decklist?tournamentId=42&amp;gameId=g1" -H "Authorization: Bearer $TOKEN"</code></pre>
+<table class="wrap">
+<tr><th>Repo</th><th>Command</th><th>Covers</th></tr>
+<tr><td>altered-draft</td><td><code>npm test</code> (Vitest)</td><td>Pool generation (<code>generateTournamentSealedPool</code>, <code>buildPool</code>), PRNG, unique draws, config / rules / BGA link / form validation, moderator check, card helpers.</td></tr>
+<tr><td>altered-draft</td><td><code>npm run test:integration</code> (Vitest + throwaway Postgres in Docker)</td><td><code>api/rooms</code>, and <code>tests/integration/tournaments.test.js</code>: stored pools, the BGA resolution order, adoption, concurrent creation, <code>tournamentStore</code>, every <code>api/tournaments*</code> handler, the freeze script. Pool generation is mocked there (no network).</td></tr>
+<tr><td>altered-bga-api</td><td><code>dotnet test</code></td><td><code>SealedDecklistHandlerTests</code> (params, parent id, quoted ids, auth forwarding, 502 paths), <code>SealedDecklistEndpointTests</code> (real pipeline, never-fall-through, startup without <code>AlteredDraft:BaseUrl</code>).</td></tr>
+<tr><td>decks-api</td><td>PHPUnit</td><td><code>SealedFormatValidatorTest</code>, <code>SealedFormatValidatorUserDeckTest</code>, <code>AlteredDraftSealedPoolClientTest</code>, <code>BgaDeckSealedIntegrationTest</code>.</td></tr>
+</table>
+<p><strong>Debugging in prod</strong>: altered-bga-api <code>GET /api/request-logs?apiKey=&lt;ApiKeys:EndGame&gt;</code> shows the raw frames BGA sent (with <code>decodedEnvelope</code> and <code>userId</code>). altered-draft logs <code>verifySub</code> failures and <code>tournament-pool-by-deck</code> hits/misses with <code>sub</code> and <code>deckId</code>.</p>
+</section>
+
+<!-- ───────────────────────── 12 ───────────────────────── -->
+<section id="s12">
+<h2>12. Invariants, pitfalls, and how to extend</h2>
+<h3>12.1 Invariants (do not break)</h3>
+<ol>
+<li><strong>The seed string excludes <code>tournament_id</code></strong> and includes exactly the six snapshot columns + nonce, in that order. Adding a column to the seed changes every legacy (unfrozen) pool.</li>
+<li><strong>One pending tournament pool per <code>sub</code></strong>, enforced by the partial unique index; binding is a one-time <code>UPDATE … WHERE tournament_id IS NULL</code>.</li>
+<li><strong>Pools are generated once and stored</strong> (generate, then insert in one statement); readers go through <code>loadPool</code>. Only rows created before storage are regenerated, until frozen.</li>
+<li><strong>Owner scoping</strong>: every lookup is <code>(sub, …)</code>. Never resolve a pool or a deck by id alone.</li>
+<li><strong><code>/api/tournament-bga-decklist</code> returns the exact hydra shape</strong> of decks-api's collection endpoint; altered-bga-api relays it byte for byte.</li>
+<li><strong>A SEALED request never falls through to decks-api</strong> in altered-bga-api, whatever happens.</li>
+<li><strong><code>Invalid </code> and <code>Random </code> prefixes are literals</strong> matched on the BGA side; never localize them. The base name always tracks the tournament name (no dates).</li>
+<li><strong>Create every new deck as <code>isDraft: true</code> first, link, then flip</strong> (backend <code>ensureDeck</code> and frontend <code>syncDeckToPool</code>): decks-api caches a failed validation for 30 s per deck id.</li>
+<li><strong>PATCH to decks-api uses <code>application/merge-patch+json</code></strong>.</li>
+<li><strong><code>heroes_in_pool = false</code> means every hero of the set is in <code>cards</code></strong>; decks-api relies on that instead of an "any hero" carve-out.</li>
+<li><strong>JSON imports use <code>with { type: 'json' }</code></strong> (plain Node on Docker enforces it).</li>
+<li>New API handlers must be <strong>registered in <code>server/index.js</code></strong> as well as existing as <code>api/*.js</code>.</li>
+<li><code>current_format</code> is <strong>append-only</strong>; never <code>UPDATE</code> it.</li>
+<li><strong>A declared tournament's config and BGA link are frozen once a pool exists</strong> (checked atomically in the UPDATE); name, description and dates stay editable in every status.</li>
+<li><strong><code>jsonb</code> parameters are <code>JSON.stringify</code>-ed</strong> (<code>pg</code> turns JS arrays into Postgres arrays).</li>
+</ol>
+<h3>12.2 Pitfalls observed in history</h3>
+<ul>
+<li>Reading <code>tournamentId</code> from the envelope instead of the query string (fixed 2026-08-12).</li>
+<li>Including <code>tournament_id</code> in the seed (fixed 2026-08-12).</li>
+<li>Reading <code>AlteredDraft:BaseUrl</code> as a required startup binding broke every format in prod (now lazy, per request).</li>
+<li>Express 5's <code>req.query</code> is a live getter: <code>Object.assign</code> on it is lost; <code>server/index.js</code> uses <code>Object.defineProperty</code> for route params.</li>
+<li>Validity mismatch: altered-draft <code>≤ 1</code> hero vs decks-api <code>exactly 1</code> hero. A hero-less 30-card deck is "Valid" in the UI, saved as <code>isDraft: false</code>, then rejected by decks-api (and BGA).</li>
+<li>decks-api caches pool-by-deck for 1 h: a normal-pool reset deletes the deck precisely so the stale cache entry can never be hit again.</li>
+<li><code>api/tournament-pool-counts.js</code> binds as a side effect; calling it casually with a <code>tournamentId</code> consumes the player's pending pool.</li>
+<li><code>pickDeterministicUniques</code> yields fewer uniques when a set has no faction-range table (FUGUE); <code>buildPool</code> now throws in that case, and a declared tournament can't ask for uniques on such a set. A legacy row on such a set with uniques would fail to load: check before deploying (TESTING.md).</li>
+<li>Anyone can declare any BGA id (squatting): handled by the moderator-only detach (<a href="#s14">§14.5</a>).</li>
+<li>Pasting a BGA <strong>stage</strong> link instead of the parent tournament's would make every BGA call miss the declaration; the form says to paste the main tournament link, and the organizer panel warns when a started tournament has no pool "created by BGA games".</li>
+<li>BGA applies its own checks on top of decks-api's validation when it loads the content (<code>actGetDeckInfos</code>): a unique must carry its <code>content</code> and an implemented power, and Moonlight Jellyfish uniques are refused as suspended by Equinox, even though decks-api's sealed validator allows banned cards. Irrelevant for EOLE pools, relevant if the format moves to a set with such cards (CORE).</li>
+</ul>
+<h3>12.3 Recipes</h3>
+<div class="cards">
+  <div class="card"><h4>Run a tournament with its own configuration</h4><p>Declare it on <code>/tournament/new</code> (<a href="#s14">§14</a>); no database change.</p></div>
+  <div class="card"><h4>Change the competitive format of the generic flows</h4><p><code>INSERT INTO current_format (…)</code>. Existing pools keep their snapshot. If the set has no <code>factionRanges/&lt;SET&gt;.json</code>, add that table first and import it in <code>uniqueFactionRanges.js</code>. Update the backend fallback names (<code>baseDeckName</code>) and the i18n strings that still say "set 6".</p></div>
+  <div class="card"><h4>Add a field to the pool response</h4><p>Extend <code>poolResponse</code> in <code>api/_lib/tournamentPool.js</code>; a new column goes in <code>sealed-pools-schema.sql</code> with <code>ADD COLUMN IF NOT EXISTS</code>; mirror it in the <code>tournamentApi.js</code> consumers.</p></div>
+  <div class="card"><h4>Add a tournament endpoint</h4><p>Create <code>api/tournament-&lt;name&gt;.js</code> (or a file under <code>api/tournaments/</code>) exporting a Vercel-style handler, start with <code>verifySub</code> / <code>verifyUser</code>, use <code>poolStore.js</code> / <code>tournamentStore.js</code> for data access, register it in <code>server/index.js</code>, add a client function in <code>src/lib/tournamentApi.js</code>, and an integration test.</p></div>
+  <div class="card"><h4>Expose games played or results</h4><p><code>gamesPlayed</code> is already in every pool response. Actual results live in altered-bga-api (<code>GET /api/games</code> feed, <code>ApiKeys:GameSync</code>), keyed by the same BGA tournament id.</p></div>
+  <div class="card"><h4>Change what BGA sends</h4><p>altered-bga-api is the adapter. New envelope fields go in <code>DecklistPayload</code> / <code>DeckContentPayload</code>; the sealed contract to altered-draft stays the three query params + the Bearer.</p></div>
+  <div class="card"><h4>Support a tournament ending</h4><p>Declared tournaments have <code>ends_at</code> and a manual close (<a href="#s14">§14</a>). For generic BGA tournaments nothing exists; options: a manual "archive" flag on <code>sealed_pools</code>, or joining altered-bga-api's <code>Tournaments</code>/<code>Games</code> by <code>tournament_id</code>.</p></div>
+  <div class="card"><h4>Draft tournaments</h4><p>Deferred by design; a draft is not a pure function of a seed, so it would need binding an already-completed <code>draft_rooms</code> result to a tournament id instead.</p></div>
+</div>
+</section>
+
+<!-- ───────────────────────── 13 ───────────────────────── -->
+<section id="s13">
+<h2>13. History and design decisions</h2>
+<table class="wrap">
+<tr><th>Date</th><th>Event</th></tr>
+<tr><td>2026-07-02</td><td>Design in <code>ROADMAP.md</code> "Set 6 preview": tournament-safe sealed + Re:Union hosting. First pass used time-windowed events and <code>hash(sub + starts_at + ends_at)</code>.</td></tr>
+<tr><td>2026-07</td><td>A Re:Union member found the hole (BGA's tournament seed is only known after the tournament starts, deck-building happens before) → current model: <strong>current format + nonce + lazy binding</strong>, no time window.</td></tr>
+<tr><td>2026-07-22 → 25</td><td>Backend built: schema, <code>poolStore.js</code>, tournament handlers, <code>tournament-pool-by-deck</code> (validation keyed by deck id instead of threading a seed). First seeded format: 3 uniques, 1 per faction, no heroes.</td></tr>
+<tr><td>2026-07-27</td><td>Booster-by-booster view, guaranteed uniques outside the boosters, first-open pack reveal.</td></tr>
+<tr><td>2026-08-06 → 08</td><td>altered-bga-api: <code>tournamentName</code> instead of <code>tournamentSeed</code>; sealed short-circuit shipped (PR #2). altered-draft adapts: <code>tournament_seed</code> → <code>tournament_id</code> (PR #12). AlteredBGA "Add Sealed mode" (2026-08-08): deck-format option 7, <code>format: SEALED</code> in the envelopes, sealed-only client flow.</td></tr>
+<tr><td>2026-08-11</td><td>Random deck + <code>ensureDeck</code>, <code>Invalid </code> naming, cached-deck existence check.</td></tr>
+<tr><td>2026-08-12</td><td>Fixes: pool contents no longer change on binding; deck names track the tournament; altered-bga-api reads <code>tournamentId</code>/<code>gameId</code> from the query string; AlteredBGA #488 fixes the sealed/custom deck selection flow (cancel, confirm, back).</td></tr>
+<tr><td>2026-09-21 → 10-03</td><td>AlteredBGA #630 adds <code>tournamentParentId</code>/<code>tournamentGroup</code> to the envelopes and the end-game call; altered-bga-api stores parent id / group and the sealed path forwards the <strong>parent</strong> id so multi-stage tournaments share one pool; backfills for older tournaments.</td></tr>
+<tr><td>2026-10-16</td><td>Service URLs made configurable (<code>src/lib/endpoints.js</code>), local dev stack.</td></tr>
+<tr><td>2026-10-16</td><td><strong>User-created tournaments, lot 1</strong> (branch <code>feat/user-tournaments</code>): <code>tournaments</code> registry, stored pools (<code>poolBuilder</code>, <code>loadPool</code>, freeze script), declared tournaments first on the BGA path, public list, create / edit / cancel / close / delete, checklist page, moderators via env, moderator-only detach against squatting, live form validation. Spec <code>user-tournaments-spec.md</code>, <a href="#s14">§14</a>.</td></tr>
+<tr><td>2026-10-18</td><td><strong>Lot 1 review fixes</strong> (PR #20): detach releases the pools a declaration adopted (<code>adopted_at</code>) instead of deleting them; pool creation guarded against a concurrent config edit or detach (409, never a stale config or a 500); one deck save at a time on the pool page (no duplicate decks); "Reconnect, input kept" on the form; indexes on <code>tournament_ref</code> and the legacy BGA id; <code>scripts/</code> in the image for the container freeze; golden test of the legacy regeneration.</td></tr>
+</table>
+<p>Decisions worth knowing: pools are stored (the upstream set file's order must not change a running pool); decks-api stays a thin consumer (no binding state of its own); the hero is "just another pool ref"; validation rejects rather than flags; a normal-pool reset deletes the deck to keep decks-api caching simple; only the <code>B</code> printing of each card is stocked, so alt-art refs never appear in pools.</p>
+</section>
+
+<!-- ───────────────────────── 14 ───────────────────────── -->
+<section id="s14">
+<h2>14. User-created tournaments (lot 1)</h2>
+<p>Any logged-in Re:Union account can now <strong>declare a sealed tournament</strong> (name, description, mandatory BGA link, start, optional end, sealed configuration) instead of a developer changing <code>current_format</code>. Design: <a href="user-tournaments-spec.md"><code>user-tournaments-spec.md</code></a>; implementation plan: <a href="user-tournaments-lot1-plan.md"><code>user-tournaments-lot1-plan.md</code></a>. Lot 1 covers <code>source.type = 'set'</code> only (7 boosters of one visible set, heroes in boosters or free choice, exact uniques inside boosters, guaranteed uniques outside, even factions, ban list).</p>
+
+<h3>14.1 Stored pools</h3>
+<p>Every pool created after the lot-1 migration <strong>stores what it generated</strong> (<code>sealed_pools.cards</code> = <code>{ ref: count }</code>, <code>boosters</code> = <code>string[][]</code>, <code>config</code> = the config snapshot, <code>created_by</code> = <code>'page' | 'bga' | 'legacy'</code>). <code>src/lib/poolBuilder.js</code> (<code>buildPool</code>) is the single generation entry point (same deterministic output as <a href="#s4">§4</a> for a legacy config, plus <code>excludeBanlist</code>); generation runs <strong>before</strong> the <code>INSERT … ON CONFLICT DO NOTHING RETURNING *</code>, so a card-data failure writes nothing. Reads go through <code>loadPool(sub, row)</code> (<code>api/_lib/tournamentPool.js</code>): stored contents when <code>row.cards</code> is set, else <a href="#s4">§4</a>'s regeneration (legacy rows). <code>scripts/freeze-sealed-pools.mjs</code> stores the older rows once after the migration — from then on no pool depends on the upstream set file's order. Idempotent. Deployed: <code>docker exec altered-draft node scripts/freeze-sealed-pools.mjs</code> (the image ships <code>scripts/</code>, the container already has <code>DATABASE_URL</code>), once the new container serves, since the old code keeps creating rows without cards until then. Local: <code>make db-freeze-pools</code> (honours a <code>DB_PORT</code> override). <a href="#s10">§10.1</a> has the whole rollout. <code>src/lib/poolBuilder.golden.test.js</code> checks that <code>buildPool</code> on a legacy config reproduces the pre-storage regeneration bit for bit (and pins a digest of one draw), so a frozen pool is the pool its player already saw.</p>
+
+<h3>14.2 BGA resolution order</h3>
+<p><code>poolStore.bindTournamentId(sub, bgaId, bgaName)</code>, called by <code>/api/tournament-bga-decklist</code> and <code>/api/tournament-pool-counts</code>, now resolves in this order:</p>
+<ol>
+<li><strong>The player's row for <code>(sub, tournament_id = bgaId)</code></strong> → returned. Legacy-bound rows still get <code>tournament_name</code> refreshed from BGA; pools of a declared tournament keep the altered-draft name.</li>
+<li><strong>A declared tournament with <code>bga_tournament_id = bgaId</code></strong> (whatever its status, detached excepted) → <code>getOrCreateTournamentPool(sub, tournament, { createdBy: 'bga' })</code>: the player's attached pool, else a legacy pool already bound to that BGA id (adopted, never replaced), else a new stored pool from the tournament's config. Registered pools are created <strong>pre-bound</strong> (<code>tournament_id</code> = the BGA id, <code>bound_at</code> = creation), so step 1 finds them afterwards. Races on either unique index re-select the winner's row.</li>
+<li><strong>Otherwise</strong> → the legacy pending preparation pool is bound, exactly as in <a href="#s5">§5</a>.</li>
+</ol>
+<p><strong>Declared after BGA started.</strong> If players already have pools bound to that BGA id without a declared tournament (they are already playing it with the default format), the declaration <strong>takes their format</strong> (the submitted config is replaced, the form shows it locked as soon as the link is pasted) and <strong>adopts those pools in the same statement</strong>, so the tournament is locked from the start. If those pools do not all share one format, the declaration is refused (409 <code>bga_tournament_mixed_formats</code>). Pools still attached to a detached declaration count as such pools (<a href="#s14">§14.5</a> releases them anyway). Adopted pools get <code>adopted_at</code>, which is what detach uses to tell them from the pools created for the declaration.</p>
+
+<h3>14.3 Endpoints</h3>
+<table class="wrap">
+<tr><th>Endpoint</th><th>Method</th><th>Auth</th><th>Purpose</th></tr>
+<tr><td><code>/api/tournaments</code></td><td>GET</td><td>none (optional bearer)</td><td>List. <code>?status=upcoming|ongoing|open|all</code> (<code>open</code> = upcoming + ongoing, the default), ordered by <code>starts_at</code>. <code>?bgaId=&lt;numeric id&gt;</code> instead returns the live (not detached) declaration of that BGA tournament whatever its status, 0 or 1 item, plus <code>legacy</code>: <code>null</code>, or <code>{ pools, mixed, config }</code> for the pools already bound to that BGA id without a declaration (the format a declaration must take): the form's duplicate-link and imposed-format check. <code>?mine=1</code> (bearer required, 401 otherwise) returns every tournament the caller organizes, whatever its status, most recent start first ("My created tournaments"). With a bearer: each item carries <code>viewer.hasPool</code> / <code>viewer.poolId</code>.</td></tr>
+<tr><td><code>/api/tournaments</code></td><td>POST</td><td>required</td><td>Create. Enforces spec §9 (10 open tournaments per account, moderators exempt). Returns the tournament. If players already have pools bound to that BGA id without a declared tournament (they are already playing it with the default format), the declaration <strong>takes their format</strong> (the submitted config is replaced, the form shows it locked as soon as the link is pasted) and <strong>adopts those pools in the same statement</strong>, so the tournament is locked from the start. If those pools do not all share one format, the declaration is refused (409 <code>bga_tournament_mixed_formats</code>).</td></tr>
+<tr><td><code>/api/tournaments/:id</code></td><td>GET</td><td>none (optional bearer)</td><td>Detail + <code>poolCount</code>, <code>locked</code>, <code>poolsByOrigin</code> (organizer/moderator only), <code>viewer</code> (bearer only).</td></tr>
+<tr><td><code>/api/tournaments/:id</code></td><td>PATCH</td><td>organizer / moderator</td><td>Partial update: <code>name</code>, <code>description</code>, <code>startsAt</code>, <code>endsAt</code>, <code>bgaUrl</code> (unlocked only), <code>config</code> (unlocked only, atomic), <code>action: cancel|restore|close|reopen|detach</code> (<code>detach</code> moderator only, <a href="#s14">§14.5</a>). 409 <code>tournament_locked</code> when a locked field is sent, <code>tournament_detached</code> on a detached tournament, <code>bga_tournament_taken</code> when the new link is already declared. A <code>bgaUrl</code> change to a BGA id already played with legacy pools follows the same rule as creation (their format imposed, pools adopted; mixed formats → 409 <code>bga_tournament_mixed_formats</code>).</td></tr>
+<tr><td><code>/api/tournaments/:id</code></td><td>DELETE</td><td>organizer / moderator</td><td>409 <code>tournament_has_pools</code> unless zero pools.</td></tr>
+<tr><td><code>/api/tournaments/:id/pool</code></td><td>GET</td><td>required</td><td>Get-or-create the caller's pool (<code>createdBy: 'page'</code>). 409 <code>tournament_closed</code> when cancelled/ended <strong>and</strong> no pool exists yet (with <code>status: 'detached'</code> when a detach won the race), 409 <code>pool_unavailable</code> when the config kept changing during generation (<a href="#s5">§5</a>). <code>/api/tournament-bga-decklist</code> and <code>/api/tournament-pool-counts</code> answer the same two cases with a 409 too.</td></tr>
+<tr><td><code>/api/tournament-bound-pools</code></td><td>GET</td><td>required</td><td>Unchanged shape + <code>tournament: { id, name, startsAt, status } | null</code> per pool.</td></tr>
+<tr><td><code>/api/tournament-bga-decklist</code>, <code>/api/tournament-pool-counts</code>, <code>/api/tournament-pool-by-deck</code>, <code>/api/tournament-pool</code></td><td>—</td><td>—</td><td><strong>Unchanged contracts.</strong> Internally they go through <a href="#s14">§14.2</a> / <code>loadPool</code>.</td></tr>
+</table>
+<p>A public GET carrying an expired bearer gets the anonymous view, never a 401. Moderators: the access token's <code>realm_access.roles</code> contains <code>TOURNAMENT_MODERATOR_ROLE</code>, or the <code>sub</code> is in <code>TOURNAMENT_MODERATORS</code> (both optional env vars, see <code>.env.example</code>); roles are read from the token payload only after userinfo accepted that token (<code>api/_lib/auth.js</code> <code>verifyUser</code>).</p>
+
+<h3>14.4 Routes</h3>
+<table class="wrap">
+<tr><th>Route</th><th>Page</th><th>Notes</th></tr>
+<tr><td><code>/tournament</code></td><td><code>TournamentMenu.jsx</code> (reworked)</td><td>Header (title, "Create a tournament", BGA registration notice); <strong>"My ongoing tournaments"</strong> (logged in, when any): a grid of the started tournaments the player has a pool in, each card opening the tournament page with a direct "Change my deck" button; then <strong>tabs</strong>, each with a one-line explanation, the active one kept in the URL (<code>?tab=upcoming|ongoing|pools|created</code>): <strong>Upcoming</strong> (default, public), <strong>Ongoing</strong> (public: pools can still be prepared until the end), <strong>My pools</strong> (every bound pool, declared tournaments first; a card opens the tournament page, or the pool itself for a BGA tournament nobody declared, plus "Change my deck"; the generic "Prepare my next tournament" block sits at the bottom of this tab), <strong>My created tournaments</strong> (<code>GET /api/tournaments?mine=1</code>, every status, grouped: ongoing then upcoming, each chronological, then a folded "Ended and cancelled (N)" block with the ended, cancelled and detached ones). The two personal tabs show a Connect box when logged out.</td></tr>
+<tr><td><code>/tournament/new</code></td><td><code>TournamentForm.jsx</code></td><td>Create mode. Live validation (<code>src/lib/tournamentForm.js</code> <code>tournamentFormIssues</code>, the API's own pure checks + a duplicate-link lookup, <code>GET /api/tournaments?bgaId=</code>, debounced while typing; the unique index + 409 on submit stay the real guard): the submit button sits in a bar stuck to the bottom of the screen, disabled while problems remain, with the list of problems next to it (each one jumps to its field). A session expired while filling the form (401 on submit) shows "Reconnect (your input is kept)": the input is parked in <code>sessionStorage</code> (<code>tournament_form_draft:&lt;id|new&gt;</code>) across the Keycloak round trip and put back when the form comes back (in edit mode over the server values, the config only while unlocked).</td></tr>
+<tr><td><code>/tournament/t/:id</code></td><td><code>TournamentDetail.jsx</code></td><td>Header, description, 3-step checklist (register on BGA → open your pool → build your deck), organizer panel.</td></tr>
+<tr><td><code>/tournament/t/:id/edit</code></td><td><code>TournamentForm.jsx</code></td><td>Edit mode; BGA link + config disabled once a pool exists. Nothing of the form renders until <code>GET /api/tournaments/:id</code> (its <code>viewer</code> block) says the viewer may edit; anyone else goes straight to the tournament page (the PATCH is refused server-side anyway, 403).</td></tr>
+<tr><td><code>/tournament/t/:id/pool</code></td><td><code>TournamentPoolPage.jsx</code></td><td><code>TournamentPoolView</code> with <code>load = fetchTournamentPool(id)</code>, back link to the tournament.</td></tr>
+</table>
+<p>Status is derived, never stored: <code>detached</code> (detached_at) &gt; <code>cancelled</code> (cancelled_at) &gt; <code>ended</code> (ended_at, or ends_at reached) &gt; <code>ongoing</code> (starts_at reached) &gt; <code>upcoming</code>. Cancelled and ended tournaments stay editable; only pool existence locks the BGA link and the config. Reopen clears an <code>ends_at</code> already reached (else the tournament would stay <code>ended</code>). A rename also renames the attached pools' <code>tournament_name</code>, which every deck name derives from. <code>evenFactions</code> is normalized to <code>false</code> below 2 uniques.</p>
+
+<h3>14.5 Detach (moderators, squatting)</h3>
+<p>Any account can declare any BGA id, so a declaration can hijack a tournament someone else organizes; uniqueness then blocks the real organizer and cancel does not help (the BGA path ignores status). A <strong>moderator</strong> fixes it with <code>PATCH { action: 'detach' }</code> (<code>tournamentStore.detachTournament</code>, one transaction that locks the tournament row first):</p>
+<ul>
+<li>the pools the declaration <strong>adopted</strong> (<code>adopted_at</code> set: they were already bound to that BGA id before it, see §14.2) are <strong>released</strong>: <code>tournament_ref</code> and <code>adopted_at</code> back to NULL, contents and deck untouched. They are ordinary bound legacy pools again, and the real organizer's declaration re-adopts them, imposing their format (§14.2);</li>
+<li>the pools <strong>created for</strong> the declaration are deleted, played or not (their <code>sealed_pool_games</code> cascade); their decks on decks-api are left orphaned and those players start over;</li>
+<li><code>detached_at</code> is set and the BGA id is free again (<code>tournaments_bga_tournament_id_live</code> is partial on <code>detached_at IS NULL</code>). A pool insert racing with the detach is refused by its <code>FOR SHARE</code> guard (<a href="#s5">§5</a>).</li>
+</ul>
+<p><code>getTournamentByBgaId</code> skips detached rows, so the next BGA call for that id goes to the real organizer's declaration (or, for a released pool, straight to that pool, step 1 of §14.2). The detached row stays as a read-only trace (status <code>detached</code>, any PATCH → 409 <code>tournament_detached</code>, DELETE still allowed). The confirmation re-reads the pool count at click time and states it, and says which pools are kept.</p>
+</section>
+
+<!-- ───────────────────────── 15 ───────────────────────── -->
+<section id="s15">
+<h2>15. Glossary</h2>
+<dl class="kv">
+<dt>sub</dt><dd>Keycloak subject (user id). The owner key of every pool.</dd>
+<dt>nonce</dt><dd>Random UUID minted once per pool; the only secret-ish input of the seed.</dd>
+<dt>pool</dt><dd>A player's sealed card pool. Stored on the row at creation since lot 1 (<a href="#s14">§14.1</a>); older rows are regenerated until frozen.</dd>
+<dt>normal pool</dt><dd>The single casual pool per player (<code>kind = normal</code>), resettable with a cooldown.</dd>
+<dt>pending / preparation pool</dt><dd>A <code>kind = tournament</code> pool with <code>tournament_id IS NULL</code>. At most one per player.</dd>
+<dt>bound pool</dt><dd>A tournament pool with <code>tournament_id</code> set; immutable.</dd>
+<dt>binding</dt><dd>The one-time write of a BGA tournament id onto the pending pool, triggered by the first BGA deck-list call for a tournament nobody declared.</dd>
+<dt>current format</dt><dd>The latest <code>current_format</code> row; the configuration of the normal and pending pools.</dd>
+<dt>declared tournament</dt><dd>A row of <code>tournaments</code>: a BGA tournament an organizer registered on altered-draft with its own sealed config (<a href="#s14">§14</a>).</dd>
+<dt>attached pool</dt><dd>A pool with <code>tournament_ref</code> set: the player's pool for a declared tournament, created pre-bound to its BGA id (or a legacy pool adopted).</dd>
+<dt>config</dt><dd>The sealed configuration object (spec §5.1): source set + boosters, heroes, uniques, ban list. Snapshotted on each pool.</dd>
+<dt>organizer / moderator</dt><dd>Who declared a tournament / who may manage every tournament and detach one (<code>TOURNAMENT_MODERATOR_ROLE</code>, <code>TOURNAMENT_MODERATORS</code>).</dd>
+<dt>detach</dt><dd>Moderator action against squatting: deletes the pools created for a declaration, releases the ones it adopted, and frees its BGA id (<a href="#s14">§14.5</a>).</dd>
+<dt>freeze</dt><dd><code>scripts/freeze-sealed-pools.mjs</code>: stores the contents of pools created before storage existed.</dd>
+<dt>envelope</dt><dd>The <code>{ v, env, mode, payload }</code> JSON that the AlteredBGA game code base64-encodes into <code>eventFormat</code> or <code>{id}</code> (<code>SetupTrait.php</code>).</dd>
+<dt>hydra collection</dt><dd>decks-api's list shape (<code>hydra:member</code>, <code>hydra:totalItems</code>, <code>hydra:view</code>) that BGA expects.</dd>
+<dt>family / serial / window</dt><dd>A rare card slot (<code>AX_106</code>), a unique's serial number, and the serial ranges that map to a faction for that family.</dd>
+<dt>OOF</dt><dd>Out-of-faction printing of a card (its <code>_R2</code>, or a unique serial in the other faction's window).</dd>
+<dt>guaranteed unique</dt><dd>A unique appended to the pool outside the boosters (<code>guaranteed_uniques</code>).</dd>
+<dt>Random / Invalid prefixes</dt><dd>Deck-name literals flagging an unreviewed auto-built deck / an illegal deck.</dd>
+<dt>AlteredOps</dt><dd>Re:Union's GitOps deployment repo (Docker on their infra, Traefik, Scaleway secrets).</dd>
+</dl>
+</section>
+</main>
+</div>
+
+<div id="lightbox" class="lightbox" hidden role="dialog" aria-modal="true" aria-label="Diagram zoom">
+  <div class="lb-bar">
+    <span class="lb-title">Diagram</span>
+    <span class="lb-hint">Scroll to zoom · drag to pan · double-click to zoom in (shift: out) · + / − / 0 keys · Esc to close</span>
+    <div class="lb-tools">
+      <button type="button" class="lb-out" aria-label="Zoom out">−</button>
+      <span class="lb-zoom">100%</span>
+      <button type="button" class="lb-in" aria-label="Zoom in">+</button>
+      <button type="button" class="lb-fit" aria-label="Fit to screen">Fit</button>
+      <button type="button" class="lb-close" aria-label="Close">✕</button>
+    </div>
+  </div>
+  <div class="lb-stage"><div class="lb-canvas"></div></div>
+</div>
+
+<script>
+(function () {
+  const root = document.documentElement;
+  const KEY = 'tournaments-doc-theme';
+  function currentTheme() {
+    const forced = root.getAttribute('data-theme');
+    if (forced) return forced;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+  try { const saved = localStorage.getItem(KEY); if (saved) root.setAttribute('data-theme', saved); } catch (e) {}
+
+  // Mermaid: render each <script type="text/x-mermaid"> into its sibling .render div.
+  const figures = Array.from(document.querySelectorAll('figure.diagram'));
+  let seq = 0;
+  async function renderAll() {
+    if (!window.mermaid) { figures.forEach(showFallback); return; }
+    const dark = currentTheme() === 'dark';
+    mermaid.initialize({
+      startOnLoad: false,
+      securityLevel: 'loose',
+      theme: dark ? 'dark' : 'neutral',
+      themeVariables: dark
+        ? { primaryColor: '#3a2f16', primaryBorderColor: '#d9a84a', lineColor: '#c9c2b2', fontFamily: 'inherit' }
+        : { primaryColor: '#f3e6c6', primaryBorderColor: '#a4761a', lineColor: '#4a4538', fontFamily: 'inherit' },
+      sequence: { useMaxWidth: true, wrap: true, width: 180 },
+      flowchart: { useMaxWidth: true, htmlLabels: true },
+    });
+    for (const fig of figures) {
+      const src = fig.querySelector('script[type="text/x-mermaid"]').textContent.trim();
+      const target = fig.querySelector('.render');
+      try {
+        const { svg } = await mermaid.render('mmd-' + (++seq), src);
+        target.innerHTML = svg;
+        fig.classList.remove('failed');
+      } catch (e) {
+        showFallback(fig);
+      }
+    }
+  }
+  function showFallback(fig) {
+    fig.classList.add('failed');
+    fig.querySelector('pre.fallback').textContent = fig.querySelector('script[type="text/x-mermaid"]').textContent.trim();
+  }
+  renderAll();
+
+  document.getElementById('themeToggle').addEventListener('click', () => {
+    const next = currentTheme() === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    try { localStorage.setItem(KEY, next); } catch (e) {}
+    renderAll();
+  });
+
+  // Lightbox: click a diagram (or its Zoom button) to open a full-screen pan/zoom view of
+  // the rendered SVG. The SVG is cloned at open time, so it follows the current theme.
+  const lb = document.getElementById('lightbox');
+  const stage = lb.querySelector('.lb-stage');
+  const canvas = lb.querySelector('.lb-canvas');
+  const zoomLabel = lb.querySelector('.lb-zoom');
+  const titleEl = lb.querySelector('.lb-title');
+  let scale = 1, tx = 0, ty = 0, baseW = 1, baseH = 1, opener = null;
+
+  function apply() {
+    canvas.style.transform = 'translate(' + tx + 'px, ' + ty + 'px) scale(' + scale + ')';
+    zoomLabel.textContent = Math.round(scale * 100) + '%';
+  }
+  function fit() {
+    const r = stage.getBoundingClientRect();
+    const s = Math.min((r.width - 40) / baseW, (r.height - 40) / baseH);
+    scale = Math.max(0.1, Math.min(s, 3));
+    tx = (r.width - baseW * scale) / 2;
+    ty = (r.height - baseH * scale) / 2;
+    apply();
+  }
+  function zoomAt(factor, cx, cy) {
+    const next = Math.max(0.1, Math.min(scale * factor, 12));
+    const r = stage.getBoundingClientRect();
+    const px = cx - r.left, py = cy - r.top;
+    tx = px - (px - tx) * (next / scale);
+    ty = py - (py - ty) * (next / scale);
+    scale = next;
+    apply();
+  }
+  function zoomCenter(factor) {
+    const r = stage.getBoundingClientRect();
+    zoomAt(factor, r.left + r.width / 2, r.top + r.height / 2);
+  }
+  function figureTitle(fig) {
+    let el = fig.previousElementSibling;
+    while (el && !/^H[2-4]$/.test(el.tagName)) el = el.previousElementSibling;
+    return el ? el.textContent : 'Diagram';
+  }
+  function openLightbox(fig) {
+    const svg = fig.querySelector('.render svg');
+    if (!svg) return;
+    const vb = (svg.getAttribute('viewBox') || '').split(/[\s,]+/).map(Number);
+    const box = svg.getBoundingClientRect();
+    baseW = vb[2] > 0 ? vb[2] : box.width;
+    baseH = vb[3] > 0 ? vb[3] : box.height;
+    const clone = svg.cloneNode(true);
+    clone.removeAttribute('style');
+    clone.setAttribute('width', baseW);
+    clone.setAttribute('height', baseH);
+    canvas.innerHTML = '';
+    canvas.appendChild(clone);
+    titleEl.textContent = figureTitle(fig);
+    opener = fig;
+    lb.hidden = false;
+    document.body.style.overflow = 'hidden';
+    fit();                       // layout is forced by getBoundingClientRect, so this is already correct
+    requestAnimationFrame(fit);  // and re-fit once the browser has painted the overlay, just in case
+    lb.querySelector('.lb-close').focus();
+  }
+  function closeLightbox() {
+    lb.hidden = true;
+    document.body.style.overflow = '';
+    canvas.innerHTML = '';
+    if (opener) { const b = opener.querySelector('.zoom-btn'); if (b) b.focus(); }
+  }
+
+  figures.forEach(fig => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'zoom-btn';
+    btn.textContent = '⤢ Zoom';
+    btn.setAttribute('aria-label', 'Open diagram full screen');
+    btn.addEventListener('click', e => { e.stopPropagation(); openLightbox(fig); });
+    fig.insertBefore(btn, fig.firstChild);
+    fig.querySelector('.render').addEventListener('click', () => openLightbox(fig));
+  });
+
+  lb.querySelector('.lb-close').addEventListener('click', closeLightbox);
+  lb.querySelector('.lb-in').addEventListener('click', () => zoomCenter(1.25));
+  lb.querySelector('.lb-out').addEventListener('click', () => zoomCenter(1 / 1.25));
+  lb.querySelector('.lb-fit').addEventListener('click', fit);
+
+  // Pointer events cover mouse drag, touch drag and two-finger pinch alike.
+  const pointers = new Map();
+  let drag = null, pinchDist = 0;
+  stage.addEventListener('pointerdown', e => {
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    stage.setPointerCapture(e.pointerId);
+    if (pointers.size === 1) { drag = { x: e.clientX, y: e.clientY, tx, ty }; stage.classList.add('dragging'); }
+    else { drag = null; pinchDist = 0; }
+  });
+  stage.addEventListener('pointermove', e => {
+    if (!pointers.has(e.pointerId)) return;
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.size === 2) {
+      const [a, b] = Array.from(pointers.values());
+      const d = Math.hypot(a.x - b.x, a.y - b.y);
+      if (pinchDist > 0) zoomAt(d / pinchDist, (a.x + b.x) / 2, (a.y + b.y) / 2);
+      pinchDist = d;
+      return;
+    }
+    if (drag) { tx = drag.tx + (e.clientX - drag.x); ty = drag.ty + (e.clientY - drag.y); apply(); }
+  });
+  function endPointer(e) {
+    pointers.delete(e.pointerId);
+    pinchDist = 0;
+    if (pointers.size === 1) { const p = Array.from(pointers.values())[0]; drag = { x: p.x, y: p.y, tx, ty }; }
+    else { drag = null; stage.classList.remove('dragging'); }
+  }
+  stage.addEventListener('pointerup', endPointer);
+  stage.addEventListener('pointercancel', endPointer);
+  stage.addEventListener('wheel', e => {
+    e.preventDefault();
+    zoomAt(e.deltaY < 0 ? 1.15 : 1 / 1.15, e.clientX, e.clientY);
+  }, { passive: false });
+  stage.addEventListener('dblclick', e => zoomAt(e.shiftKey ? 0.5 : 2, e.clientX, e.clientY));
+  window.addEventListener('keydown', e => {
+    if (lb.hidden) return;
+    if (e.key === 'Escape') closeLightbox();
+    else if (e.key === '+' || e.key === '=') zoomCenter(1.25);
+    else if (e.key === '-' || e.key === '_') zoomCenter(1 / 1.25);
+    else if (e.key === '0') fit();
+    else return;
+    e.preventDefault();
+  });
+  window.addEventListener('resize', () => { if (!lb.hidden) fit(); });
+
+  // Highlight the current section in the sidebar.
+  const links = Array.from(document.querySelectorAll('#toc a'));
+  const sections = links.map(a => document.querySelector(a.getAttribute('href')));
+  const obs = new IntersectionObserver(entries => {
+    entries.forEach(en => {
+      if (!en.isIntersecting) return;
+      links.forEach(l => l.classList.toggle('active', l.getAttribute('href') === '#' + en.target.id));
+    });
+  }, { rootMargin: '-10% 0px -80% 0px' });
+  sections.forEach(s => s && obs.observe(s));
+})();
+</script>
+</body>
+</html>

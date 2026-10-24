@@ -2,7 +2,6 @@ import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { getRoom, updateRoom, subscribeToRoom } from '../lib/roomStore.js'
 import { fetchSet, SETS, apiSetCode, fetchUniques, fetchRandomUniques, isUniqueRef, needsCardApi } from '../lib/cardData.js'
-import { SET_ASSETS } from '../lib/assets.js'
 import { COMMUNITY_CUBES, setsForCube, SPOTLIGHT } from '../lib/cubes.js'
 import CubePreviewModal from '../components/CubePreviewModal.jsx'
 import { generateAllPacks, generatePacksFromPool, generateChaosPacks, generateCubeRecipePacks, generateStructuredPacks, generateCubeDraftPacks, dealHeroSlots } from '../lib/packGenerator.js'
@@ -16,6 +15,7 @@ import { useLang } from '../lib/i18n/i18n.jsx'
 import SetSelector from '../components/SetSelector.jsx'
 import MultiSetSelector from '../components/MultiSetSelector.jsx'
 import SettingsFields from '../components/SettingsFields.jsx'
+import SetPresetGrid from '../components/SetPresetGrid.jsx'
 import { DRAFT_FORMATS } from '../lib/draftFormats.js'
 import TopNav from '../components/TopNav.jsx'
 
@@ -842,37 +842,7 @@ export default function Lobby() {
                         ? t('lobby.presetsHintWinston', { n: bpp * roomState.players.length })
                         : t('lobby.presetsHintDraft', { n: bpp })}
                   </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {SETS.filter(s => !s.hidden).map(set => {
-                      const selected = selectedPreset === set.code
-                      const assets = SET_ASSETS[set.code]
-                      const logoUrl = assets?.logo
-                      const iconUrl = assets?.icon
-                      return (
-                        <button
-                          key={set.code}
-                          onClick={() => setSelectedPreset(selected ? null : set.code)}
-                          className={`relative flex flex-col items-center justify-center rounded-xl border-2 p-3 h-32 transition-all overflow-hidden gap-1 ${
-                            selected
-                              ? 'border-accent shadow-lg shadow-accent/20'
-                              : 'border-line hover:border-line'}`}
-                          style={{ backgroundColor: set.color + 'cc' }}
-                        >
-                          {logoUrl ? (
-                            <img src={logoUrl} alt={set.name} className="h-14 w-full object-contain"
-                              onError={e => { e.currentTarget.style.display = 'none' }} />
-                          ) : iconUrl ? (
-                            <img src={iconUrl} alt={set.name} className="h-10 object-contain"
-                              onError={e => { e.currentTarget.style.display = 'none' }} />
-                          ) : null}
-                          <span className="text-xs text-ink text-center leading-tight font-medium px-1">{set.name}</span>
-                          {selected && (
-                            <span className="absolute top-2 right-2 w-5 h-5 rounded-full bg-accent flex items-center justify-center text-xs text-on-accent font-bold">✓</span>
-                          )}
-                        </button>
-                      )
-                    })}
-                  </div>
+                  <SetPresetGrid selected={selectedPreset} onSelect={setSelectedPreset} disabled={loading} />
                 </div>
               )}
 
