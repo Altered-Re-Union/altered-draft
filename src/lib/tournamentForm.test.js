@@ -29,6 +29,20 @@ describe('tournamentFormIssues', () => {
       .toEqual([{ field: 'endsAt', code: 'must_be_after_start' }])
   })
 
+  it('puts a crossed-dates error under the start when the start was edited last', () => {
+    const crossed = { ...body, startsAt: '2026-11-12T19:00:00Z', endsAt: '2026-11-11T19:00:00Z' }
+    expect(tournamentFormIssues({ body: crossed, config, now: NOW, isCreate: false, lastDateEdited: 'startsAt' }))
+      .toEqual([{ field: 'startsAt', code: 'must_be_before_end' }])
+    expect(tournamentFormIssues({ body: crossed, config, now: NOW, isCreate: false, lastDateEdited: 'endsAt' }))
+      .toEqual([{ field: 'endsAt', code: 'must_be_after_start' }])
+  })
+
+  it('keeps a start error of its own over the crossed-dates one', () => {
+    const crossed = { ...body, startsAt: '2026-10-30T19:00:00Z', endsAt: '2026-10-29T19:00:00Z' }
+    expect(tournamentFormIssues({ body: crossed, config, now: NOW, isCreate: true, lastDateEdited: 'startsAt' }))
+      .toEqual([{ field: 'startsAt', code: 'must_be_future' }])
+  })
+
   it('flags a BGA link already declared by another tournament, but not by the tournament being edited', () => {
     const taken = new Map([['7', 'other-id']])
     expect(tournamentFormIssues({ body, config, now: NOW, isCreate: true, takenBgaIds: taken }))

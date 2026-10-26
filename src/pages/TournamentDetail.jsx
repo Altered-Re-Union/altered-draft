@@ -132,7 +132,8 @@ export default function TournamentDetail() {
                   {tournament.cancelledAt
                     ? <button onClick={() => act('restore')} disabled={busy} className={btn}>{t('tournaments.restore')}</button>
                     : <button onClick={() => act('cancel')} disabled={busy} className={`${btn} hover:bg-danger-soft hover:text-danger`}>{t('tournaments.cancel')}</button>}
-                  {tournament.endedAt
+                  {/* Ended by hand (endedAt) or by its end date: both reopen (the API clears a past end date). */}
+                  {tournament.endedAt || tournament.status === 'ended'
                     ? <button onClick={() => act('reopen')} disabled={busy} className={btn}>{t('tournaments.reopen')}</button>
                     : <button onClick={() => act('close')} disabled={busy} className={btn}>{t('tournaments.close')}</button>}
                   <button onClick={handleDelete} disabled={busy || (tournament.poolCount ?? 0) > 0}
