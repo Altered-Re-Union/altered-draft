@@ -6,6 +6,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { APP_URL, CLIENT_ID, CLIENT_SECRET, FAKES_URL, KEYCLOAK_ISSUER, ROOT_DIR } from '../support/env.js'
 import { PASSWORD, PERSONAS } from '../support/personas.js'
+import { closeDb, resetDb } from '../support/db.js'
 import { decodeJwt } from '../fakes/keycloak.mjs'
 
 const TOKEN_URL = `${KEYCLOAK_ISSUER}/protocol/openid-connect/token`
@@ -186,5 +187,49 @@ test.describe('fake decks-api, cards API, CDN, placeholders', () => {
     expect(log).toContainEqual(expect.objectContaining({ method: 'POST', path: '/api/decks', sub: PERSONAS.alice.sub }))
     await request.post(`${FAKES_URL}/__control/reset`)
     expect(await (await request.get(`${FAKES_URL}/__control/decks?user=alice`)).json()).toEqual([])
+  })
+})
+
+test.describe('card fixtures and the app wiring', () => {
+  test.beforeAll(async () => {
+    await resetDb()
+  })
+
+  test.afterAll(async () => {
+    await closeDb()
+  })
+
+  test('carddb serves the three fixtures and 404s the rest', async ({ request }) => {
+    for (const set of ['CYCLONE', 'EOLE', 'FUGUE']) {
+      const res = await request.get(`${FAKES_URL}/carddb/${set}/${set}_EN.json`)
+      expect(res.status(), set).toBe(200)
+      const cards = await res.json()
+      expect(cards.length, set).toBeGreaterThan(100)
+      expect(cards.every(c => c.reference.includes('_B_')), set).toBe(true)
+    }
+    expect((await request.get(`${FAKES_URL}/carddb/ALIZE/ALIZE_EN.json`)).status()).toBe(404)
+  })
+
+  test('api config only points at localhost', async ({ request }) => {
+    const config = await (await request.get(`${APP_URL}/api/config`)).json()
+    const urls = Object.entries(config).filter(([key]) => key !== 'keycloakClientId')
+    expect(urls.length).toBeGreaterThan(0)
+    for (const [key, value] of urls) expect(value, key).toMatch(/^http:\/\/localhost:8091\//)
+  })
+
+  test('the app generates a normal pool from the fixtures', async ({ request }) => {
+    const headers = { Authorization: `Bearer ${await accessToken(request, 'alice')}` }
+    const res = await request.get(`${APP_URL}/api/tournament-normal-pool`, { headers })
+    expect(res.status()).toBe(200)
+    const pool = await res.json()
+    expect(pool.boosters).toHaveLength(7)
+    // The seeded format (EOLE, heroes_in_pool = false) is the free-hero mode: no hero slot,
+    // so 12-card boosters.
+    for (const booster of pool.boosters) {
+      expect(booster).toHaveLength(12)
+      for (const ref of booster) expect(ref).toMatch(/^ALT_EOLE_B_/)
+    }
+    expect(pool.boosters.flat().filter(r => r.includes('_U_'))).toHaveLength(1)
+    expect(Object.keys(pool.cards).filter(r => r.includes('_U_'))).toHaveLength(2)
   })
 })
