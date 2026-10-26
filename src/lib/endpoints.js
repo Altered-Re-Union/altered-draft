@@ -16,6 +16,7 @@ const DEFAULTS = {
   reunionUrl: 'https://altered.re',
   cardsApiUrl: 'https://cards.alteredcore.org',
   cdnUrl: 'https://cdn.alteredcore.org',
+  cardDbUrl: 'https://raw.githubusercontent.com/PolluxTroy0/Altered-TCG-Card-Database/main/SETS',
 }
 
 const ENV_VARS = {
@@ -26,11 +27,12 @@ const ENV_VARS = {
   reunionUrl: 'REUNION_URL',
   cardsApiUrl: 'CARDS_API_URL',
   cdnUrl: 'CDN_URL',
+  cardDbUrl: 'CARD_DB_URL',
 }
 
 // What the browser needs. The decks API is only ever reached through our own proxy
 // (api/decks/*), so its URL stays server-side.
-const PUBLIC_KEYS = ['keycloakIssuer', 'keycloakClientId', 'deckbuilderUrl', 'reunionUrl', 'cardsApiUrl', 'cdnUrl']
+const PUBLIC_KEYS = ['keycloakIssuer', 'keycloakClientId', 'deckbuilderUrl', 'reunionUrl', 'cardsApiUrl', 'cdnUrl', 'cardDbUrl']
 
 // Per attempt. Two attempts, so a cold serverless function gets a second chance before
 // we give up — a fallback is only correct on a prod deployment.
