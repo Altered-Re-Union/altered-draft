@@ -86,7 +86,7 @@ Anonymous play needs nothing more. For login, deck save/load and the tournament 
 
 - Test users: `alice` / `bob`, password `TestPassword1234`.
 - Use Chrome or Firefox: the session cookies are `Secure`, which Safari rejects on `http://localhost`.
-- Every Re:Union / Community service URL is overridable — Keycloak, decks API, deckbuilder, altered.re, cards API, CDN. They default to prod; see `.env.example` to point any of them at a local version (`src/lib/endpoints.js`).
+- Every Re:Union / Community service URL is overridable — Keycloak, decks API, deckbuilder, altered.re, cards API, CDN, community card database (`CARD_DB_URL`). They default to prod; see `.env.example` to point any of them at a local version (`src/lib/endpoints.js`).
 
 ---
 
@@ -96,6 +96,7 @@ Anonymous play needs nothing more. For login, deck save/load and the tournament 
 npm test              # unit tests — pure logic, no DB, runs in a couple of seconds
 npm run test:watch    # unit tests in watch mode
 npm run test:integration   # api/rooms/*.js against a real Postgres in Docker
+npm run test:e2e      # Playwright: real browser, fakes for Keycloak / decks-api / cards, throwaway Postgres
 ```
 
 - **`npm test`** (Vitest) covers the pure-logic modules: draft/sealed pack generation
@@ -109,6 +110,16 @@ npm run test:integration   # api/rooms/*.js against a real Postgres in Docker
   optimistic-concurrency compare-and-swap (`state->>'version'`) that guards against two
   players' picks clobbering each other. The container is created and torn down
   automatically (`tests/integration/globalSetup.js`); requires Docker running locally.
+- **`make e2e`** (or `npm run test:e2e` after `npm run build`) runs the Playwright suite in
+  `tests/e2e`: the user-tournaments recette (`docs/tournaments/recette-user-tournaments.html`,
+  groups A–J and L) replayed in Chromium (desktop + a 375 px mobile project) against the
+  built app (`node server/index.js` on `:8090`), a throwaway Postgres (`docker-compose.e2e.yml`,
+  `:55433`) and ONE fake process on `:8091` standing in for Keycloak, decks-api, the cards API,
+  the CDN and the card database — nothing leaves `localhost`. Needs Docker and Chromium
+  (`npx playwright install chromium`, done by `make e2e`). `E2E_KEEP_STACK=1` keeps the
+  Postgres container between runs (`make e2e-down` removes it), `make e2e-ui` opens the
+  Playwright UI. Each test carries its recette step id as a tag;
+  `npm run test:e2e:coverage -- --write` refreshes the recette's « auto » badges from them.
 
 ---
 

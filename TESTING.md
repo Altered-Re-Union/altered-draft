@@ -7,8 +7,9 @@ ships adds its section here, a behaviour that changes updates its line. Detailed
 campaigns (setup steps, curl commands, every edge case of a new feature) belong in a
 per-campaign recette, not here.
 
-**Automated first.** `npm test` (unit) and `npm run test:integration` (API handlers + SQL against
-a throwaway Postgres, needs Docker) must be green; `npm run build` must succeed.
+**Automated first.** `npm test` (unit), `npm run test:integration` (API handlers + SQL against
+a throwaway Postgres, needs Docker) and `make e2e` (Playwright, the tournament pages in a real
+browser against fake Re:Union services, needs Docker) must be green; `npm run build` must succeed.
 
 **Where to test.** Locally with `make dev` (+ `../altered-dev-environment` for login: users
 `alice` / `bob`, password `TestPassword1234`; Chrome or Firefox), or on preprod
@@ -57,6 +58,8 @@ link in a second tab as a 2nd player). Locally there is no Realtime: pages poll 
 - [ ] Load a deck as a cube (search + format chips), preview it, draft it.
 
 ## 8. Tournaments (BGA sealed) — see `docs/tournaments/README.md`
+Automated by `tests/e2e` — the steps with an « auto » badge in `docs/tournaments/recette-user-tournaments.html`
+no longer need a manual pass; the items below are the smoke check on a real deployment.
 - [ ] **Normal pool** (`/tournament/normal`): pool + pack reveal; **Reset pool** gives a new pool, then a 30-minute cooldown.
 - [ ] **Generic preparation pool** (`/tournament/prep`, bottom of `/tournament`): one-shot pool, no reset.
 - [ ] **Declare a tournament** (`/tournament/new`, logged in): validation is live — the BGA link is parsed as you paste it ("Tournament id … detected", or "already exists"), and the submit bar stuck to the bottom of the screen stays disabled while it lists the remaining problems (too-short name, past start, end before start, no set…), each one jumping to its field; a set without unique data disables the unique steppers. Session expired before submitting (wait out the access token, or block `/api/token`): "Reconnect (your input is kept)" brings the form back filled in.
