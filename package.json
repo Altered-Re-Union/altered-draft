@@ -10,7 +10,10 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:integration": "vitest run --config vitest.integration.config.js"
+    "test:integration": "vitest run --config vitest.integration.config.js",
+    "test:e2e": "playwright test -c tests/e2e/playwright.config.js",
+    "test:e2e:ui": "playwright test -c tests/e2e/playwright.config.js --ui",
+    "test:e2e:coverage": "node scripts/e2e-recette-coverage.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0",
@@ -21,6 +24,7 @@
     "react-router-dom": "^6.21.1"
   },
   "devDependencies": {
+    "@playwright/test": "1.64.1",
     "@vitejs/plugin-react": "^4.2.1",
     "autoprefixer": "^10.4.16",
     "postcss": "^8.4.32",
