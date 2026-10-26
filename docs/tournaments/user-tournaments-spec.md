@@ -407,7 +407,7 @@ Theming: semantic tokens only (`surface`, `ink`, `accent`, …), as in `CLAUDE.m
   `cards` + `boosters`. From then on no pool depends on the upstream set file's order anymore.
   Requires `DATABASE_URL` and network access to the set files; logs a count; safe to re-run.
   Deployed, it runs inside the app container once the new version serves
-  (`docker exec altered-draft node scripts/freeze-sealed-pools.mjs`; the image ships `scripts/`).
+  (`docker exec altered-draft node scripts/freeze-sealed-pools.mjs`; the image ships `scripts/freeze-sealed-pools.mjs`).
 - Before deploying: the latest `current_format` row must not name a set without faction-range
   data with uniques (the unique draw now throws there); same check on the legacy rows to freeze.
   The full rollout is in `README.md` §10.1.

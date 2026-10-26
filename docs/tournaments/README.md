@@ -1205,8 +1205,8 @@ so a card-data failure writes nothing. Reads go through `loadPool(sub, row)`
 regeneration (legacy rows). `scripts/freeze-sealed-pools.mjs` stores the older rows once after
 the migration — from then on no pool depends on the upstream set file's order. Idempotent.
 Deployed: `docker exec altered-draft node scripts/freeze-sealed-pools.mjs`
-(the image ships `scripts/`, the container already has `DATABASE_URL`), once the new
-container serves, since the old code keeps creating rows without cards until then. Local:
+(the image ships `scripts/freeze-sealed-pools.mjs` only, the container already has
+`DATABASE_URL`), once the new container serves, since the old code keeps creating rows without cards until then. Local:
 `make db-freeze-pools` (honours a `DB_PORT` override). §10.1 has the whole rollout.
 `src/lib/poolBuilder.golden.test.js` checks that `buildPool` on a legacy config reproduces
 the pre-storage regeneration bit for bit (and pins a digest of one draw), so a frozen pool is
