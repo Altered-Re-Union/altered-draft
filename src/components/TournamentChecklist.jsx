@@ -6,7 +6,7 @@ const registeredKey = id => `tournament_bga_registered:${id}`
 
 function Step({ n, title, desc, done, children }) {
   return (
-    <div className={`flex gap-3 rounded-lg border p-3 ${done ? 'border-ok/40 bg-surface' : 'border-line bg-surface2'}`}>
+    <div data-testid={`checklist-step-${n}`} data-done={done ? 'true' : 'false'} className={`flex gap-3 rounded-lg border p-3 ${done ? 'border-ok/40 bg-surface' : 'border-line bg-surface2'}`}>
       <span className={`w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${
         done ? 'bg-ok text-surface' : 'bg-accent text-on-accent'}`}>{done ? '✓' : n}</span>
       <div className="flex-1 space-y-1.5">

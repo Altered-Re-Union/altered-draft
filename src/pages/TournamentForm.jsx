@@ -392,7 +392,7 @@ export default function TournamentForm() {
           {issues.length > 0 && !loading && (
             <div className="text-sm">
               <p className="text-muted mb-1">{isEdit ? t('tournaments.issuesTitleSave') : t('tournaments.issuesTitleCreate')}</p>
-              <ul className="space-y-0.5">
+              <ul data-testid="form-problems" className="space-y-0.5">
                 {issues.map((issue, i) => (
                   <li key={`${issue.field}-${issue.code}`}>
                     <button type="button" onClick={() => { touch(issue.field); focusField(issue.field) }}

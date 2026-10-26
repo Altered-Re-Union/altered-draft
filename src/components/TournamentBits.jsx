@@ -11,7 +11,7 @@ const PILL = {
 
 export function StatusPill({ status, t }) {
   const key = { upcoming: 'statusUpcoming', ongoing: 'statusOngoing', ended: 'statusEnded', cancelled: 'statusCancelled', detached: 'statusDetached' }[status] ?? 'statusUpcoming'
-  return <span className={`text-xs px-2 py-0.5 rounded-full border ${PILL[status] ?? PILL.upcoming}`}>{t(`tournaments.${key}`)}</span>
+  return <span data-testid="tournament-status" className={`text-xs px-2 py-0.5 rounded-full border ${PILL[status] ?? PILL.upcoming}`}>{t(`tournaments.${key}`)}</span>
 }
 
 /** Viewer-local date + time (the API sends UTC ISO strings). */
@@ -44,7 +44,7 @@ function configSummaryParts(config, t, tc) {
 export function ConfigSummary({ config, t, tc, className = '' }) {
   if (!config) return null
   return (
-    <p className={className}>
+    <p data-testid="tournament-summary" className={className}>
       {configSummaryParts(config, t, tc).map((p, i) => (
         <span key={i}>
           {i > 0 && ' · '}

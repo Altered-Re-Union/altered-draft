@@ -16,6 +16,7 @@ export default function SetPresetGrid({ selected, onSelect, disabled = false }) 
             key={set.code}
             type="button"
             disabled={disabled}
+            aria-pressed={isSelected}
             onClick={() => onSelect(isSelected ? null : set.code)}
             className={`relative flex flex-col items-center justify-center rounded-xl border-2 p-3 h-32 transition-all overflow-hidden gap-1 disabled:opacity-60 ${
               isSelected ? 'border-accent shadow-lg shadow-accent/20' : 'border-line hover:border-line'}`}
