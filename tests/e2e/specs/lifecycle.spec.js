@@ -91,13 +91,11 @@ test('crossed dates are refused', { tag: ['@e-dates'] }, async ({ openAs }) => {
   await expect(page.getByRole('button', { name: t('tournaments.submitSave') })).toBeDisabled()
 })
 
-// The edit form always sends both dates, so a start moved past the stored end is reported
-// as "The end must be after the start." under the END field; the start-side message
-// (tournamentRules' must_be_before_end) only fires for a patch without endsAt.
-test.fixme('a start moved past the stored end says "must be before the end"', { tag: ['@e-dates'] }, async ({ openAs }) => {
+test('a start moved past the stored end says "must be before the end"', { tag: ['@e-dates'] }, async ({ openAs }) => {
   const page = await openEdit(openAs)
   await field(page, 'startsAtLabel').fill(localDateTime(11))
   await expect(page.getByRole('alert').filter({ hasText: t('tournaments.errStartsAtBeforeEnd') })).toBeVisible()
+  await expect(page.getByRole('alert').filter({ hasText: t('tournaments.errEndsAt') })).toHaveCount(0)
 })
 
 test('relinking to a declared BGA tournament is a field error', { tag: ['@e-relink-taken'] }, async ({ openAs }) => {
@@ -143,22 +141,10 @@ test('reopening a tournament whose end is past', { tag: ['@e-reopen-past'] }, as
   await db.query(PAST)
   const page = await openDetail(openAs, 'alice')
   await expect(pill(page)).toHaveText(t('tournaments.statusEnded'))
-  // Through the API: the UI offers no Reopen here (see the fixme below).
-  expect((await api('alice').patch(`/api/tournaments/${id}`, { action: 'reopen' })).status).toBe(200)
-  await page.reload()
+  await panel(page).getByRole('button', { name: t('tournaments.reopen') }).click()
   await expect(pill(page)).toHaveText(t('tournaments.statusOngoing'))
   expect((await api('alice').get(`/api/tournaments/${id}`)).body.endsAt).toBeNull()
   // Back to upcoming for the next steps.
-  expect((await api('alice').patch(`/api/tournaments/${id}`, { startsAt: isoDaysFromNow(1) })).status).toBe(200)
-})
-
-// A tournament ended by its end date (ended_at NULL) shows "Ended", but the organizer
-// panel picks Reopen vs "Mark as ended" from endedAt alone, so it offers "Mark as ended".
-test.fixme('the organizer panel offers Reopen on a tournament ended by its date', { tag: ['@e-reopen-past'] }, async ({ openAs, db, api }) => {
-  await db.query(PAST)
-  const page = await openDetail(openAs, 'alice')
-  await panel(page).getByRole('button', { name: t('tournaments.reopen') }).click()
-  await expect(pill(page)).toHaveText(t('tournaments.statusOngoing'))
   expect((await api('alice').patch(`/api/tournaments/${id}`, { startsAt: isoDaysFromNow(1) })).status).toBe(200)
 })
 

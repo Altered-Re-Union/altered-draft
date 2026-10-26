@@ -132,9 +132,7 @@ test('a start in the past blocks the submit', { tag: ['@b-past'] }, async ({ ope
   await expect(submit(page)).toBeEnabled()
 })
 
-// The submit button is disabled while problems are listed, and a disabled default button
-// blocks implicit submission: Enter never reaches handleSubmit, so focus does not move.
-test.fixme('Enter in a field jumps to the first problem', { tag: ['@b-past'] }, async ({ openAs }) => {
+test('Enter in a field jumps to the first problem', { tag: ['@b-past'] }, async ({ openAs }) => {
   const page = await openForm(openAs)
   await fillValid(page, { bgaUrl: bga(123457) })
   await field(page, 'startsAtLabel').fill(localDateTime(-1))
