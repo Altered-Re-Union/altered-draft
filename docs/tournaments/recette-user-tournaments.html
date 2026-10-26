@@ -1,0 +1,1023 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Recette tournois utilisateurs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #f6f5f2;
+  --surface: #ffffff;
+  --surface-2: #f0eee9;
+  --border: #e3e0d8;
+  --text: #1d1b16;
+  --muted: #6b675d;
+  --accent: #4f46e5;
+  --accent-soft: #eceafe;
+  --ok: #15803d;
+  --ok-soft: #e3f4e8;
+  --ko: #c2410c;
+  --ko-soft: #fdebe1;
+  --skip: #7c7768;
+  --skip-soft: #ecebe6;
+  --shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 16px rgba(0,0,0,.04);
+  --radius: 14px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141310;
+    --surface: #1c1b17;
+    --surface-2: #25231e;
+    --border: #34312a;
+    --text: #ece9e1;
+    --muted: #9c978a;
+    --accent: #8b85ff;
+    --accent-soft: #26244a;
+    --ok: #4ade80;
+    --ok-soft: #173322;
+    --ko: #fb923c;
+    --ko-soft: #3a2316;
+    --skip: #a8a394;
+    --skip-soft: #2a2823;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 4px 16px rgba(0,0,0,.25);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #141310;
+  --surface: #1c1b17;
+  --surface-2: #25231e;
+  --border: #34312a;
+  --text: #ece9e1;
+  --muted: #9c978a;
+  --accent: #8b85ff;
+  --accent-soft: #26244a;
+  --ok: #4ade80;
+  --ok-soft: #173322;
+  --ko: #fb923c;
+  --ko-soft: #3a2316;
+  --skip: #a8a394;
+  --skip-soft: #2a2823;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 4px 16px rgba(0,0,0,.25);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.55 Inter, system-ui, sans-serif;
+}
+code, .mono { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: .86em; }
+a { color: var(--accent); }
+.wrap { max-width: 920px; margin: 0 auto; padding: 0 16px 120px; }
+
+header.top {
+  position: sticky; top: 0; z-index: 10;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border);
+}
+header.top .inner { max-width: 920px; margin: 0 auto; padding: 12px 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+header.top h1 { font-size: 17px; margin: 0; font-weight: 700; letter-spacing: -.01em; flex: 1 1 auto; }
+.progress { flex: 1 1 220px; display: flex; align-items: center; gap: 10px; }
+.bar { flex: 1; height: 8px; border-radius: 99px; background: var(--surface-2); overflow: hidden; display: flex; }
+.bar span { height: 100%; transition: width .3s ease; }
+.bar .b-ok { background: var(--ok); }
+.bar .b-ko { background: var(--ko); }
+.bar .b-skip { background: var(--skip); }
+.count { font-size: 13px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.filters { display: flex; gap: 4px; background: var(--surface-2); padding: 3px; border-radius: 10px; }
+.filters button { border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 13px; padding: 4px 10px; border-radius: 8px; cursor: pointer; }
+.filters button.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+.tabs button { font-weight: 600; }
+.badge { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; margin-left: 4px; border-radius: 99px; background: var(--ko); color: #fff; font-size: 11px; font-weight: 700; }
+.new-tag { display: inline-block; font-size: 11px; font-weight: 700; padding: 0 6px; border-radius: 99px; background: var(--accent); color: #fff; vertical-align: 2px; }
+.new-tag.v11 { background: #6d5bd0; }
+.new-tag.auto { background: #2f7d4f; }
+.icon-btn { border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 10px; padding: 5px 9px; cursor: pointer; font: inherit; font-size: 13px; }
+
+.hero { padding: 36px 0 8px; }
+.hero h2 { font-size: 28px; line-height: 1.2; margin: 0 0 8px; letter-spacing: -.02em; }
+.hero p { color: var(--muted); margin: 0; max-width: 680px; }
+
+.cast { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; margin: 24px 0 8px; }
+.persona { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; box-shadow: var(--shadow); min-width: 0; }
+.persona .tag { display: inline-block; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; padding: 2px 8px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); margin-bottom: 6px; }
+.persona .org { font-weight: 600; }
+.persona .meta { color: var(--muted); font-size: 13px; }
+
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; max-width: 100%;
+  border: 1px dashed var(--border); background: var(--surface-2); color: var(--text);
+  border-radius: 8px; padding: 1px 8px; font-family: "JetBrains Mono", monospace; font-size: 12.5px;
+  cursor: pointer; word-break: break-all; text-align: left;
+}
+.chip:hover { border-color: var(--accent); }
+.chip.copied { border-color: var(--ok); color: var(--ok); }
+
+section.group { margin-top: 36px; }
+section.group > h3 { display: flex; align-items: baseline; gap: 10px; font-size: 19px; margin: 0 0 4px; letter-spacing: -.01em; }
+section.group > h3 .letter { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 8px; background: var(--text); color: var(--bg); font-size: 14px; flex: none; }
+section.group > h3 .gcount { margin-left: auto; font-size: 13px; color: var(--muted); font-weight: 500; }
+section.group > .intro { color: var(--muted); margin: 0 0 14px 38px; font-size: 14px; }
+section.group > h3 { cursor: pointer; user-select: none; border-radius: 8px; }
+section.group > h3:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+section.group > h3 .chev { flex: none; align-self: center; color: var(--muted); font-size: 12px; transition: transform .2s; }
+section.group.collapsed > h3 .chev { transform: rotate(-90deg); }
+section.group.collapsed > :not(h3) { display: none; }
+.fold { display: flex; gap: 6px; justify-content: flex-end; margin: 24px 0 -16px; }
+.fold button { border: 1px solid var(--border); background: var(--surface); color: var(--muted); font: inherit; font-size: 13px; padding: 4px 10px; border-radius: 8px; cursor: pointer; }
+.fold button:hover { color: var(--text); }
+
+.step {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  margin-bottom: 10px; box-shadow: var(--shadow); overflow: hidden;
+  transition: border-color .2s, opacity .2s;
+}
+.step[data-status="ok"] { border-color: color-mix(in srgb, var(--ok) 40%, var(--border)); }
+.step[data-status="ok"] .s-title { color: var(--muted); }
+.step[data-status="ko"] { border-color: var(--ko); }
+.step[data-status="skip"] { opacity: .65; }
+.s-head { display: flex; gap: 12px; padding: 14px 16px; align-items: flex-start; }
+.s-num { flex: none; font-size: 12px; font-weight: 600; color: var(--muted); padding-top: 3px; width: 30px; font-variant-numeric: tabular-nums; }
+.s-body { flex: 1; min-width: 0; }
+.s-title { font-weight: 600; margin: 0 0 4px; }
+.s-who { font-size: 13px; color: var(--muted); margin-bottom: 6px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.s-body ul { margin: 6px 0 0; padding-left: 18px; }
+.s-body li { margin: 2px 0; }
+.s-body li::marker { color: var(--muted); }
+.s-body .note { font-size: 13px; color: var(--muted); margin-top: 6px; }
+.s-body pre { background: var(--surface-2); border-radius: 10px; padding: 10px 12px; overflow-x: auto; font-size: 12.5px; margin: 8px 0 0; white-space: pre-wrap; word-break: break-word; position: relative; }
+.s-body pre .copy-pre { position: absolute; top: 6px; right: 6px; }
+
+.status { display: flex; gap: 4px; flex: none; }
+.status button {
+  width: 34px; height: 34px; border-radius: 10px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--muted); cursor: pointer; display: grid; place-items: center;
+  transition: background .15s, color .15s, border-color .15s, transform .1s;
+}
+.status button:active { transform: scale(.94); }
+.status button svg { width: 17px; height: 17px; }
+.status button.on[data-v="ok"] { background: var(--ok-soft); color: var(--ok); border-color: var(--ok); }
+.status button.on[data-v="ko"] { background: var(--ko-soft); color: var(--ko); border-color: var(--ko); }
+.status button.on[data-v="skip"] { background: var(--skip-soft); color: var(--skip); border-color: var(--skip); }
+
+.issue { display: none; border-top: 1px dashed var(--ko); background: color-mix(in srgb, var(--ko-soft) 55%, var(--surface)); padding: 12px 16px 14px 58px; }
+.step[data-status="ko"] .issue, .step.has-note .issue { display: block; }
+.issue label { font-size: 12px; font-weight: 600; color: var(--ko); text-transform: uppercase; letter-spacing: .04em; }
+.issue textarea {
+  width: 100%; min-height: 84px; margin-top: 6px; resize: vertical;
+  border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px;
+  background: var(--surface); color: var(--text); font: inherit; font-size: 14px;
+}
+.issue textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.drop { margin-top: 8px; border: 1.5px dashed var(--border); border-radius: 10px; padding: 10px; font-size: 13px; color: var(--muted); text-align: center; cursor: pointer; }
+.drop.over { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.thumbs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.thumb { position: relative; width: 112px; height: 76px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); background: var(--surface-2); }
+.thumb img { width: 100%; height: 100%; object-fit: cover; cursor: zoom-in; }
+.thumb button { position: absolute; top: 3px; right: 3px; width: 22px; height: 22px; border-radius: 6px; border: 0; background: rgba(0,0,0,.6); color: #fff; cursor: pointer; font-size: 13px; line-height: 1; }
+.thumb .fname { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,.55); color: #fff; font-size: 9.5px; padding: 1px 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: "JetBrains Mono", monospace; }
+
+.callout { background: var(--accent-soft); border-radius: var(--radius); padding: 14px 16px; margin: 14px 0; font-size: 14px; }
+.callout strong { color: var(--accent); }
+details.callout summary { cursor: pointer; font-weight: 600; }
+
+.recap { margin-top: 48px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+.recap-head { display: flex; gap: 10px; align-items: center; padding: 14px 16px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.recap-head h3 { margin: 0; font-size: 17px; flex: 1; }
+.btn { border: 0; background: var(--accent); color: #fff; font: inherit; font-weight: 600; font-size: 14px; padding: 8px 14px; border-radius: 10px; cursor: pointer; }
+.btn.secondary { background: var(--surface-2); color: var(--text); }
+.btn:disabled { opacity: .5; cursor: default; }
+.recap pre { margin: 0; padding: 16px; font-size: 12.5px; white-space: pre-wrap; word-break: break-word; max-height: 460px; overflow: auto; }
+.empty { padding: 20px 16px; color: var(--muted); font-size: 14px; }
+
+.toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(20px); opacity: 0; background: var(--text); color: var(--bg); padding: 8px 14px; border-radius: 10px; font-size: 13px; transition: .2s; pointer-events: none; z-index: 50; }
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.lightbox { position: fixed; inset: 0; background: rgba(0,0,0,.8); display: none; place-items: center; z-index: 40; padding: 16px; cursor: zoom-out; }
+.lightbox.show { display: grid; }
+.lightbox img { max-width: 100%; max-height: 100%; border-radius: 8px; }
+.hidden { display: none !important; }
+
+@media (max-width: 600px) {
+  .s-head { flex-wrap: wrap; }
+  .s-num { width: auto; }
+  .status { width: 100%; justify-content: flex-end; order: 3; }
+  .issue { padding-left: 16px; }
+  section.group > .intro { margin-left: 0; }
+  .hero h2 { font-size: 23px; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="inner">
+    <h1>Recette — tournois créés par les utilisateurs · lot 1</h1>
+    <div class="progress">
+      <div class="bar"><span class="b-ok"></span><span class="b-ko"></span><span class="b-skip"></span></div>
+      <span class="count" id="count">0 / 0</span>
+    </div>
+    <div class="filters tabs" id="tabs">
+      <button data-tab="steps" class="active">Recette</button>
+      <button data-tab="recap">Récap à copier-coller <span class="badge hidden" id="tabBadge"></span></button>
+    </div>
+    <div class="filters" id="filters">
+      <button data-f="all" class="active">Tout</button>
+      <button data-f="todo">À faire</button>
+      <button data-f="ko">Problèmes</button>
+      <button data-f="manual">Manuel seulement</button>
+    </div>
+    <button class="icon-btn" id="themeBtn" title="Thème">◐</button>
+  </div>
+</header>
+
+<main class="wrap">
+ <div id="viewSteps">
+  <div class="hero">
+    <h2>Tournois sealed créés par les utilisateurs — lot 1</h2>
+    <p>Branche <code>feat/user-tournaments</code> sur <code>make dev</code> (API :8080, Vite :5173) + altered-dev-environment. Couvre la déclaration de tournoi, la page tournoi et sa checklist, les pools stockés, le chemin BGA (contrats inchangés), le cycle de vie, la modération (détacher), le menu, et la non-régression Lobby / pools legacy.</p>
+    <p>Spec : <code>docs/tournaments/user-tournaments-spec.md</code> · doc : <code>docs/tournaments/README.md</code> §14. Les groupes suivent un parcours : fais-les dans l'ordre (C à H réutilisent « Test cup » créé en B).</p>
+    <p>Coche ✓ ou ✗ à chaque étape. Le bouton ✗ ouvre un champ texte où tu peux coller des captures (Ctrl+V). Le récap se copie depuis l'onglet en haut. L'état est gardé dans ce navigateur (IndexedDB).</p>
+    <p>Les étapes marquées <span class="new-tag">nouveau</span> ont été ajoutées ou réécrites après une vague de retours : à (re)passer.</p>
+    <p>Les étapes marquées <span class="new-tag auto">auto</span> sont rejouées par la suite Playwright (<code>make e2e</code>, <code>tests/e2e</code>) : plus besoin de les passer à la main. Survole le badge quand la couverture est partielle. Le filtre « Manuel seulement » ne montre que les autres.</p>
+    <p>Les étapes marquées <span class="new-tag v11">v1.1</span> couvrent l'option ajoutée au lot 1 : <strong>faction des uniques</strong> (groupe L).</p>
+  </div>
+
+  <div class="cast" id="cast"></div>
+
+  <div class="fold"><button type="button" id="foldAll">Tout replier</button><button type="button" id="unfoldAll">Tout déplier</button></div>
+  <div id="groups"></div>
+
+  <p style="margin-top:32px;text-align:center">
+    <button class="btn" data-goto="recap">Voir le récap à copier-coller →</button>
+  </p>
+ </div>
+
+ <div id="viewRecap" class="hidden">
+  <div class="hero">
+    <h2>Récap à copier-coller</h2>
+    <p>Colle-le tel quel dans le chat. Si tu as joint des captures, télécharge-les d'abord : le récap donne leur chemin dans <code>~/Downloads</code>.</p>
+  </div>
+  <div class="recap" style="margin-top:20px">
+    <div class="recap-head">
+      <h3>Récap à copier-coller</h3>
+      <button class="btn secondary" id="dlImages">Télécharger les captures</button>
+      <button class="btn" id="copyRecap">Copier</button>
+    </div>
+    <pre id="recapText"></pre>
+  </div>
+
+  <p style="margin-top:24px;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap">
+    <button class="icon-btn" data-goto="steps">← Retour à la recette</button>
+    <button class="icon-btn" id="resetAll">Tout réinitialiser</button>
+  </p>
+ </div>
+</main>
+
+<div class="toast" id="toast"></div>
+<div class="lightbox" id="lightbox"><img alt=""></div>
+
+<script>
+const WEB = 'http://localhost:5173';
+const API = 'http://localhost:8080';
+const KC = 'http://auth.altered.local.gd:18080';
+const PWD = 'TestPassword1234';
+const BGA_ID = '123456';
+const BGA_URL = 'https://fr.boardgamearena.com/tournament/?id=123456';
+
+const PERSONAS = {
+  alice: { tag: 'Organisatrice', org: 'alice (sub 1111…)', email: 'alice', meta: 'Crée « Test cup ». Pas modératrice.' },
+  bob:   { tag: 'Modérateur + joueur', org: 'bob (sub 2222…)', email: 'bob', meta: 'Modérateur via TOURNAMENT_MODERATORS (setup 0.3). Prépare aussi un pool.' },
+  carol: { tag: 'Joueuse', org: 'carol (à créer, setup 0.4)', email: 'carol@example.test', meta: 'Compte sans pool : sert au chemin BGA et aux refus de création.' },
+  anon:  { tag: 'Déconnecté', org: 'fenêtre privée', email: '—', meta: 'Aucune session Re:Union.' },
+};
+
+const chip = (txt) => `<button class="chip" data-copy="${txt.replace(/"/g,'&quot;')}">${txt}</button>`;
+const who = (k) => k === 'anon' ? '<span>Déconnecté (fenêtre privée)</span>' : (k ? `${chip(PERSONAS[k].email)} ${chip(PWD)} <span>${PERSONAS[k].meta}</span>` : '');
+const url = (u) => chip(u);
+const pre = (cmd) => {
+  const users = [...new Set([...cmd.matchAll(/\$TOKEN_([A-Z]+)/g)].map(m => m[1]))].filter(u => !cmd.includes('export TOKEN_' + u))
+  const full = [...users.map(u => TOKEN(u.toLowerCase())), cmd].join('\n')
+  return `<pre><button class="chip copy-pre" data-copy-pre>copier</button>${full.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</pre>`
+}
+const LOGIN = { carol: 'carol@example.test' }
+const TOKEN = (u) => `export TOKEN_${u.toUpperCase()}=$(curl -s -X POST "${KC}/realms/players/protocol/openid-connect/token" -d grant_type=password -d client_id=altered-draft -d client_secret=dev-altered-draft-secret -d username=${LOGIN[u] ?? u} -d password=${PWD} -d 'scope=openid profile' | node -pe 'JSON.parse(require("fs").readFileSync(0)).access_token'); [ -n "$TOKEN_${u.toUpperCase()}" ] && [ "$TOKEN_${u.toUpperCase()}" != undefined ] && echo "TOKEN_${u.toUpperCase()} ok" || echo "TOKEN_${u.toUpperCase()} VIDE : identifiants refusés par Keycloak"`;
+const DECKS = (tok, filter) => pre(`curl -s -H "Authorization: Bearer $TOKEN_${tok}" -H 'Accept: application/json' "http://localhost:8001/api/decks?itemsPerPage=200" | node -pe 'const j = JSON.parse(require("fs").readFileSync(0)); const items = j["hydra:member"] ?? j.member ?? j; items.filter(d => /${filter}/.test(d.name) && Date.parse(d.createdAt) > Date.now() - 10 * 60 * 1000).map(d => d.id + "  " + d.name).join("\\n") || "aucun deck"'`);
+const PSQL = (sql) => pre(`docker compose exec -T postgres psql -U altered-draft -d altered-draft -c "${sql}"`);
+
+// Steps replayed by the Playwright suite. Rewritten by `npm run test:e2e:coverage -- --write`
+// (scripts/e2e-recette-coverage.mjs) from the tests' tags: do not edit this line by hand.
+const AUTO_STEPS = ['a-grid', 'a-lang', 'a-sealed-run', 'b-cap', 'b-dup', 'b-end-before', 'b-even', 'b-happy', 'b-links', 'b-logged-out', 'b-nej', 'b-options', 'b-past', 'b-session-expired', 'c-404', 'c-anon', 'c-organizer', 'c-step1', 'd-back', 'd-bob', 'd-deck', 'd-one-deck', 'd-open', 'd-same', 'e-cancel', 'e-close', 'e-dates', 'e-delete', 'e-edit-anon', 'e-locked', 'e-relink-taken', 'e-rename', 'e-reopen-past', 'e-stranger', 'f-bga-r3', 'f-button-r3', 'f-delete', 'f-detach-r3', 'f-frozen', 'f-no-button', 'f-players-r3', 'f-redeclare-r3', 'f-squat-r3', 'g-adopt', 'g-adopt-mixed', 'g-carol-menu', 'g-counts', 'g-create', 'g-legacy', 'g-name', 'g-panel', 'h-anon', 'h-created', 'h-generic', 'h-mobile', 'h-my-ongoing', 'h-ongoing', 'h-order', 'h-pools', 'h-tabs-url', 'i-freeze', 'i-legacy-row', 'i-normal', 'j-console', 'j-fr', 'j-mobile', 'j-theme', 'l-api-invalid', 'l-api-no-unique', 'l-create', 'l-form', 'l-imposed', 'l-menu', 'l-pool'];
+// Steps the suite covers with a narrower assertion than the recette (hand-maintained).
+const AUTO_PARTIAL = { 'j-fr': 'raw keys and a FR sample; English leftovers stay a human check', 'j-theme': 'toggle, persistence and screenshots; contrast stays a human check' };
+
+const GROUPS = [
+  {
+    letter: '0', title: 'Setup',
+    intro: 'Une fois, avant de commencer. Navigateur : Chrome ou Firefox (Safari refuse les cookies Secure sur http://localhost).',
+    steps: [
+      { id: 'setup-branch', title: 'Branche et dépendances',
+        html: pre(`cd ~/Perso/altered-reunion/altered-draft && git checkout feat/user-tournaments && git pull && make install`) },
+      { id: 'setup-dev-env', title: 'Démarrer altered-dev-environment (Keycloak + decks-api)',
+        html: `<p>Dans le repo frère : <code>./run.sh</code>. Contrôle : ${url(KC + '/realms/players')} répond.</p>` },
+      { id: 'setup-moderator', title: 'Faire de bob un modérateur',
+        html: `<p>Dans <code>.env</code> :</p>${pre('TOURNAMENT_MODERATORS=22222222-2222-2222-2222-222222222222')}<p class="note">Relancer <code>make dev</code> ensuite (l'API lit l'env au démarrage).</p>` },
+      { id: 'setup-carol', title: 'Créer un 3e compte « carol » dans Keycloak',
+        html: `<ul><li>${url(KC + '/admin')} (admin / admin) › realm <strong>players</strong> › Users › Add user : username et email ${chip('carol@example.test')} (dans ce realm, le username est l'email ; alice et bob acceptent aussi leur pseudo, pas un compte créé à la main), email vérifié, prénom/nom quelconques.</li>
+<li>Credentials › Set password ${chip(PWD)}, <em>Temporary</em> décoché.</li>
+<li>Les jetons d'accès du Keycloak de dev expirent au bout de <strong>5 minutes</strong> : chaque bloc de commande de la recette redemande le sien en première ligne.</li>
+<li>Attribut <code>pseudo</code> = <code>Carol</code> si le formulaire le propose (sinon le nom affiché sera le username).</li></ul>
+<p class="note">Le realm est réimporté à chaque redémarrage de Keycloak : à refaire après un restart.</p>` },
+      { id: 'setup-dev-r3', v2: true, title: 'Lancer la stack et migrer',
+        html: `<p>Relance <code>make dev</code> (ou, s'il tourne déjà, <code>make db-migrate</code> dans un autre terminal) : cette vague ajoute une colonne et deux index, et l'API plante en 500 tant que la base ne les a pas.</p>${pre('make dev')}<p>Contrôles :</p>${PSQL('\\d tournaments')}<p>Attendu : colonne <code>detached_at</code> et index <code>tournaments_bga_tournament_id_live</code> (partiel <code>WHERE detached_at IS NULL</code>).</p>${PSQL('\\d sealed_pools')}<p>Attendu : colonne <code>adopted_at</code>, index <code>sealed_pools_by_tournament_ref</code> et <code>sealed_pools_legacy_by_bga_id</code>.</p>` },
+      { id: 'setup-tests-r3', v2: true, title: 'Suites automatiques vertes',
+        html: `${pre('npm test && npm run test:integration')}<p>Attendu : unit 235/235, intégration 59/59 (Docker requis pour la seconde). Les cas de concurrence (modification de config ou détachement pendant la création d'un pool), le test golden de la régénération legacy et le schéma rejoué deux fois ne sont couverts que là : pas d'étape manuelle pour eux.</p>` },
+      { id: 'setup-clean', title: 'Partir d\'une base sans tournoi',
+        html: `${PSQL('SELECT id, name, bga_tournament_id, detached_at FROM tournaments')}<p>Attendu : vide (ou des lignes que tu connais). Pour repartir de zéro sur les tournois uniquement :</p>${PSQL('DELETE FROM sealed_pools WHERE tournament_ref IS NOT NULL; DELETE FROM tournaments;')}` },
+    ],
+  },
+  {
+    letter: 'A', title: 'Non-régression Lobby (composants partagés)',
+    intro: 'SetPresetGrid et SettingsFields ont été extraits / modifiés : le Lobby doit être identique.',
+    steps: [
+      { id: 'a-grid', title: 'Grille des sets : sélection, désélection, Next',
+        html: `<ul><li>${url(WEB)} › créer une room › Sealed › étape Cards, onglet Presets.</li>
+<li>Attendu : mêmes tuiles qu'avant (logo sur la couleur du set, COREKS absent), clic = sélection (bord doré + ✓), re-clic = désélection, <strong>Next</strong> désactivé tant qu'aucun set n'est choisi.</li></ul>` },
+      { id: 'a-lang', title: 'Réglages Sealed : la ligne « Card language » est toujours là',
+        html: `<p>Étape Settings du Lobby, en Sealed puis en Draft. Attendu : la ligne de langue (EN FR ES DE IT) est présente et fonctionne.</p>` },
+      { id: 'a-sealed-run', title: 'Un sealed de room se lance toujours',
+        html: `<p>Lancer le sealed de la room jusqu'à la page Sealed. Attendu : boosters affichés, aucune erreur console.</p>` },
+    ],
+  },
+  {
+    letter: 'B', title: 'Création d\'un tournoi (/tournament/new)',
+    intro: 'Connecté en alice sauf mention contraire.',
+    steps: [
+      { id: 'b-logged-out', who: 'anon', title: 'Déconnecté : invite de connexion',
+        html: `<p>${url(WEB + '/tournament/new')}. Attendu : encart « Connect Re:Union », le bouton renvoie sur <code>/tournament/new</code> après login.</p>` },
+      { id: 'b-happy', who: 'alice', title: 'Création nominale « Test cup »',
+        html: `<ul><li>Nom ${chip('Test cup')}, description sur 2 lignes, lien ${chip(BGA_URL)}.</li>
+<li>Sous le lien : « Tournament id ${BGA_ID} detected » en vert, et l'aide « Paste the link of the MAIN tournament page (not a stage) ».</li>
+<li>Début = demain (valeur par défaut 20:00), fin vide ; la note de fuseau affiche ton fuseau (Europe/Paris).</li>
+<li>Cards : Skybound Odyssey. Settings : pas de ligne de langue ; héros « In packs » ; uniques 1 / 1.</li>
+<li>Submit. Attendu : redirection vers <code>/tournament/t/&lt;id&gt;</code>.</li></ul>
+${pre(`curl -s "${API}/api/tournaments" | node -pe 'JSON.parse(require("fs").readFileSync(0)).tournaments.map(t => [t.name, t.bgaTournamentId, t.bgaUrl, t.status])'`)}
+<p>Attendu : <code>Test cup</code>, <code>${BGA_ID}</code>, lien canonique <code>https://boardgamearena.com/tournament?id=${BGA_ID}</code>, <code>upcoming</code>.</p>` },
+      { id: 'b-links', who: 'alice', title: 'Variantes de lien BGA (sans soumettre)',
+        html: `<p>Coller tour à tour dans le champ lien, observer la ligne sous le champ :</p><ul>
+<li>${chip('HTTPS://BOARDGAMEARENA.COM/tournament/?id=5&x=1')} → id 5 détecté.</li>
+<li>${chip('http://boardgamearena.com/tournament?id=5')} → invalide (http).</li>
+<li>${chip('https://boardgamearena.com/tournamentlist?id=5')} → invalide.</li>
+<li>${chip('https://boardgamearena.com.evil.io/tournament?id=5')} → invalide.</li>
+<li>${chip('https://boardgamearena.com/tournament?id=abc')} → invalide.</li></ul>` },
+      { id: 'b-dup', who: 'alice', title: 'Lien déjà déclaré',
+        html: `<ul><li>Nouveau formulaire, autre nom, coller le même lien ${chip(BGA_URL)}.</li>
+<li>Attendu <strong>dès le collage</strong>, sans soumettre : le champ passe en rouge avec « A tournament already exists for this BGA link. ».</li>
+<li>La barre collée en bas de l'écran (visible quel que soit le scroll) liste « BGA tournament link — A tournament already exists… » ; le bouton est grisé, son infobulle donne la liste.</li>
+<li>Clic sur la ligne dans la barre : la page remonte au champ lien, curseur dedans.</li></ul>` },
+      { id: 'b-past', who: 'alice', title: 'Début dans le passé : erreur sans requête',
+        html: `<ul><li>Formulaire par ailleurs valide (nom, lien libre, set choisi : le bouton est actif).</li>
+<li>Début = hier. Attendu, immédiatement : champ début en rouge avec « The start must be a valid date in the future. », la barre du bas le liste, le bouton se grise.</li>
+<li>DevTools › Network : aucune requête POST (on ne peut pas soumettre ; Entrée dans un champ amène au premier problème).</li>
+<li>Remettre une date future : le problème disparaît de la barre et le bouton redevient actif.</li></ul>` },
+      { id: 'b-end-before', who: 'alice', title: 'Fin avant le début, nom trop court',
+        html: `<ul><li>Fin = 1 h avant le début → erreur sous le champ fin, ligne « End » dans la barre.</li><li>Nom ${chip('ab')} puis sortir du champ → erreur de longueur (3–80) sous le champ et dans la barre.</li>
+<li>Formulaire vierge : la barre liste d'emblée ce qui manque (nom, lien, set) en couleur neutre ; une ligne passe au rouge une fois son champ touché.</li>
+<li>Mobile (DevTools 375 px) : la barre reste en bas et lisible, sans scroll horizontal.</li></ul>` },
+      { id: 'b-nej', who: 'alice', title: 'Set sans données d\'uniques (Neverending Journey)',
+        html: `<p>Choisir Neverending Journey. Attendu : steppers d'uniques désactivés à 0 avec « No unique data for this set yet », création OK (lien ${chip('https://boardgamearena.com/tournament?id=123458')}).</p>` },
+      { id: 'b-even', who: 'alice', title: 'Even factions se décoche sous 2 uniques',
+        html: `<ul><li>Uniques 1 + 1, cocher « Spread the uniques evenly across factions ».</li><li>Descendre à 1 + 0. Attendu : case décochée et grisée.</li>
+<li>Remonter à 1 + 1 : la case reste décochée (il faut la recocher).</li><li>Créer avec 1 + 0 (lien ${chip('https://boardgamearena.com/tournament?id=123459')}) puis vérifier : <code>evenFactions</code> vaut <code>false</code>.</li></ul>
+${pre(`curl -s "${API}/api/tournaments" | node -pe 'JSON.parse(require("fs").readFileSync(0)).tournaments.map(t => [t.bgaTournamentId, JSON.stringify(t.config.uniques)])'`)}` },
+      { id: 'b-options', who: 'alice', title: 'Héros « Free choice » et ban list',
+        html: `<p>Un tournoi avec héros « Free choice » et ban list exclue. Attendu : la ligne de résumé sur sa page contient « free hero choice » et « ban list excluded ».</p>` },
+      { id: 'b-session-expired', who: 'alice', v2: true, title: 'Session expirée pendant la saisie : la saisie est conservée',
+        html: `<ul><li>En alice, ${url(WEB + '/tournament/new')} : nom ${chip('Expired session cup')}, lien ${chip('https://boardgamearena.com/tournament?id=555777')}, set Skybound Odyssey. <strong>Ne pas soumettre.</strong></li>
+<li>Couper la session d'alice côté Keycloak, au choix : ${url(KC + '/admin')} (admin / admin) › realm <strong>players</strong> › Users › alice › Sessions › « Sign out » ; ou la commande ci-dessous.</li></ul>
+${pre(`ADMIN=$(curl -s -X POST "${KC}/realms/master/protocol/openid-connect/token" -d grant_type=password -d client_id=admin-cli -d username=admin -d password=admin | node -pe 'JSON.parse(require("fs").readFileSync(0)).access_token')
+curl -s -o /dev/null -w 'logout %{http_code}\\n' -X POST -H "Authorization: Bearer $ADMIN" "${KC}/admin/realms/players/users/11111111-1111-1111-1111-111111111111/logout"`)}
+<p>Attendu : <code>logout 204</code>.</p>
+<ul><li>Cliquer « Créer le tournoi ». Attendu : dans la barre du bas, en rouge, « Votre session Re:Union a expiré : votre saisie est conservée, reconnectez-vous pour l'enregistrer. » et un bouton « Se reconnecter (saisie conservée) ». Plus d'erreur brute en anglais.</li>
+<li>Cliquer le bouton : Keycloak redemande le mot de passe ; se connecter en alice.</li>
+<li>Attendu : retour sur le formulaire, nom, lien et set remplis comme avant, bouton de création actif.</li>
+<li>Ne pas créer (ou supprimer le tournoi ensuite).</li></ul>` },
+      { id: 'b-cap', title: 'Plafond de 10 tournois ouverts (curl)',
+        html: `<p>Avec le jeton d'alice (${chip('TOKEN_ALICE')} ci-dessous), créer jusqu'à 10 tournois ouverts ; le 11e répond <code>429 too_many_open_tournaments</code>. La même chose en bob (modérateur) passe au-delà (2e commande).</p>
+${pre(TOKEN('alice'))}
+${pre(`T=$TOKEN_ALICE P=90 node -e '(async () => { for (let i = 1; i <= 11; i++) { const r = await fetch("${API}/api/tournaments", { method: "POST", headers: { Authorization: "Bearer " + process.env.T, "Content-Type": "application/json" }, body: JSON.stringify({ name: "Cap " + process.env.P + "-" + i, bgaUrl: "https://boardgamearena.com/tournament?id=" + process.env.P + i, startsAt: new Date(Date.now() + 864e5).toISOString(), config: { source: { type: "set", setCode: "CYCLONE" }, heroes: "packs" } }) }); process.stdout.write(r.status + " ") } console.log() })()'`)}
+<p>Puis en bob (modérateur) : que des 201.</p>${pre(TOKEN('bob'))}
+${pre(`T=$TOKEN_BOB P=91 node -e '(async () => { for (let i = 1; i <= 11; i++) { const r = await fetch("${API}/api/tournaments", { method: "POST", headers: { Authorization: "Bearer " + process.env.T, "Content-Type": "application/json" }, body: JSON.stringify({ name: "Cap " + process.env.P + "-" + i, bgaUrl: "https://boardgamearena.com/tournament?id=" + process.env.P + i, startsAt: new Date(Date.now() + 864e5).toISOString(), config: { source: { type: "set", setCode: "CYCLONE" }, heroes: "packs" } }) }); process.stdout.write(r.status + " ") } console.log() })()'`)}
+<p class="note">Les tournois déjà ouverts d'alice comptent : le 429 peut arriver avant le 11e. Nettoyage (aucun pool sur ces tournois) :</p>${PSQL("DELETE FROM tournaments WHERE name LIKE 'Cap %'")}<p class="note">Les URL des commandes sont entre guillemets : sans ça, zsh (url-quote-magic) échappe le <code>;</code> collé après une URL et la boucle ne se ferme pas.</p>` },
+    ],
+  },
+  {
+    letter: 'C', title: 'Page tournoi (/tournament/t/:id)',
+    intro: 'Sur « Test cup ».',
+    steps: [
+      { id: 'c-anon', who: 'anon', title: 'Déconnecté : contenu public, pas de panneau organisateur',
+        html: `<ul><li>Nom + pastille « Upcoming », dates dans ton fuseau, « Organized by alice · 0 pools prepared », ligne de résumé (« 7 boosters · Skybound Odyssey · 1 unique in boosters · 1 guaranteed unique »), description avec ses retours à la ligne.</li>
+<li>Étape 2 : bouton « Connect to prepare your pool ». Aucun panneau organisateur.</li></ul>` },
+      { id: 'c-step1', who: 'anon', title: 'Étape 1 : lien BGA et case mémorisée',
+        html: `<p>Le bouton ouvre le lien BGA dans un nouvel onglet. Cocher « I'm registered on BGA », recharger : la case est toujours cochée et l'étape passe au vert (localStorage <code>tournament_bga_registered:&lt;id&gt;</code>).</p>` },
+      { id: 'c-organizer', who: 'alice', title: 'Organisatrice : panneau',
+        html: `<p>Attendu : panneau « Organizer » avec « 0 from this site · 0 created by BGA games », Edit, « Cancel the tournament », « Mark as ended », Delete actif. Pas de bouton « Detach » (alice n'est pas modératrice).</p>` },
+      { id: 'c-404', who: 'anon', title: 'Id inconnu',
+        html: `<p>${url(WEB + '/tournament/t/00000000-0000-0000-0000-000000000000')} et ${url(WEB + '/tournament/t/nope')}. Attendu : message « not found », pas de page blanche.</p>` },
+    ],
+  },
+  {
+    letter: 'D', title: 'Pool d\'un joueur',
+    steps: [
+      { id: 'd-open', who: 'alice', title: '« Open my pool » crée le pool et ouvre la page pool',
+        html: `<ul><li>Clic sur « Open my pool » : spinner, puis <code>/tournament/t/&lt;id&gt;/pool</code>.</li>
+<li>Révélation : 7 boosters de 13 (1 héros + 9 communes + 3 rares, dont 1 unique), puis un 8e « booster » avec l'unique garanti.</li>
+<li>Titre = « Test cup », lien « ← Back to the tournament ».</li></ul>` },
+      { id: 'd-back', who: 'alice', title: 'Retour sur la page tournoi',
+        html: `<p>Attendu : étape 2 cochée (« See my pool »), panneau « 1 from this site · 0 created by BGA games », « 1 pool prepared », Delete grisé avec l'infobulle « Cannot delete: pools exist ».</p>` },
+      { id: 'd-deck', who: 'alice', title: 'Construire un deck : synchro et étape 3',
+        html: `<ul><li>Sur la page pool, « Random deck » ou ajout manuel jusqu'à 30 cartes.</li>
+<li>Retour page tournoi : étape 3 cochée, « Deck: Test cup · 30 cards ».</li>
+<li>Le deck existe sur le decks-api local (format sealed).</li></ul>` },
+      { id: 'd-same', who: 'alice', title: 'Un seul pool par joueur',
+        html: `<p>Recharger la page pool, rouvrir depuis le menu : même contenu (pas de nouveau tirage).</p>${PSQL(`SELECT sub, created_by, tournament_id, tournament_name FROM sealed_pools WHERE tournament_ref IS NOT NULL`)}<p>Attendu : 1 ligne pour alice, <code>created_by = page</code>, <code>tournament_id = ${BGA_ID}</code>.</p>` },
+      { id: 'd-bob', who: 'bob', title: 'Un second joueur a un autre pool',
+        html: `<p>Autre navigateur (ou fenêtre privée) en bob : « Open my pool ». Attendu : un pool différent ; la page d'alice affiche « 2 pools prepared ».</p>` },
+      { id: 'd-one-deck', who: 'bob', v2: true, title: 'Deck aléatoire puis retouches rapides : un seul deck créé',
+        html: `<p>Avant ce correctif, deux sauvegardes qui se chevauchaient sur un pool neuf créaient chacune un deck sur le decks-api.</p>
+<ul><li>En bob, sur son pool de Test cup tout neuf (étape précédente, encore sans deck) : « Deck aléatoire », puis tout de suite (moins de 2 s) deux ou trois « + » / « − » sur des cartes.</li>
+<li>Attendre 5 s, puis lister les decks de bob dont le nom contient « Test cup » :</li></ul>
+${DECKS('BOB', 'Test cup')}
+<p>La commande ne garde que les decks créés dans les 10 dernières minutes (les decks des recettes précédentes restent sur le decks-api). Attendu : <strong>une seule</strong> ligne. Recharger la page pool : le deck affiché est celui-là, avec les retouches.</p>` },
+    ],
+  },
+  {
+    letter: 'E', title: 'Édition et cycle de vie (organisatrice)',
+    steps: [
+      { id: 'e-locked', who: 'alice', title: 'Édition verrouillée une fois des pools créés',
+        html: `<p>Edit. Attendu : Cards, Settings et lien BGA désactivés avec « Cards, settings and the BGA link are locked: pools already exist. » ; nom, description et dates modifiables.</p>` },
+      { id: 'e-rename', who: 'alice', title: 'Renommer propage le nom aux pools',
+        html: `<ul><li>Renommer en ${chip('Test cup renamed')}.</li><li>Attendu : titre de la page pool d'alice et de bob = nouveau nom, l'onglet « Mes pools » idem.</li>
+<li>Le deck d'alice prend le nouveau nom à la prochaine modification du deck (synchro) ou au prochain appel BGA.</li></ul>
+<p class="note">Remettre « Test cup » à la fin (les étapes G cherchent « Random Test cup »).</p>` },
+      { id: 'e-dates', who: 'alice', title: 'Dates croisées refusées',
+        html: `<ul><li>Fin fixée dans 10 jours et enregistrer. Puis début dans 11 jours → erreur « must be before the end ».</li><li>Fin avant le début → erreur sous la fin.</li></ul>` },
+      { id: 'e-relink-taken', who: 'alice', title: 'Changer le lien vers un lien déjà pris (tournoi sans pool)',
+        html: `<p>Sur le tournoi NEJ (sans pool), remplacer le lien par ${chip(BGA_URL)}. Attendu : « A tournament already exists for this BGA link. » sous le champ (et non une erreur générique / 500).</p>` },
+      { id: 'e-cancel', who: 'alice', title: 'Annuler : création de pool fermée, édition toujours possible',
+        html: `<ul><li>« Cancel the tournament » (confirmation). Pastille « Cancelled ».</li><li>En carol : étape 2 affiche « Pool creation is closed for this tournament. ».</li>
+<li>En alice et bob : leur pool reste accessible.</li><li>En alice : Edit fonctionne toujours (renommer), puis « Restore » → « Upcoming ».</li></ul>` },
+      { id: 'e-close', who: 'alice', title: 'Clore puis rouvrir',
+        html: `<p>« Mark as ended » → pastille « Ended », disparaît des onglets publics « À venir » / « En cours ». « Reopen » → « Upcoming » de nouveau.</p>` },
+      { id: 'e-reopen-past', who: 'alice', title: 'Rouvrir un tournoi dont la fin est passée',
+        html: `<p>Sur un tournoi de test sans enjeu, passer début et fin dans le passé en base :</p>${PSQL(`UPDATE tournaments SET starts_at = now() - interval '3 days', ends_at = now() - interval '1 day' WHERE name = 'Test cup'`)}
+<p>Recharger : « Ended ». Cliquer « Reopen ». Attendu : « Ongoing », date de fin effacée.</p><p class="note">Remettre un début futur ensuite si tu veux rejouer B/C (Edit).</p>` },
+      { id: 'e-delete', who: 'alice', title: 'Supprimer un tournoi sans pool',
+        html: `<p>Sur le tournoi NEJ : Delete (confirmation) → retour au menu, tournoi disparu. Sur « Test cup » (avec pools) : bouton grisé.</p>` },
+      { id: 'e-stranger', who: 'carol', title: 'Un tiers ne peut pas éditer',
+        html: `<p>En carol, ${url(WEB + '/tournament/t/<id>/edit')} (remplacer l'id) → arrivée directe sur la page tournoi : le formulaire n'apparaît <strong>jamais</strong>, même une fraction de seconde (seul « Chargement… » s'affiche le temps de la vérification) ; pas de panneau organisateur.</p>` },
+      { id: 'e-edit-anon', who: 'anon', title: 'Édition déconnecté : invite de connexion',
+        html: `<p>Déconnecté, ${url(WEB + '/tournament/t/<id>/edit')}. Attendu : encart « Connect Re:Union » (et non une redirection vers la page tournoi). Après login en alice, retour sur le formulaire prérempli.</p>` },
+    ],
+  },
+  {
+    letter: 'F', title: 'Modération : détacher un tournoi squatté',
+    intro: 'Scénario (réécrit) : bob joue déjà le tournoi BGA 777777 avant toute déclaration ; carol le déclare sans l\'organiser (elle adopte le pool de bob) ; alice y ouvre un pool ; bob (modérateur) détache : le pool d\'alice est supprimé, celui de bob est conservé ; alice (vraie organisatrice) redéclare et récupère le pool de bob.',
+    steps: [
+      { id: 'f-squat-r3', who: 'carol', v2: true, title: 'Préparer la déclaration squattée',
+        html: `<ul><li>bob joue une partie du tournoi BGA 777777, que personne n'a encore déclaré : son pool de préparation y est lié.</li></ul>
+${pre(`curl -s "${API}/api/tournament-bga-decklist?tournamentId=777777&tournamentName=BGA%20name&gameId=g-777777" -H "Authorization: Bearer $TOKEN_BOB" | node -pe 'const j = JSON.parse(require("fs").readFileSync(0)); j["hydra:member"]?.map(m => m.id + "  " + m.name) ?? j'`)}
+<p>Attendu : <code>[ '&lt;id&gt;  Random BGA name' ]</code>. Note l'id du deck : on le retrouve en fin de F.</p>
+<ul><li>En carol : créer ${chip('Squat cup')} avec ${chip('https://boardgamearena.com/tournament?id=777777')}. Attendu dès la saisie du lien : l'avis « Ce tournoi BGA est déjà en cours de jeu : 1 joueur a déjà un pool… », le format par défaut (Roots of Corruption) imposé et verrouillé. Créer.</li>
+<li>En alice : « Ouvrir mon pool » sur Squat cup.</li>
+<li>En alice : essayer de créer un tournoi avec le même lien → « existe déjà » dès la saisie.</li>
+<li>DevTools › Network : aucun appel <code>/api/tournaments</code> au chargement du formulaire, puis <strong>un seul</strong> <code>GET /api/tournaments?bgaId=777777</code> pendant la saisie (déclenché 350 ms après la dernière frappe).</li></ul>
+${PSQL(`SELECT sub, adopted_at IS NOT NULL AS adopted, set_code FROM sealed_pools WHERE tournament_id = '777777' ORDER BY sub`)}
+<p>Attendu : deux lignes, <code>1111… | f | EOLE</code> (alice, pool créé pour la déclaration) et <code>2222… | t | EOLE</code> (bob, pool adopté).</p>` },
+      { id: 'f-no-button', who: 'carol', title: 'Pas de bouton Détacher pour l\'organisatrice',
+        html: `<p>En carol (organisatrice non modératrice) : panneau Organizer sans « Detach (moderator) ».</p>` },
+      { id: 'f-button-r3', who: 'bob', v2: true, title: 'Le modérateur voit l\'action et son avertissement',
+        html: `<p>En bob : le panneau organisateur s'affiche (modérateur) avec, en bas, le texte d'aide (« Supprime les pools créés pour cette déclaration… Les pools qui existaient déjà sur BGA avant la déclaration sont conservés et rattachés à la prochaine déclaration. ») et « Détacher (modérateur) ». Le clic relit le nombre de pools, puis la confirmation l'annonce : « Sur ses 2 pools, ceux créés pour cette déclaration (joués ou non) sont supprimés sans retour possible, et ceux qui existaient déjà sur BGA avant elle sont conservés… ».</p>` },
+      { id: 'f-detach-r3', who: 'bob', v2: true, title: 'Détacher : pool d\'alice supprimé, pool de bob conservé, tournoi figé',
+        html: `<ul><li>Confirmer. Attendu : pastille « Détaché », avis « Un modérateur a détaché ce tournoi : les pools créés pour lui ont été supprimés, ceux qui existaient déjà sur BGA ont été conservés… », seule reste l'action Supprimer.</li>
+<li>Étape 2 de la checklist : création de pool fermée.</li></ul>
+${PSQL(`SELECT sub, tournament_ref IS NULL AS released, adopted_at FROM sealed_pools WHERE tournament_id = '777777'`)}
+<p>Attendu : <strong>une seule</strong> ligne, celle de bob : <code>2222… | t |</code> (plus rattachée, <code>adopted_at</code> vide). Le pool d'alice a disparu.</p>` },
+      { id: 'f-players-r3', who: 'alice', v2: true, title: 'alice a perdu son pool, bob a gardé le sien',
+        html: `<ul><li>En alice : l'onglet « Mes pools » ne liste plus Squat cup ; le tournoi n'apparaît plus dans « À venir » / « En cours ».</li>
+<li>En bob : « Mes pools » liste toujours son pool du tournoi BGA 777777 (carte qui ouvre le pool lui-même, comme un tournoi non déclaré), même contenu et même deck qu'avant. Son nom affiché reste « Squat cup » jusqu'au prochain appel BGA, qui le rafraîchit.</li></ul>` },
+      { id: 'f-frozen', who: 'carol', title: 'L\'organisatrice ne peut plus rien modifier',
+        html: `<p>En carol : ${url(WEB + '/tournament/t/<id>/edit')} redirige vers la page. En curl, un PATCH répond <code>409 tournament_detached</code> :</p>${pre(TOKEN('carol'))}${pre(`curl -s -X PATCH -H "Authorization: Bearer $TOKEN_CAROL" -H 'Content-Type: application/json' -d '{"name":"Back"}' "${API}/api/tournaments/<id>"`)}` },
+      { id: 'f-redeclare-r3', who: 'alice', v2: true, title: 'La vraie organisatrice redéclare le même lien et récupère le pool de bob',
+        html: `<ul><li>En alice : nouveau tournoi ${chip('Real cup')} avec ${chip('https://boardgamearena.com/tournament?id=777777')}. Attendu dès la saisie : le même avis « déjà en cours de jeu : 1 joueur… », Roots of Corruption imposé. Créer : redirection, « 1 pool préparé », tournoi verrouillé.</li>
+<li>L'ancienne déclaration détachée existe toujours.</li></ul>
+${PSQL(`SELECT sub, tournament_name, adopted_at IS NOT NULL AS adopted FROM sealed_pools WHERE tournament_id = '777777'`)}
+<p>Attendu : <code>2222… | Real cup | t</code>.</p>` },
+      { id: 'f-bga-r3', v2: true, title: 'L\'appel BGA de bob tombe sur son pool, sous la nouvelle déclaration',
+        html: `${pre(`curl -s "${API}/api/tournament-bga-decklist?tournamentId=777777&tournamentName=BGA%20name&gameId=g-777777b" -H "Authorization: Bearer $TOKEN_BOB" | node -pe 'const j = JSON.parse(require("fs").readFileSync(0)); j["hydra:member"]?.map(m => m.id + "  " + m.name) ?? j'`)}
+<p>Attendu : <code>[ '&lt;id&gt;  Random Real cup' ]</code> avec <strong>le même id</strong> qu'au début de F : même pool, même deck, renommé, pas un nouveau.</p>` },
+      { id: 'f-delete', who: 'bob', title: 'Supprimer la trace détachée',
+        html: `<p>Sur Squat cup détaché : Delete → OK (plus aucun pool).</p>` },
+    ],
+  },
+  {
+    letter: 'G', title: 'Chemin BGA (curl)',
+    intro: 'Contrats BGA inchangés. Jetons via la commande du setup, l\'en-tête est celui que BGA transmet.',
+    steps: [
+      { id: 'g-create', title: 'Un compte sans pool : le premier appel BGA crée le pool',
+        html: `<p>Sur « Coupe d’automne — Skybound Odyssey » (id BGA 610001, organisé par alice), où carol n'a pas encore de pool. Sur « Test cup », carol en a déjà un depuis D–F : l'appel renverrait son deck existant.</p>${pre(TOKEN('carol'))}${pre(`curl -s "${API}/api/tournament-bga-decklist?tournamentId=610001&tournamentName=X%20-%20Stage%201&gameId=g1" -H "Authorization: Bearer $TOKEN_CAROL" | node -pe 'const j = JSON.parse(require("fs").readFileSync(0)); j["hydra:member"]?.map(m => m.name) ?? j'`)}
+<p>Attendu : <code>[ 'Random Coupe d’automne — Skybound Odyssey' ]</code> (nom altered-draft, pas celui envoyé par BGA). Si la commande affiche <code>{ error: 'unauthorized' }</code>, le jeton est vide : relance la ligne <code>export TOKEN_CAROL</code>.</p>` },
+      { id: 'g-panel', who: 'alice', title: 'Le panneau compte le pool créé par BGA',
+        html: `<p>Page « Coupe d’automne » en alice : « … · 1 created by BGA games ». Si le tournoi est commencé et que ce chiffre vaut 0, l'avertissement « Check that the BGA link points to the main tournament » s'affiche.</p>` },
+      { id: 'g-name', title: 'Le nom BGA n\'écrase pas le nom altered-draft',
+        html: `${pre(`curl -s "${API}/api/tournament-bga-decklist?tournamentId=610001&tournamentName=Autre&gameId=g2" -H "Authorization: Bearer $TOKEN_CAROL" | node -pe 'const j = JSON.parse(require("fs").readFileSync(0)); j["hydra:member"]?.map(m => m.name) ?? j'`)}
+<p>Attendu : toujours <code>[ 'Random Coupe d’automne — Skybound Odyssey' ]</code>. Puis le compteur de parties de carol sur ce pool :</p>${pre(`curl -s "${API}/api/tournament-bound-pools" -H "Authorization: Bearer $TOKEN_CAROL" | node -pe 'JSON.parse(require("fs").readFileSync(0)).pools.map(p => [p.tournamentName, p.tournamentId, p.gamesPlayed + " games"])'`)}<p>Attendu : la ligne 610001 affiche <code>2 games</code> (g1 et g2 ; rejouer g2 ne compte pas deux fois).</p>` },
+      { id: 'g-carol-menu', who: 'carol', title: 'L’onglet « Mes pools » de carol',
+        html: `<p>${url(WEB + '/tournament')}. Attendu : « Coupe d’automne — Skybound Odyssey » avec sa pastille, le deck « Random Coupe d’automne — Skybound Odyssey · 30 cards », « Change my deck » → <code>/tournament/t/&lt;id&gt;/pool</code>.</p>` },
+      { id: 'g-legacy', title: 'Un id BGA non déclaré lie toujours le pool de préparation générique',
+        html: `${pre(`curl -s "${API}/api/tournament-bga-decklist?tournamentId=424242&tournamentName=Legacy%20cup&gameId=g3" -H "Authorization: Bearer $TOKEN_CAROL" | node -pe 'const j = JSON.parse(require("fs").readFileSync(0)); j["hydra:member"]?.map(m => m.name) ?? j'`)}
+${PSQL(`SELECT tournament_id, tournament_ref IS NULL AS legacy, tournament_name FROM sealed_pools WHERE tournament_id = '424242'`)}<p>Attendu : un pool legacy (<code>tournament_ref</code> nul) nommé « Legacy cup ».</p>` },
+      { id: 'g-adopt', title: 'Tournoi déclaré après coup : le format des pools déjà joués est imposé',
+        html: `<p>Règle (décidée le 18/10) : si des joueurs ont déjà un pool lié à cet id BGA (ils le jouent déjà au format par défaut), la déclaration prend <strong>leur</strong> format et rattache leurs pools d'un coup.</p>
+<ul><li>carol joue une partie du tournoi BGA 474747, que personne n'a déclaré : son pool de préparation y est lié.</li></ul>${pre(`curl -s "${API}/api/tournament-bga-decklist?tournamentId=474747&tournamentName=BGA%20name&gameId=g-474747" -H "Authorization: Bearer $TOKEN_CAROL" | node -pe 'const j = JSON.parse(require("fs").readFileSync(0)); j["hydra:member"]?.map(m => m.name) ?? j'`)}
+<ul><li>En alice, ${url(WEB + '/tournament/new')} : nom ${chip('Declared after the fact')}, lien ${chip('https://boardgamearena.com/tournament?id=474747')}.</li>
+<li>Attendu <strong>dès la saisie du lien</strong> : dans la section Cartes, l'avis « Ce tournoi BGA est déjà en cours de jeu : 1 joueur a déjà un pool au format par défaut… » ; le set du format par défaut (Roots of Corruption) est sélectionné et la grille, les héros et les uniques sont verrouillés.</li>
+<li>Créer. Attendu : page du tournoi en Roots of Corruption, « 1 pool préparé », tournoi verrouillé (Edit : cartes et lien grisés).</li></ul>
+${PSQL(`SELECT tournament_ref IS NOT NULL AS attached, tournament_name, set_code FROM sealed_pools WHERE tournament_id = '474747'`)}
+<p>Attendu : <code>t | Declared after the fact | EOLE</code>. psql affiche les booléens en <code>t</code> (vrai) / <code>f</code> (faux) : <code>t</code> = rattaché.</p>
+<ul><li>En carol, la page du tournoi affiche directement « Voir mon pool » (étape 2 cochée) : son pool est rattaché sans nouvel appel BGA.</li></ul>` },
+      { id: 'g-adopt-mixed', title: 'Formats différents parmi les pools déjà joués : déclaration refusée',
+        html: `<p>Un format mixte n'arrive que si le format par défaut a changé entre deux liaisons : on le simule en base, avec un pool de bob en Skybound Odyssey lié à 484848, puis carol liée normalement (Roots of Corruption).</p>
+${PSQL(`INSERT INTO sealed_pools (sub, kind, set_code, unique_count, even_factions, heroes_in_pool, guaranteed_uniques, nonce, tournament_id, tournament_name, bound_at, cards, boosters, created_by) VALUES ('22222222-2222-2222-2222-222222222222', 'tournament', 'CYCLONE', 1, false, false, 1, 'recette-mixed', '484848', 'BGA name', now(), '{}', '[]', 'bga')`)}
+${pre(`curl -s "${API}/api/tournament-bga-decklist?tournamentId=484848&tournamentName=BGA%20name&gameId=g-484848" -H "Authorization: Bearer $TOKEN_CAROL" | node -pe 'const j = JSON.parse(require("fs").readFileSync(0)); j["hydra:member"]?.map(m => m.name) ?? j'`)}
+<ul><li>En alice, nouveau formulaire, lien ${chip('https://boardgamearena.com/tournament?id=484848')}.</li>
+<li>Attendu dès la saisie : sous le lien, « Ce tournoi BGA est déjà joué avec des pools de formats différents : il ne peut pas être déclaré ici. » ; la barre du bas le liste, le bouton est grisé.</li></ul>
+<p class="note">Nettoyage ensuite :</p>${PSQL(`DELETE FROM sealed_pools WHERE tournament_id = '484848'`)}` },
+      { id: 'g-counts', title: 'Endpoint pool-counts inchangé',
+        html: `${pre(`curl -s "${API}/api/tournament-pool-counts?tournamentId=${BGA_ID}" -H "Authorization: Bearer $TOKEN_CAROL" | head -c 300; echo`)}<p>Attendu : même forme qu'avant (comptes par ref), pas d'erreur.</p>` },
+    ],
+  },
+  {
+    letter: 'H', title: 'Menu /tournament (nouvelle organisation)',
+    intro: 'Refonte du 18/10 : « Mes tournois en cours » en tête, puis 4 onglets (À venir, En cours, Mes pools, Mes tournois créés), chacun avec une phrase d’explication. L’onglet actif est dans l’URL.',
+    steps: [
+      { id: 'h-anon', who: 'anon', title: 'Déconnecté : onglets publics, onglets perso → connexion',
+        html: `<ul><li>${url(WEB + '/tournament')}. Attendu : pas de bloc « Mes tournois en cours ».</li>
+<li>Onglet « À venir » ouvert par défaut avec sa phrase d’explication et son compteur ; les cartes (pastille, début local, résumé, organisateur, nombre de pools) ouvrent la page du tournoi.</li>
+<li>« En cours » : les tournois commencés, avec son explication.</li>
+<li>« Mes pools » et « Mes tournois créés » : encart « Connect Re:Union ».</li>
+<li>« Créer un tournoi » envoie au login.</li></ul>` },
+      { id: 'h-my-ongoing', who: 'carol', title: '« Mes tournois en cours » : grille, carte cliquable, bouton direct',
+        html: `<ul><li>En carol (${chip('carol@example.test')}) : bloc « Mes tournois en cours » en tête de page, en grille (2 colonnes en desktop, 1 en mobile), avec les tournois <strong>commencés</strong> où elle a un pool (« Test cup renamed back »).</li>
+<li>Clic sur la carte (hors bouton) → page du tournoi. Retour arrière → même onglet.</li>
+<li>Clic sur « Changer mon deck » → page pool du tournoi.</li>
+<li>Un compte sans tournoi en cours (ex. bob s’il n’a pas de pool sur un tournoi commencé) ne voit pas ce bloc.</li></ul>` },
+      { id: 'h-tabs-url', who: 'carol', title: 'Onglet dans l’URL',
+        html: `<ul><li>Cliquer « Mes pools » : l’URL devient ${chip(WEB + '/tournament?tab=pools')}. Recharger : l’onglet reste ouvert.</li>
+<li>Ouvrir directement ${url(WEB + '/tournament?tab=created')} : « Mes tournois créés » est ouvert. Une valeur inconnue (${chip(WEB + '/tournament?tab=nope')}) ouvre « À venir ».</li>
+<li>Les compteurs à côté des onglets correspondent au nombre de cartes de chaque onglet.</li></ul>` },
+      { id: 'h-pools', who: 'carol', title: '« Mes pools » : cartes cliquables + « Changer mon deck »',
+        html: `<ul><li>Phrase d’explication en tête ; un pool par tournoi, les tournois déclarés <strong>d’abord</strong>, puis les pools de tournois BGA non déclarés.</li>
+<li>Carte d’un tournoi déclaré : clic → page du tournoi ; « Changer mon deck » → page pool.</li>
+<li>Carte d’un pool legacy (tournoi BGA non déclaré, ex. « Legacy cup » de G5) : clic → la page du pool (il n’y a pas de page tournoi) ; « Changer mon deck » → même page.</li>
+<li>En bas de l’onglet : « Votre tournoi n’est pas dans la liste ? » + « Préparer mon prochain tournoi » → ${url(WEB + '/tournament/prep')}.</li></ul>` },
+      { id: 'h-order', who: 'carol', title: 'Ordre de « Mes pools » : déclarés d\'abord',
+        html: `<p>Carol a un pool déclaré (G1) et un pool legacy « Legacy cup » lié plus récemment (G5). Si G6 l'a adopté, lier un autre pool legacy :</p>${pre(`curl -s "${API}/api/tournament-bga-decklist?tournamentId=434343&tournamentName=Legacy%20cup%202&gameId=g5" -H "Authorization: Bearer $TOKEN_CAROL" | node -pe 'const j = JSON.parse(require("fs").readFileSync(0)); j["hydra:member"]?.map(m => m.name) ?? j'`)}<p>Attendu : dans « Mes pools », les tournois déclarés sont listés <strong>avant</strong> le legacy, même s'ils ont été liés plus tôt.</p>` },
+      { id: 'h-created', who: 'alice', title: '« Mes tournois créés » : actifs d’abord, archives repliées',
+        html: `<ul><li>En alice : groupe « En cours » puis « À venir », chacun avec son compteur et ses tournois du début le plus proche au plus lointain.</li>
+<li>En bas, « ▸ Terminés et annulés (N) » replié : un clic le déplie (clavier : Tab puis Entrée) et montre « Terminés », « Annulés » puis « Détachés », chacun en ordre chronologique.</li>
+<li>Annuler un de ses tournois à venir (page tournoi › « Annuler le tournoi ») : il quitte « À venir » de cet onglet et passe dans le bloc replié, groupe « Annulés » ; il disparaît aussi de l’onglet public « À venir ».</li>
+<li>Les tournois de bob n’y sont pas. En carol (aucun tournoi à son nom) : « Vous n’avez pas encore créé de tournoi. ».</li></ul>` },
+      { id: 'h-ongoing', who: 'alice', title: 'Passage en « En cours »',
+        html: `<p>Edit d’un tournoi à venir où alice a un pool (ex. « Coupe d’automne ») : début = hier. Attendu : il passe de l’onglet « À venir » à « En cours », et apparaît dans « Mes tournois en cours » en tête de page.</p>` },
+      { id: 'h-mobile', title: 'Mobile',
+        html: `<p>DevTools en 375 px : la grille passe sur une colonne, la barre d’onglets défile horizontalement si besoin (pas de scroll de la page), les boutons « Changer mon deck » restent cliquables.</p>` },
+      { id: 'h-generic', who: 'alice', title: 'Le parcours générique fonctionne toujours',
+        html: `<p>Onglet « Mes pools » › « Préparer mon prochain tournoi » → <code>/tournament/prep</code> : pool de préparation, pas de bouton Reset pool.</p>` },
+    ],
+  },
+  {
+    letter: 'I', title: 'Pools legacy, mode normal et script de gel',
+    steps: [
+      { id: 'i-normal', who: 'alice', title: 'Mode normal : pool et reset',
+        html: `<p>${url(WEB + '/tournament/normal')} : pool affiché ; « Reset pool » donne un nouveau pool, puis cooldown de 30 min affiché.</p>${PSQL(`SELECT created_by, cards IS NOT NULL AS stored, reset_at FROM sealed_pools WHERE kind = 'normal' AND sub = '11111111-1111-1111-1111-111111111111'`)}<p>Attendu : <strong>une</strong> ligne (le pool normal d’alice ; chaque joueur a le sien), <code>stored = t</code> (pool stocké à la création et au reset), <code>reset_at</code> renseigné. <code>created_by</code> vaut <code>legacy</code> si son pool existait avant la migration : un reset ne change pas l’origine de la ligne.</p>` },
+      { id: 'i-legacy-row', title: 'Une ligne legacy (sans cards) se régénère encore',
+        html: `${PSQL(`UPDATE sealed_pools SET cards = NULL, boosters = NULL WHERE kind = 'normal' AND sub = '11111111-1111-1111-1111-111111111111'`)}<p>Recharger ${url(WEB + '/tournament/normal')} en alice. Attendu : <strong>le même pool</strong> qu'avant (régénéré depuis la graine, identique au contenu stocké).</p>` },
+      { id: 'i-freeze', title: 'Script de gel',
+        html: `${pre('make db-freeze-pools')}<p>Attendu : <code>frozen N/N pools (0 failed)</code>. Puis une seconde fois :</p>${pre('make db-freeze-pools')}<p>Attendu : <code>frozen 0/0 pools (0 failed)</code> (idempotent). La page normale d'alice montre toujours le même pool.</p>` },
+      { id: 'i-freeze-port', v2: true, title: 'make db-freeze-pools suit un DB_PORT surchargé',
+        html: `${pre('make -n db-freeze-pools DB_PORT=5999 | tail -1')}<p>Attendu : la commande contient <code>DATABASE_URL=postgres://altered-draft:altered-draft@localhost:5999/altered-draft</code> (avant, elle prenait toujours la base du <code>.env</code>). <code>-n</code> affiche la commande sans la lancer.</p>` },
+    ],
+  },
+  {
+    letter: 'J', title: 'Transverse : FR, thème, mobile, console',
+    steps: [
+      { id: 'j-fr', title: 'Interface en français',
+        html: `<p>Basculer la langue de l'UI en FR et parcourir menu, formulaire, page tournoi, page pool. Attendu : aucun texte anglais résiduel ni clé brute (<code>tournaments.…</code>).</p>` },
+      { id: 'j-theme', title: 'Thème clair et sombre',
+        html: `<p>Bascule ☀/☾ sur ces pages. Attendu : contrastes lisibles (pastilles de statut, encarts d'erreur, cases de la checklist).</p>` },
+      { id: 'j-mobile', title: 'Largeur mobile',
+        html: `<p>DevTools en 375 px : menu, formulaire (dates sur une colonne), page tournoi, panneau organisateur. Pas de scroll horizontal.</p>` },
+      { id: 'j-console', title: 'Console sans erreur',
+        html: `<p>Sur tout le parcours, aucune erreur JS ni requête 500 dans Network.</p>` },
+    ],
+  },
+  {
+    letter: 'L', title: 'v1.1 : faction des uniques',
+    intro: 'Option du formulaire : toutes les uniques du pool (boosters et garanties) d\'une seule faction, tirées dans l\'extension choisie. « Unique Axiom » = unique dont la faction réelle est Axiom, versions hors-faction comprises. Indépendant du parcours « Test cup ». Libellés FR / EN.',
+    steps: [
+      { id: 'l-tests', v11: true, title: 'Suites automatiques vertes (nouveaux tests de faction)',
+        html: `${pre('make test')}<p>Attendu : tout vert, dont les blocs <code>pickDeterministicUniques faction</code> et <code>validateTournamentConfig faction</code>.</p>` },
+      { id: 'l-form', who: 'alice', v11: true, title: 'Formulaire : pastilles de faction et interactions',
+        html: `<ul><li>${url(WEB + '/tournament/new')}, Cards : Skybound Odyssey. Sous les steppers d'uniques (1 / 1 par défaut) : « Faction des uniques / Faction of the uniques » avec 7 pastilles, « Toutes / All factions » puis les 6 factions avec leur icône. « Toutes » est sélectionnée. Dessous : « Tirées dans l'extension sélectionnée. / Drawn from the selected set. ».</li>
+<li>Cocher « Répartir les uniques équitablement… », puis cliquer Axiom. Attendu : Axiom surlignée, la case se décoche et se grise.</li>
+<li>Recliquer « Toutes » : la case redevient cochable (et reste décochée).</li>
+<li>Choisir Bravos, puis descendre les deux steppers à 0. Attendu : pastilles grisées, « Toutes » re-sélectionnée. Remonter à 1 : toujours « Toutes ».</li>
+<li>Choisir Neverending Journey : pastilles grisées comme les steppers.</li></ul>` },
+      { id: 'l-create', who: 'alice', v11: true, title: 'Création « Axiom cup » : config stockée et résumé',
+        html: `<ul><li>${url(WEB + '/tournament/new')} : nom ${chip('Axiom cup')}, lien ${chip('https://boardgamearena.com/tournament?id=123470')}, Skybound Odyssey, uniques 2 / 2, faction Axiom. Créer.</li>
+<li>Page du tournoi : la ligne de résumé finit par « … · 2 uniques in boosters · 2 guaranteed uniques · <em>[icône Axiom]</em> Axiom uniques » (FR : « uniques Axiom »), sans « even factions ».</li></ul>
+${pre(`curl -s "${API}/api/tournaments" | node -pe 'JSON.parse(require("fs").readFileSync(0)).tournaments.filter(t => String(t.bgaTournamentId) === "123470").map(t => JSON.stringify(t.config.uniques))'`)}
+<p>Attendu : <code>{"inBoosters":2,"guaranteed":2,"evenFactions":false,"faction":"AX"}</code>.</p>` },
+      { id: 'l-menu', who: 'alice', v11: true, title: 'Menu : la carte du tournoi porte la faction',
+        html: `<p>${url(WEB + '/tournament')}, onglet Upcoming : la carte « Axiom cup » affiche la même ligne de résumé, icône Axiom comprise. Vérifier aussi en thème clair et en 375 px (l'icône reste alignée sur le texte, pas de débordement).</p>` },
+      { id: 'l-pool', who: 'alice', v11: true, title: 'Le pool ne contient que des uniques Axiom',
+        html: `<ul><li>Sur « Axiom cup », « Open my pool ». Révélation : 2 uniques dans les boosters + un 8e « booster » avec les 2 garanties, toutes Axiom (icône/cadre de faction).</li>
+<li>Contrôle sur la faction réelle (API cards de la communauté), qui doit donner 4 lignes en <code>AX</code>. Une réf qui ne commence pas par <code>ALT_CYCLONE_B_AX_</code> est une version hors-faction, c'est normal :</li></ul>
+${pre(`docker compose exec -T postgres psql -U altered-draft -d altered-draft -At -c "SELECT k FROM sealed_pools p JOIN tournaments t ON t.id = p.tournament_ref, jsonb_object_keys(p.cards) k WHERE t.bga_tournament_id = '123470' AND p.sub = '11111111-1111-1111-1111-111111111111' AND k ~ '_U_[0-9]+$'" | node -e 'const refs = require("fs").readFileSync(0, "utf8").split(/\\s+/).filter(Boolean); (async () => { for (const r of refs) { const j = await (await fetch("https://cards.alteredcore.org/api/cards?reference=" + r)).json(); const c = (j.member ?? j["hydra:member"] ?? [])[0]; console.log(r, c?.faction?.code ?? "introuvable") } })()'`)}
+<p>Attendu : 4 lignes, toutes terminées par <code>AX</code>.</p>` },
+      { id: 'l-api-invalid', v11: true, title: 'API : faction inconnue refusée (curl)',
+        html: `${pre(`T=$TOKEN_ALICE node -e '(async () => { const r = await fetch("${API}/api/tournaments", { method: "POST", headers: { Authorization: "Bearer " + process.env.T, "Content-Type": "application/json" }, body: JSON.stringify({ name: "Bad faction", bgaUrl: "https://boardgamearena.com/tournament?id=123471", startsAt: new Date(Date.now() + 864e5).toISOString(), config: { source: { type: "set", setCode: "CYCLONE" }, heroes: "packs", uniques: { inBoosters: 1, guaranteed: 0, faction: "XX" } } }) }); console.log(r.status, await r.text()) })()'`)}
+<p>Attendu : <code>400</code> et une réponse contenant <code>"config":["uniques.faction"]</code>. Aucun tournoi créé.</p>` },
+      { id: 'l-api-no-unique', v11: true, title: 'API : une faction sans aucune unique est remise à null (curl)',
+        html: `${pre(`T=$TOKEN_ALICE node -e '(async () => { const h = { Authorization: "Bearer " + process.env.T, "Content-Type": "application/json" }; const r = await fetch("${API}/api/tournaments", { method: "POST", headers: h, body: JSON.stringify({ name: "No unique faction", bgaUrl: "https://boardgamearena.com/tournament?id=123472", startsAt: new Date(Date.now() + 864e5).toISOString(), config: { source: { type: "set", setCode: "CYCLONE" }, heroes: "packs", uniques: { inBoosters: 0, guaranteed: 0, faction: "BR" } } }) }); const j = await r.json(); const tn = j.tournament ?? j; console.log(r.status, JSON.stringify(tn.config?.uniques)); const d = await fetch("${API}/api/tournaments/" + tn.id, { method: "DELETE", headers: h }); console.log("delete", d.status) })()'`)}
+<p>Attendu : <code>201 {"inBoosters":0,"guaranteed":0,"evenFactions":false,"faction":null}</code> puis <code>delete 200</code> (ou 204) : le tournoi de test est supprimé.</p>` },
+      { id: 'l-imposed', v11: true, title: 'Format imposé par des pools déjà joués : la faction repasse à « Toutes »',
+        html: `<ul><li>carol joue une partie du tournoi BGA 474749, que personne n'a déclaré (son pool de préparation y est lié) :</li></ul>${pre(`curl -s "${API}/api/tournament-bga-decklist?tournamentId=474749&tournamentName=BGA%20name&gameId=g-474749" -H "Authorization: Bearer $TOKEN_CAROL" | node -pe 'const j = JSON.parse(require("fs").readFileSync(0)); j["hydra:member"]?.map(m => m.name) ?? j'`)}
+<ul><li>En alice, ${url(WEB + '/tournament/new')} : Skybound Odyssey, uniques 1 / 1, faction Axiom. Puis coller le lien ${chip('https://boardgamearena.com/tournament?id=474749')}.</li>
+<li>Attendu : l'avis « déjà en cours de jeu », le format par défaut (Roots of Corruption) imposé, et dans les uniques la pastille « Toutes » sélectionnée, l'ensemble grisé.</li>
+<li>Ne pas créer.</li></ul>` },
+    ],
+  },
+  {
+    letter: 'K', title: 'Avant la mise en prod',
+    steps: [
+      { id: 'k-format', v2: true, title: 'Avant de déployer : le format actif et les pools legacy sont tirables',
+        html: `<p>Le tirage des uniques lève maintenant une erreur sur un set sans données de factions, au lieu de donner moins d'uniques. Sur l'hôte de la cible (preprod puis prod), <strong>avant</strong> le déploiement (la commande passe par le conteneur en place, qui a déjà <code>DATABASE_URL</code> ; elle fonctionne avec ou sans la colonne <code>cards</code>, qui n'arrive qu'avec la migration) :</p>${pre(`docker exec altered-draft node --input-type=module -e "import { query, getPool } from './src/lib/db.js'; const f = await query('SELECT set_code, unique_count, guaranteed_uniques, created_at FROM current_format ORDER BY created_at DESC, id DESC LIMIT 1'); const l = await query(\\"SELECT count(*)::int AS n FROM sealed_pools WHERE to_jsonb(sealed_pools)->'cards' IS NULL AND set_code NOT IN ('CORE','COREKS','ALIZE','BISE','CYCLONE','DUSTER','EOLE') AND (unique_count > 0 OR guaranteed_uniques > 0)\\"); const ok = ['CORE','COREKS','ALIZE','BISE','CYCLONE','DUSTER','EOLE'].includes(f.rows[0].set_code) || (f.rows[0].unique_count + f.rows[0].guaranteed_uniques) === 0; console.log('current_format:', f.rows[0].set_code, f.rows[0].unique_count + '+' + f.rows[0].guaranteed_uniques, 'uniques →', ok ? 'OK' : 'PROBLEM'); console.log('legacy rows that cannot be regenerated:', l.rows[0].n); await getPool().end()"`)}<p>Attendu : <code>current_format: … → OK</code> (un set parmi CORE, COREKS, ALIZE, BISE, CYCLONE, DUSTER, EOLE, ou aucun unique ; sinon tout nouveau pool normal ou de préparation échouerait) et <code>legacy rows that cannot be regenerated: 0</code>. Testée en local : <code>current_format: EOLE 1+1 uniques → OK</code>, <code>0</code>.</p>` },
+      { id: 'k-image', v2: true, title: 'L\'image embarque le script de gel, et lui seul (vérifiable en local)',
+        html: `${pre(`docker build -q -f build/Dockerfile --target app -t altered-draft-app:check . && docker run --rm --entrypoint sh altered-draft-app:check -c 'ls scripts' ; docker rmi -f altered-draft-app:check >/dev/null`)}<p>Attendu : <code>freeze-sealed-pools.mjs</code> et rien d'autre (avant, <code>scripts/</code> n'était pas copié et la commande de gel échouait dans le conteneur ; les scripts de dev locaux, eux, ne partent pas en prod).</p>` },
+      { id: 'k-migrate-r3', v2: true, title: 'Migration puis gel dans le conteneur, sur chaque cible',
+        html: `<p>Le déploiement AlteredOps applique <code>sealed-pools-schema.sql</code> (image migrations), puis démarre le nouveau conteneur. <strong>Une fois le nouveau conteneur en service</strong> (l'ancien code continue sinon à créer des lignes sans contenu), sur l'hôte :</p>${pre('docker exec altered-draft node scripts/freeze-sealed-pools.mjs')}<p>Attendu : <code>frozen N/N pools (0 failed)</code> ; relancé, <code>frozen 0/0 pools (0 failed)</code>. Un pool lié avant le déploiement s'ouvre toujours depuis « Mes pools » et son deck reste valide sur BGA.</p>` },
+      { id: 'k-parent-id', title: 'Avec Re:Union : id parent sur un tournoi à phases',
+        html: `<p>Sur un vrai tournoi BGA multi-phases, vérifier que l'<code>id</code> de l'URL publique est bien le <code>tournamentParentId</code> transmis par altered-bga-api (panneau : « created by BGA games » &gt; 0 après le 1er tour).</p>` },
+      { id: 'k-moderators-r3', v2: true, title: 'Modérateurs configurés (PR AlteredOps #18)',
+        html: `<p>Merger ${url('https://github.com/Altered-Re-Union/AlteredOps/pull/18')} : la liste <code>environment:</code> du service est explicite, sans elle les variables n'atteignent pas le conteneur. Puis renseigner <code>TOURNAMENT_MODERATORS</code> (subs) et/ou <code>TOURNAMENT_MODERATOR_ROLE</code> (si Re:Union crée le rôle) dans <code>env/altered-draft.preprod.defaults</code> et <code>env/altered-draft.prod.defaults</code>. Contrôle sur l'hôte :</p>${pre(`docker exec altered-draft printenv TOURNAMENT_MODERATORS TOURNAMENT_MODERATOR_ROLE`)}<p>Attendu : les valeurs saisies. Un modérateur voit « Détacher (modérateur) » sur un tournoi qu'il n'a pas créé.</p>` },
+    ],
+  },
+];
+
+
+/* ---------- state (IndexedDB, fallback mémoire) ---------- */
+const DB_NAME = 'tournois-recette', STORE = 'kv', KEY = 'state-lot1';
+let state = { steps: {} };
+let dbp = null;
+function openDb() {
+  if (dbp) return dbp;
+  dbp = new Promise((res) => {
+    try {
+      const r = indexedDB.open(DB_NAME, 1);
+      r.onupgradeneeded = () => r.result.createObjectStore(STORE);
+      r.onsuccess = () => res(r.result);
+      r.onerror = () => res(null);
+    } catch (e) { res(null); }
+  });
+  return dbp;
+}
+async function load() {
+  const db = await openDb();
+  if (!db) return;
+  await new Promise((res) => {
+    try {
+      const t = db.transaction(STORE).objectStore(STORE).get(KEY);
+      t.onsuccess = () => { if (t.result) state = t.result; res(); };
+      t.onerror = () => res();
+    } catch (e) { res(); }
+  });
+}
+let saveTimer = null;
+function save() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(async () => {
+    const db = await openDb();
+    if (!db) return;
+    try { db.transaction(STORE, 'readwrite').objectStore(STORE).put(state, KEY); } catch (e) {}
+  }, 250);
+}
+const st = (id) => (state.steps[id] ||= { status: null, note: '', images: [] });
+
+/* ---------- render ---------- */
+const ICONS = {
+  ok: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+  ko: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+  skip: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 6l7 6-7 6M13 6l7 6-7 6"/></svg>',
+};
+const allSteps = GROUPS.flatMap((g) => g.steps.map((s, i) => ({ ...s, group: g, num: `${g.letter}${i + 1}` })));
+
+function renderCast() {
+  document.getElementById('cast').innerHTML = Object.values(PERSONAS).map((p) => `
+    <div class="persona"><span class="tag">${p.tag}</span>
+      <div class="org">${p.org}</div>
+      <div style="margin:4px 0">${chip(p.email)}</div>
+      <div class="meta">${p.meta}</div></div>`).join('');
+}
+
+const FOLD_KEY = 'tournois-recette-lot1-collapsed';
+let collapsed = new Set();
+try { collapsed = new Set(JSON.parse(localStorage.getItem(FOLD_KEY) || '[]')); } catch (e) {}
+function saveFold() { try { localStorage.setItem(FOLD_KEY, JSON.stringify([...collapsed])); } catch (e) {} }
+function setFold(letter, isCollapsed) {
+  isCollapsed ? collapsed.add(letter) : collapsed.delete(letter);
+  const sec = document.querySelector(`section.group[data-g="${letter}"]`);
+  if (sec) {
+    sec.classList.toggle('collapsed', isCollapsed);
+    sec.querySelector('h3').setAttribute('aria-expanded', String(!isCollapsed));
+  }
+}
+document.addEventListener('click', (e) => {
+  const h = e.target.closest('section.group > h3');
+  if (h) { const l = h.parentElement.dataset.g; setFold(l, !collapsed.has(l)); saveFold(); return; }
+  if (e.target.id === 'foldAll' || e.target.id === 'unfoldAll') {
+    GROUPS.forEach((g) => setFold(g.letter, e.target.id === 'foldAll')); saveFold();
+  }
+});
+document.addEventListener('keydown', (e) => {
+  const h = e.target.closest && e.target.closest('section.group > h3');
+  if (h && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); h.click(); }
+});
+
+function renderGroups() {
+  document.getElementById('groups').innerHTML = GROUPS.map((g) => `
+    <section class="group${collapsed.has(g.letter) ? ' collapsed' : ''}" data-g="${g.letter}">
+      <h3 tabindex="0" role="button" aria-expanded="${!collapsed.has(g.letter)}"><span class="letter">${g.letter}</span>${g.title}<span class="gcount" data-gcount="${g.letter}"></span><span class="chev" aria-hidden="true">▼</span></h3>
+      ${g.intro ? `<p class="intro">${g.intro}</p>` : ''}
+      ${g.steps.map((s, i) => stepHtml(s, `${g.letter}${i + 1}`)).join('')}
+    </section>`).join('');
+  allSteps.forEach((s) => paintStep(s.id));
+}
+
+function stepHtml(s, num) {
+  return `<article class="step" data-id="${s.id}">
+    <div class="s-head">
+      <div class="s-num">${num}</div>
+      <div class="s-body">
+        <p class="s-title">${s.v11 ? '<span class="new-tag v11">v1.1</span> ' : s.v2 ? '<span class="new-tag">nouveau</span> ' : ''}${s.title}${AUTO_STEPS.includes(s.id) ? ` <span class="new-tag auto" title="${AUTO_PARTIAL[s.id] ? 'Partiel : ' + AUTO_PARTIAL[s.id] : 'Rejouée par la suite Playwright'}">auto${AUTO_PARTIAL[s.id] ? ' (partiel)' : ''}</span>` : ''}</p>
+        ${s.who ? `<div class="s-who">${who(s.who)}</div>` : ''}
+        ${s.html || ''}
+      </div>
+      <div class="status">
+        <button data-v="ok" title="OK">${ICONS.ok}</button>
+        <button data-v="ko" title="Problème">${ICONS.ko}</button>
+        <button data-v="skip" title="Passer">${ICONS.skip}</button>
+      </div>
+    </div>
+    <div class="issue">
+      <label>Ce qui ne va pas</label>
+      <textarea placeholder="Ce que tu as vu, ce que tu attendais… (Ctrl+V pour coller une capture)"></textarea>
+      <div class="drop">Glisse ou colle une capture ici, ou <u>clique pour choisir</u></div>
+      <input type="file" accept="image/*" multiple hidden>
+      <div class="thumbs"></div>
+    </div>
+  </article>`;
+}
+
+function imgName(id, i) { return `tournois-recette-${id}-${i + 1}.png`; }
+
+function paintStep(id) {
+  const el = document.querySelector(`.step[data-id="${id}"]`);
+  if (!el) return;
+  const s = st(id);
+  el.dataset.status = s.status || '';
+  el.classList.toggle('has-note', !!(s.note || s.images.length));
+  el.querySelectorAll('.status button').forEach((b) => b.classList.toggle('on', b.dataset.v === s.status));
+  const ta = el.querySelector('textarea');
+  if (document.activeElement !== ta) ta.value = s.note;
+  el.querySelector('.thumbs').innerHTML = s.images.map((src, i) => `
+    <div class="thumb"><img src="${src}" data-i="${i}" alt=""><button data-del="${i}" title="Retirer">×</button><span class="fname">${imgName(id, i)}</span></div>`).join('');
+}
+
+function refreshMeta() {
+  const total = allSteps.length;
+  const c = { ok: 0, ko: 0, skip: 0 };
+  allSteps.forEach((s) => { const v = st(s.id).status; if (v) c[v]++; });
+  const done = c.ok + c.ko + c.skip;
+  document.getElementById('count').textContent = `${done} / ${total}` + (c.ko ? ` · ${c.ko} ✗` : '');
+  document.querySelector('.b-ok').style.width = (c.ok / total * 100) + '%';
+  document.querySelector('.b-ko').style.width = (c.ko / total * 100) + '%';
+  document.querySelector('.b-skip').style.width = (c.skip / total * 100) + '%';
+  GROUPS.forEach((g) => {
+    const d = g.steps.filter((s) => st(s.id).status).length;
+    document.querySelector(`[data-gcount="${g.letter}"]`).textContent = `${d}/${g.steps.length}`;
+  });
+  applyFilter();
+  renderRecap();
+}
+
+let filter = 'all';
+function applyFilter() {
+  document.querySelectorAll('.step').forEach((el) => {
+    const v = st(el.dataset.id).status;
+    const show = filter === 'all' || (filter === 'todo' && !v) || (filter === 'ko' && v === 'ko')
+      || (filter === 'manual' && !AUTO_STEPS.includes(el.dataset.id));
+    el.classList.toggle('hidden', !show);
+  });
+  document.querySelectorAll('section.group').forEach((g) => {
+    g.classList.toggle('hidden', !g.querySelector('.step:not(.hidden)'));
+  });
+}
+
+function stripHtml(h) {
+  const d = document.createElement('div');
+  d.innerHTML = h;
+  d.querySelectorAll('.copy-pre').forEach((b) => b.remove());
+  return d.textContent.replace(/\s+/g, ' ').trim();
+}
+
+function renderRecap() {
+  const ko = allSteps.filter((s) => st(s.id).status === 'ko' || (st(s.id).status !== 'ok' && (st(s.id).note || st(s.id).images.length)));
+  const c = { ok: 0, ko: 0, skip: 0, todo: 0 };
+  allSteps.forEach((s) => { c[st(s.id).status || 'todo']++; });
+  let out = `Recette tournois utilisateurs lot 1 (feat/user-tournaments)\n`;
+  out += `Bilan : ${c.ok} OK · ${c.ko} problème(s) · ${c.skip} passée(s) · ${c.todo} non faite(s)\n`;
+  const skipped = allSteps.filter((s) => st(s.id).status === 'skip').map((s) => s.num);
+  if (skipped.length) out += `Passées : ${skipped.join(', ')}\n`;
+  if (!ko.length) {
+    out += `\nAucun problème remonté.`;
+  } else {
+    ko.forEach((s) => {
+      const x = st(s.id);
+      out += `\n— ${s.num} · ${s.group.title} · ${s.title}\n`;
+      if (s.who) out += `  Compte : ${PERSONAS[s.who].email} (${PERSONAS[s.who].tag})\n`;
+      out += `  Attendu : ${stripHtml(s.html || '').slice(0, 400)}\n`;
+      out += `  Constaté : ${x.note ? x.note.replace(/\n/g, '\n    ') : '(pas de note)'}\n`;
+      if (x.images.length) out += `  Captures : ${x.images.map((_, i) => '~/Downloads/' + imgName(s.id, i)).join(', ')}\n`;
+    });
+  }
+  document.getElementById('recapText').textContent = out;
+  const badge = document.getElementById('tabBadge');
+  badge.textContent = ko.length;
+  badge.classList.toggle('hidden', ko.length === 0);
+  const n = allSteps.reduce((a, s) => a + st(s.id).images.length, 0);
+  const b = document.getElementById('dlImages');
+  b.disabled = n === 0;
+  b.textContent = n ? `Télécharger les captures (${n})` : 'Télécharger les captures';
+}
+
+/* ---------- interactions ---------- */
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), 1400);
+}
+async function copy(text) {
+  try { await navigator.clipboard.writeText(text); }
+  catch (e) {
+    const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); } catch (_) {} ta.remove();
+  }
+}
+
+function addImages(id, files) {
+  [...files].filter((f) => f.type.startsWith('image/')).forEach((f) => {
+    const r = new FileReader();
+    r.onload = () => { st(id).images.push(r.result); paintStep(id); save(); refreshMeta(); };
+    r.readAsDataURL(f);
+  });
+}
+
+document.addEventListener('click', async (e) => {
+  const c = e.target.closest('.chip');
+  if (c) {
+    let text = c.dataset.copy;
+    if (c.hasAttribute('data-copy-pre')) {
+      const pre = c.closest('pre').cloneNode(true); pre.querySelector('.copy-pre').remove(); text = pre.textContent.trim();
+    }
+    await copy(text);
+    c.classList.add('copied'); setTimeout(() => c.classList.remove('copied'), 900);
+    toast('Copié');
+    return;
+  }
+  const sb = e.target.closest('.status button');
+  if (sb) {
+    const id = sb.closest('.step').dataset.id;
+    const s = st(id);
+    s.status = s.status === sb.dataset.v ? null : sb.dataset.v;
+    paintStep(id); save(); refreshMeta();
+    if (s.status === 'ko') sb.closest('.step').querySelector('textarea').focus();
+    return;
+  }
+  const del = e.target.closest('[data-del]');
+  if (del) {
+    const id = del.closest('.step').dataset.id;
+    st(id).images.splice(+del.dataset.del, 1); paintStep(id); save(); refreshMeta();
+    return;
+  }
+  const img = e.target.closest('.thumb img');
+  if (img) {
+    const lb = document.getElementById('lightbox'); lb.querySelector('img').src = img.src; lb.classList.add('show');
+    return;
+  }
+  if (e.target.closest('#lightbox')) { document.getElementById('lightbox').classList.remove('show'); return; }
+  const drop = e.target.closest('.drop');
+  if (drop) { drop.parentElement.querySelector('input[type=file]').click(); return; }
+  const tab = e.target.closest('#tabs button, [data-goto]');
+  if (tab) { showTab(tab.dataset.tab || tab.dataset.goto); return; }
+  const f = e.target.closest('#filters button');
+  if (f) {
+    filter = f.dataset.f;
+    document.querySelectorAll('#filters button').forEach((b) => b.classList.toggle('active', b === f));
+    applyFilter();
+  }
+});
+
+document.addEventListener('input', (e) => {
+  if (e.target.matches('.issue textarea')) {
+    const id = e.target.closest('.step').dataset.id;
+    st(id).note = e.target.value; save(); renderRecap();
+  }
+});
+document.addEventListener('change', (e) => {
+  if (e.target.matches('.issue input[type=file]')) {
+    addImages(e.target.closest('.step').dataset.id, e.target.files); e.target.value = '';
+  }
+});
+document.addEventListener('paste', (e) => {
+  const stepEl = e.target.closest && e.target.closest('.step');
+  if (!stepEl) return;
+  const files = [...(e.clipboardData?.items || [])].filter((i) => i.type.startsWith('image/')).map((i) => i.getAsFile());
+  if (files.length) { e.preventDefault(); addImages(stepEl.dataset.id, files); toast('Capture ajoutée'); }
+});
+['dragover', 'dragleave', 'drop'].forEach((ev) => document.addEventListener(ev, (e) => {
+  const d = e.target.closest && e.target.closest('.drop');
+  if (!d) return;
+  e.preventDefault();
+  d.classList.toggle('over', ev === 'dragover');
+  if (ev === 'drop') addImages(d.closest('.step').dataset.id, e.dataTransfer.files);
+}));
+
+document.getElementById('copyRecap').addEventListener('click', async () => {
+  await copy(document.getElementById('recapText').textContent); toast('Récap copié');
+});
+document.getElementById('dlImages').addEventListener('click', () => {
+  let delay = 0;
+  allSteps.forEach((s) => st(s.id).images.forEach((src, i) => {
+    setTimeout(() => {
+      const a = document.createElement('a'); a.href = src; a.download = imgName(s.id, i); document.body.appendChild(a); a.click(); a.remove();
+    }, delay);
+    delay += 250;
+  }));
+  toast('Téléchargement vers ~/Downloads');
+});
+document.getElementById('resetAll').addEventListener('click', () => {
+  if (!confirm('Effacer toutes les coches, notes et captures ?')) return;
+  state = { steps: {} }; save(); renderGroups(); refreshMeta();
+});
+
+function showTab(name) {
+  const recap = name === 'recap';
+  document.getElementById('viewSteps').classList.toggle('hidden', recap);
+  document.getElementById('viewRecap').classList.toggle('hidden', !recap);
+  document.getElementById('filters').classList.toggle('hidden', recap);
+  document.querySelectorAll('#tabs button').forEach((b) => b.classList.toggle('active', b.dataset.tab === name));
+  try { history.replaceState(null, '', recap ? '#recap' : '#'); } catch (e) {}
+  window.scrollTo({ top: 0 });
+}
+
+const themeBtn = document.getElementById('themeBtn');
+function setTheme(t) {
+  if (t) document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme;
+  try { t ? localStorage.setItem('tournois-recette-theme', t) : localStorage.removeItem('tournois-recette-theme'); } catch (e) {}
+}
+try { const t = localStorage.getItem('tournois-recette-theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+themeBtn.addEventListener('click', () => {
+  const cur = document.documentElement.dataset.theme
+    || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  setTheme(cur === 'dark' ? 'light' : 'dark');
+});
+
+(async () => {
+  renderCast();
+  await load();
+  renderGroups();
+  refreshMeta();
+  if (location.hash === '#recap') showTab('recap');
+})();
+</script>
+</body>
+</html>
