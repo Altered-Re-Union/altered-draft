@@ -12,7 +12,6 @@ export default defineConfig({
   expect: { timeout: 5_000 },
   reporter: [['list'], ['html', { open: 'on-failure', outputFolder: `${ROOT_DIR}/playwright-report` }]],
   outputDir: `${ROOT_DIR}/test-results`,
-  globalSetup: './global-setup.js',
   use: {
     baseURL: APP_URL,
     locale: 'en-GB',
@@ -54,7 +53,7 @@ export default defineConfig({
       timeout: 30_000,
     },
     {
-      command: 'node server/index.js',
+      command: 'node tests/e2e/app-server.mjs',
       url: `${APP_URL}/api/config`,
       env: APP_ENV,
       cwd: ROOT_DIR,

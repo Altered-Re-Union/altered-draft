@@ -1,7 +1,7 @@
 # Throwaway Postgres for the Playwright suite (`npm run test:e2e` / `make e2e`). Mirrors the
 # integration one (docker-compose.test.yml) on another port so both can run side by side,
-# on postgres:17 like dev and prod. Started and removed by tests/e2e/global-setup.js and
-# global-teardown.js (kept between runs with E2E_KEEP_STACK=1, removed by `make e2e-down`).
+# on postgres:17 like dev and prod. Started and removed by tests/e2e/db-stack.mjs, the
+# suite's first webServer (kept between runs with E2E_KEEP_STACK=1, removed by `make e2e-down`).
 # Own project name: the dev stack (docker-compose.yml) lives in the same folder and would
 # otherwise share the `altered-draft` project and its network.
 name: altered-draft-e2e

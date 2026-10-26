@@ -16,3 +16,4 @@ export const fakesRevoke = user => call('POST', '/__control/revoke', { user })
 export const fakesSession = async user => (await call('POST', '/__control/session', { user })).refresh_token
 export const fakesDecks = user => call('GET', `/__control/decks?user=${encodeURIComponent(user)}`)
 export const fakesRequests = () => call('GET', '/__control/requests')
+export const fakesDrainUnmatched = () => call('POST', '/__control/unmatched/drain')

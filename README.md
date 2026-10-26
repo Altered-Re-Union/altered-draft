@@ -118,7 +118,11 @@ npm run test:e2e      # Playwright: real browser, fakes for Keycloak / decks-api
   the CDN and the card database — nothing leaves `localhost`. Needs Docker and Chromium
   (`npx playwright install chromium`, done by `make e2e`). `E2E_KEEP_STACK=1` keeps the
   Postgres container between runs (`make e2e-down` removes it), `make e2e-ui` opens the
-  Playwright UI. Each test carries its acceptance step id as a tag;
+  Playwright UI. Two ways to test something stale: the kept container keeps the schema it was
+  created with (its init scripts only run on a fresh container), so run `make e2e-down` after
+  changing `sealed-pools-schema.sql` or `draft-rooms-schema.sql`; and outside CI Playwright
+  reuses whatever already answers on `:8090` / `:8091` / `:8092` (`reuseExistingServer`), so
+  stop a server left over from an interrupted run before a new one, or it serves its old code. Each test carries its acceptance step id as a tag;
   `npm run test:e2e:coverage -- --write` refreshes the acceptance page's « auto » badges from them.
 
 ---

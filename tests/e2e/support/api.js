@@ -4,12 +4,14 @@ import { tokenFor } from './auth.js'
 import { isoDaysFromNow } from './dates.js'
 import { APP_URL } from './env.js'
 
-export function apiAs(request, who) {
+// `bucket` (the test's guard bucket) collects the >= 500 answers, as the browser guard does.
+export function apiAs(request, who, bucket = null) {
   let token = null
   async function call(method, path, body) {
     const headers = {}
     if (who) headers.Authorization = `Bearer ${token ??= await tokenFor(who)}`
     const res = await request.fetch(`${APP_URL}${path}`, { method, headers, data: body })
+    if (bucket && res.status() >= 500) bucket.serverErrors.push(`${res.status()} ${method} ${APP_URL}${path} (api helper)`)
     const text = await res.text()
     let parsed = null
     try { parsed = text ? JSON.parse(text) : null } catch { parsed = text }
@@ -45,17 +47,17 @@ function expectStatus(res, status, what) {
   return res.body
 }
 
-export function makeSeed(request) {
+export function makeSeed(request, bucket = null) {
   return {
     async tournament(who, overrides = {}) {
-      return expectStatus(await apiAs(request, who).post('/api/tournaments', tournamentBody(overrides)), 201, 'seed tournament')
+      return expectStatus(await apiAs(request, who, bucket).post('/api/tournaments', tournamentBody(overrides)), 201, 'seed tournament')
     },
     async pool(who, tournamentId) {
-      return expectStatus(await apiAs(request, who).get(`/api/tournaments/${tournamentId}/pool`), 200, 'seed pool')
+      return expectStatus(await apiAs(request, who, bucket).get(`/api/tournaments/${tournamentId}/pool`), 200, 'seed pool')
     },
     async bgaDecklist(who, { tournamentId, tournamentName, gameId }) {
       const qs = new URLSearchParams({ tournamentId, tournamentName, gameId })
-      return expectStatus(await apiAs(request, who).get(`/api/tournament-bga-decklist?${qs}`), 200, 'seed BGA decklist')
+      return expectStatus(await apiAs(request, who, bucket).get(`/api/tournament-bga-decklist?${qs}`), 200, 'seed BGA decklist')
     },
   }
 }

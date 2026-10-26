@@ -2,7 +2,7 @@
 // cookies api/token.js sets; the app's own refresh then runs through /api/token on load).
 // loginViaUi = the real redirect round trip, for the steps that assert it. tokenFor = a
 // password-grant access token for API calls.
-import { CLIENT_ID, KEYCLOAK_ISSUER } from './env.js'
+import { CLIENT_ID, CLIENT_SECRET, KEYCLOAK_ISSUER } from './env.js'
 import { fakesSession } from './fakes-client.js'
 import { t } from './i18n.js'
 import { PASSWORD, PERSONAS } from './personas.js'
@@ -27,7 +27,7 @@ export async function tokenFor(who) {
   const res = await fetch(`${KEYCLOAK_ISSUER}/protocol/openid-connect/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ grant_type: 'password', client_id: CLIENT_ID, username: PERSONAS[who].username, password: PASSWORD }),
+    body: new URLSearchParams({ grant_type: 'password', client_id: CLIENT_ID, client_secret: CLIENT_SECRET, username: PERSONAS[who].username, password: PASSWORD }),
   })
   if (!res.ok) throw new Error(`password grant for ${who} → ${res.status}`)
   return (await res.json()).access_token

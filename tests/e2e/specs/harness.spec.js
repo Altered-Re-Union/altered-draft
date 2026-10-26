@@ -8,13 +8,15 @@ import { APP_URL, CLIENT_ID, CLIENT_SECRET, FAKES_URL, KEYCLOAK_ISSUER, ROOT_DIR
 import { PASSWORD, PERSONAS } from '../support/personas.js'
 import { closeDb, resetDb } from '../support/db.js'
 import { decodeJwt } from '../fakes/keycloak.mjs'
+import { apiAs } from '../support/api.js'
+import { newBucket, pending } from '../support/guards.js'
 
 const TOKEN_URL = `${KEYCLOAK_ISSUER}/protocol/openid-connect/token`
 const USERINFO_URL = `${KEYCLOAK_ISSUER}/protocol/openid-connect/userinfo`
 const REDIRECT_URI = `${APP_URL}/auth/callback`
 
 function tokenRequest(request, form) {
-  return request.post(TOKEN_URL, { form: { client_id: CLIENT_ID, ...form } })
+  return request.post(TOKEN_URL, { form: { client_id: CLIENT_ID, client_secret: CLIENT_SECRET, ...form } })
 }
 
 function pkce() {
@@ -101,6 +103,13 @@ test.describe('fake Keycloak', () => {
     }
   })
 
+  test('password and refresh grants refuse a wrong client secret, like a confidential client', async ({ request }) => {
+    expect((await tokenRequest(request, { grant_type: 'password', client_secret: 'nope', username: 'bob', password: PASSWORD })).status()).toBe(401)
+    const { refresh_token } = await (await request.post(`${FAKES_URL}/__control/session`, { data: { user: 'bob' } })).json()
+    expect((await tokenRequest(request, { grant_type: 'refresh_token', client_secret: 'nope', refresh_token })).status()).toBe(401)
+    expect((await request.post(TOKEN_URL, { form: { grant_type: 'refresh_token', refresh_token } })).status()).toBe(401)
+  })
+
   test('refresh after revoke → 400 through the app, both cookies cleared', async ({ request }) => {
     const { refresh_token } = await (await request.post(`${FAKES_URL}/__control/session`, { data: { user: 'alice' } })).json()
     await request.post(`${FAKES_URL}/__control/revoke`, { data: { user: 'alice' } })
@@ -114,10 +123,20 @@ test.describe('fake Keycloak', () => {
     expect(cookies.some(c => /^reunion_auth=;.*Max-Age=0/.test(c))).toBe(true)
   })
 
-  test('unknown path is a loud 404', async ({ request }) => {
+  test('unknown path is a loud 404, kept for the guard until drained', async ({ request }) => {
     const res = await request.get(`${FAKES_URL}/nope`)
     expect(res.status()).toBe(404)
     expect(await res.json()).toEqual({ error: 'not_found' })
+    const drain = () => request.post(`${FAKES_URL}/__control/unmatched/drain`).then(r => r.json())
+    expect(await drain()).toEqual(['GET /nope'])
+    expect(await drain()).toEqual([])
+  })
+
+  test('an API helper call answered >= 500 lands in the guard bucket', async () => {
+    const bucket = newBucket()
+    const request = { fetch: async () => ({ status: () => 503, text: async () => '' }) }
+    expect((await apiAs(request, null, bucket).get('/api/tournaments')).status).toBe(503)
+    expect(pending(bucket)).toEqual([`503 GET ${APP_URL}/api/tournaments (api helper)`])
   })
 })
 

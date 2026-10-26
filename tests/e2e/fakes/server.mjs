@@ -25,6 +25,7 @@ export function createFakeServer() {
   const decks = createDecksApi({ authenticate: req => keycloak.lookupAccess(bearer(req)) })
   const cards = createCardsApi()
   const app = express()
+  const unmatched = []
 
   app.use((req, res, next) => {
     res.set('Access-Control-Allow-Origin', '*')
@@ -69,6 +70,9 @@ export function createFakeServer() {
     res.json(decks.decksOf(persona.sub))
   })
   app.get('/__control/requests', (req, res) => res.json(decks.requests))
+  // The 404s below since the last drain: the guard fixture drains before and after each test
+  // and fails it on any, so a route the app needs but the fakes lack never goes unnoticed.
+  app.post('/__control/unmatched/drain', (req, res) => res.json(unmatched.splice(0)))
   app.post('/__control/reset', (req, res) => {
     keycloak.reset()
     decks.reset()
@@ -77,6 +81,7 @@ export function createFakeServer() {
 
   app.use((req, res) => {
     console.error('[fake] 404', req.method, req.originalUrl)
+    unmatched.push(`${req.method} ${req.originalUrl}`)
     res.status(404).json({ error: 'not_found' })
   })
 

@@ -5,7 +5,7 @@ import { test as base, expect } from '@playwright/test'
 import { apiAs, makeSeed } from './api.js'
 import { loginAs } from './auth.js'
 import { closeDb, query, resetDb } from './db.js'
-import { fakesDecks, fakesRequests, fakesReset, fakesRevoke, fakesSession } from './fakes-client.js'
+import { fakesDecks, fakesDrainUnmatched, fakesRequests, fakesReset, fakesRevoke, fakesSession } from './fakes-client.js'
 import { assertClean, attachGuards, newBucket, pending } from './guards.js'
 import { installNetworkRules } from './network.js'
 
@@ -26,7 +26,9 @@ export const test = base.extend({
   },
 
   guard: [async ({ guardBucket }, use, testInfo) => {
+    await fakesDrainUnmatched()
     await use()
+    guardBucket.fakeMisses.push(...await fakesDrainUnmatched())
     const left = pending(guardBucket)
     if (!left.length) return
     if (testInfo.status === testInfo.expectedStatus) assertClean(guardBucket)
@@ -59,12 +61,12 @@ export const test = base.extend({
     await closeDb()
   }, { scope: 'worker' }],
 
-  api: async ({ request }, use) => {
-    await use(who => apiAs(request, who))
+  api: async ({ request, guardBucket }, use) => {
+    await use(who => apiAs(request, who, guardBucket))
   },
 
-  seed: async ({ request }, use) => {
-    await use(makeSeed(request))
+  seed: async ({ request, guardBucket }, use) => {
+    await use(makeSeed(request, guardBucket))
   },
 })
 

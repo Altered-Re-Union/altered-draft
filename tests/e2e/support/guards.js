@@ -12,7 +12,7 @@ export const ALLOWED_NOISE = [
 ]
 
 export function newBucket() {
-  return { consoleErrors: [], pageErrors: [], serverErrors: [], leaks: [] }
+  return { consoleErrors: [], pageErrors: [], serverErrors: [], leaks: [], fakeMisses: [] }
 }
 
 export function attachGuards(context, bucket) {
@@ -30,7 +30,7 @@ export function attachGuards(context, bucket) {
 }
 
 export function pending(bucket) {
-  const all = [...bucket.consoleErrors, ...bucket.pageErrors, ...bucket.serverErrors, ...bucket.leaks.map(url => `leak: ${url}`)]
+  const all = [...bucket.consoleErrors, ...bucket.pageErrors, ...bucket.serverErrors, ...bucket.leaks.map(url => `leak: ${url}`), ...bucket.fakeMisses.map(req => `fake 404: ${req}`)]
   return all.filter(entry => !ALLOWED_NOISE.some(re => re.test(entry)))
 }
 

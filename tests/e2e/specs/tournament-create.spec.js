@@ -125,6 +125,8 @@ test('a start in the past blocks the submit', { tag: ['@b-past'] }, async ({ ope
   await expect(problems(page)).toContainText(t('tournaments.errStartsAt'))
   await expect(submit(page)).toBeDisabled()
   await field(page, 'nameLabel').press('Enter')
+  // The Enter has been handled once the focus has moved: a submit would have fired by then.
+  await expect(field(page, 'startsAtLabel')).toBeFocused()
   expect(posts).toBe(0)
 
   await field(page, 'startsAtLabel').fill(localDateTime(1))

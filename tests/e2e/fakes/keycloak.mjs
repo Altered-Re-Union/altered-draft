@@ -100,8 +100,9 @@ export function createKeycloak({ issuer, clientId, clientSecret, personas, passw
 
   router.post('/protocol/openid-connect/token', (req, res) => {
     const body = req.body || {}
+    // A confidential client: every grant authenticates it, as the real realm does.
+    if (body.client_id !== clientId || body.client_secret !== clientSecret) return res.status(401).json({ error: 'unauthorized_client' })
     if (body.grant_type === 'authorization_code') {
-      if (body.client_id !== clientId || body.client_secret !== clientSecret) return res.status(401).json({ error: 'unauthorized_client' })
       const entry = codes.get(body.code)
       if (!entry) return res.status(400).json({ error: 'invalid_grant', error_description: 'Code not valid' })
       codes.delete(body.code)
