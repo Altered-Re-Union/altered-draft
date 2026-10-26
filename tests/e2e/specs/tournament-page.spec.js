@@ -1,4 +1,4 @@
-// Recette group C — the tournament page, anonymous and as its organizer.
+// Acceptance group C — the tournament page, anonymous and as its organizer.
 import { test, expect } from '../support/fixtures.js'
 import { t, tc } from '../support/i18n.js'
 

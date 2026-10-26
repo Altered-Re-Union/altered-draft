@@ -1,4 +1,4 @@
-// Recette group G — the BGA path (the recette's curl blocks), plus the two form checks of the
+// Acceptance group G — the BGA path (the acceptance page's curl blocks), plus the two form checks of the
 // "declared after the fact" rule. API calls carry the bearer BGA forwards.
 import { test, expect, resetStack } from '../support/fixtures.js'
 import { tournamentBody, withRequestContext } from '../support/api.js'
@@ -80,7 +80,7 @@ test('declared after the fact: the played format is imposed', { tag: ['@g-adopt'
 
 test('pools of different formats: the declaration is refused', { tag: ['@g-adopt-mixed'] }, async ({ seed, openAs, db, api }) => {
   await db.query(`INSERT INTO sealed_pools (sub, kind, set_code, unique_count, even_factions, heroes_in_pool, guaranteed_uniques, nonce, tournament_id, tournament_name, bound_at, cards, boosters, created_by)
-    VALUES ('22222222-2222-2222-2222-222222222222', 'tournament', 'CYCLONE', 1, false, false, 1, 'recette-mixed', '484848', 'BGA name', now(), '{}', '[]', 'bga')`)
+    VALUES ('22222222-2222-2222-2222-222222222222', 'tournament', 'CYCLONE', 1, false, false, 1, 'acceptance-mixed', '484848', 'BGA name', now(), '{}', '[]', 'bga')`)
   try {
     await seed.bgaDecklist('carol', { tournamentId: '484848', tournamentName: 'BGA name', gameId: 'g-484848' })
     const page = await openAs('alice')

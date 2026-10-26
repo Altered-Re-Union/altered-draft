@@ -1,4 +1,4 @@
-// SQL access to the e2e Postgres, for resets and for the assertions the recette itself
+// SQL access to the e2e Postgres, for resets and for the assertions the acceptance page itself
 // makes in SQL. Own pool, never the app's.
 import pg from 'pg'
 import { DATABASE_URL } from './env.js'

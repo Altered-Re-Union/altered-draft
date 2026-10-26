@@ -1,4 +1,4 @@
-// Recette group F — a BGA tournament declared by someone who does not organize it: the
+// Acceptance group F — a BGA tournament declared by someone who does not organize it: the
 // moderator detaches it, pools created for it go, pools that predate it stay and follow the
 // real organizer's declaration.
 import { test, expect, resetStack } from '../support/fixtures.js'

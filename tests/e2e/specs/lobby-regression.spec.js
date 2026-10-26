@@ -1,4 +1,4 @@
-// Recette group A — the room Lobby still works after the tournament changes (shared set
+// Acceptance group A — the room Lobby still works after the tournament changes (shared set
 // grid, settings fields).
 import { test, expect } from '../support/fixtures.js'
 import { t } from '../support/i18n.js'

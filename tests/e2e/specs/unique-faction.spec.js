@@ -1,4 +1,4 @@
-// Recette group L — v1.1, the faction of the uniques: the form's faction chips, the stored
+// Acceptance group L — v1.1, the faction of the uniques: the form's faction chips, the stored
 // config and its summary, the pool's uniques (real faction through the range data), the API
 // guards, and the faction reset when a played format is imposed.
 import { test, expect } from '../support/fixtures.js'

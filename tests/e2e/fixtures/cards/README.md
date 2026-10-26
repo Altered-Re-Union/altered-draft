@@ -15,7 +15,7 @@ Why these three sets:
 
 | Set | Name | Why |
 |---|---|---|
-| `CYCLONE` | Skybound Odyssey | the recette's working set for declared tournaments |
+| `CYCLONE` | Skybound Odyssey | the acceptance steps' working set for declared tournaments |
 | `EOLE` | Roots of Corruption | the active format seeded by `sealed-pools-schema.sql`: normal / preparation pools and the "imposed format" steps draw it |
 | `FUGUE` | Neverending Journey | no faction-range data, which the "uniques unsupported" steps depend on |
 

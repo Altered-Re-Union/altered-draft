@@ -1,4 +1,4 @@
-// Recette group I — the out-of-tournament normal pool, a legacy row (no stored cards) that
+// Acceptance group I — the out-of-tournament normal pool, a legacy row (no stored cards) that
 // still regenerates, and the freeze script that stores such rows.
 import { execFileSync } from 'node:child_process'
 import { test, expect, resetStack } from '../support/fixtures.js'

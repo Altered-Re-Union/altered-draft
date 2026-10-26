@@ -1,4 +1,4 @@
-// Recette group H — the /tournament hub: "my ongoing tournaments", the four tabs and their
+// Acceptance group H — the /tournament hub: "my ongoing tournaments", the four tabs and their
 // URL, "My pools" (with g-carol-menu), "My created tournaments", and the generic prep path.
 import { test, expect, resetStack } from '../support/fixtures.js'
 import { withRequestContext } from '../support/api.js'

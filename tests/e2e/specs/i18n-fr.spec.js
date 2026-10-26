@@ -1,4 +1,4 @@
-// Recette j-fr (partial): the French UI shows no raw i18n key and the expected French copy
+// Acceptance step j-fr (partial): the French UI shows no raw i18n key and the expected French copy
 // on the tournament pages. "No English leftovers" stays a human check.
 import { test, expect } from '../support/fixtures.js'
 import { t, tFr } from '../support/i18n.js'

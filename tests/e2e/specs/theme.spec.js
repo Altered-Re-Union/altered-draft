@@ -1,4 +1,4 @@
-// Recette j-theme (partial): the ☀/☾ toggle flips <html data-theme> and the choice persists
+// Acceptance step j-theme (partial): the ☀/☾ toggle flips <html data-theme> and the choice persists
 // across reloads and pages. A screenshot per page and theme is attached to the report for a
 // human glance; contrast stays a human check.
 import { test, expect } from '../support/fixtures.js'

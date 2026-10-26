@@ -1,4 +1,4 @@
-// The three accounts the fake Keycloak knows — same subs as the recette, so its SQL
+// The three accounts the fake Keycloak knows — same subs as the acceptance page, so its SQL
 // snippets transfer verbatim. bob is the moderator through TOURNAMENT_MODERATORS (env.js).
 export const PASSWORD = 'TestPassword1234'
 

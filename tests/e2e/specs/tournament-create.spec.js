@@ -1,4 +1,4 @@
-// Recette group B — creating a tournament: the form, its live checks, the session that
+// Acceptance group B — creating a tournament: the form, its live checks, the session that
 // expires mid-form and the open-tournaments cap.
 import { test, expect } from '../support/fixtures.js'
 import { loginViaUi } from '../support/auth.js'

@@ -13,7 +13,7 @@
     "test:integration": "vitest run --config vitest.integration.config.js",
     "test:e2e": "playwright test -c tests/e2e/playwright.config.js",
     "test:e2e:ui": "playwright test -c tests/e2e/playwright.config.js --ui",
-    "test:e2e:coverage": "node scripts/e2e-recette-coverage.mjs"
+    "test:e2e:coverage": "node scripts/e2e-acceptance-coverage.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0",

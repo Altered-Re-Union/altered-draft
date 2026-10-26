@@ -1,4 +1,4 @@
-// Recette group E — the organizer edits the tournament and walks it through its lifecycle
+// Acceptance group E — the organizer edits the tournament and walks it through its lifecycle
 // (cancel / restore, close / reopen, delete), and strangers cannot edit it.
 import { test, expect, resetStack } from '../support/fixtures.js'
 import { withRequestContext } from '../support/api.js'

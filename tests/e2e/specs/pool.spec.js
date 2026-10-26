@@ -1,4 +1,4 @@
-// Recette group D — a player's pool for a declared tournament: the first-open reveal, the
+// Acceptance group D — a player's pool for a declared tournament: the first-open reveal, the
 // deck saved on decks-api, the pool kept across reloads, and one deck only under quick edits.
 import fs from 'node:fs'
 import path from 'node:path'

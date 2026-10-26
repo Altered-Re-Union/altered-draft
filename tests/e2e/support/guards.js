@@ -1,4 +1,4 @@
-// Cross-cutting guards (recette j-console, applied to every test): console errors, page
+// Cross-cutting guards (acceptance step j-console, applied to every test): console errors, page
 // errors, HTTP >= 500 and non-localhost leaks, collected across every page of a context.
 // The fixture fails the test on anything not in ALLOWED_NOISE — adding to it is a reviewed
 // change. Plus a few page helpers.
