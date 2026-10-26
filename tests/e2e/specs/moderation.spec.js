@@ -4,7 +4,7 @@
 import { test, expect, resetStack } from '../support/fixtures.js'
 import { acceptNextDialog, captureNextDialog } from '../support/guards.js'
 import { t, tc } from '../support/i18n.js'
-import { tournamentLink } from '../support/pages.js'
+import { openMenu, tournamentLink } from '../support/pages.js'
 import { PERSONAS } from '../support/personas.js'
 
 test.describe.configure({ mode: 'serial' })
@@ -41,12 +41,6 @@ async function createDeclared(page) {
   await page.getByRole('button', { name: t('tournaments.submitCreate') }).click()
   await page.waitForURL(/\/tournament\/t\/[0-9a-f-]{36}$/)
   return page.url().split('/').pop()
-}
-
-async function settledTab(page, tab) {
-  await page.goto(`/tournament?tab=${tab}`)
-  await expect(page.getByRole('tabpanel')).toBeVisible()
-  await page.waitForLoadState('networkidle')
 }
 
 test.beforeAll(async () => {
@@ -119,11 +113,11 @@ test('detach: alice\'s pool deleted, bob\'s released, tournament frozen', { tag:
 test('alice lost her pool, bob kept his', { tag: ['@f-players-r3'] }, async ({ openAs, api }) => {
   const alice = await openAs('alice')
   for (const tab of ['pools', 'upcoming', 'ongoing']) {
-    await settledTab(alice, tab)
+    await openMenu(alice, `?tab=${tab}`)
     await expect(tournamentLink(alice, 'Squat cup'), tab).toHaveCount(0)
   }
   const bob = await openAs('bob')
-  await settledTab(bob, 'pools')
+  await openMenu(bob, '?tab=pools')
   await expect(tournamentLink(bob, 'Squat cup')).toHaveAttribute('href', `/tournament/pools/${bobPoolId}`)
   const pool = (await api('bob').get(`/api/tournament-pool?id=${bobPoolId}`)).body
   expect(Object.keys(pool.cards).sort()).toEqual(bobPoolCards)

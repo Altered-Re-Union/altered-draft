@@ -6,7 +6,7 @@ import { loginViaUi } from '../support/auth.js'
 import { isoDaysFromNow, localDateTime } from '../support/dates.js'
 import { acceptNextDialog } from '../support/guards.js'
 import { t } from '../support/i18n.js'
-import { openPoolPage, tournamentLink } from '../support/pages.js'
+import { openMenu, openPoolPage, tournamentLink } from '../support/pages.js'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -75,7 +75,7 @@ test('a rename reaches the players\' pools', { tag: ['@e-rename'] }, async ({ op
   await rename(openAs, 'Test cup renamed')
   await openPoolPage({ openAs, seed }, 'alice', id, 'Test cup renamed')
   const bob = await openPoolPage({ openAs, seed }, 'bob', id, 'Test cup renamed')
-  await bob.goto('/tournament?tab=pools')
+  await openMenu(bob, '?tab=pools')
   await expect(tournamentLink(bob, 'Test cup renamed')).toBeVisible()
   await rename(openAs, 'Test cup')
 })
@@ -130,8 +130,7 @@ test('close, then reopen', { tag: ['@e-close'] }, async ({ openAs, page }) => {
   await panel(alice).getByRole('button', { name: t('tournaments.close') }).click()
   await expect(pill(alice)).toHaveText(t('tournaments.statusEnded'))
   for (const tab of ['upcoming', 'ongoing']) {
-    await page.goto(`/tournament?tab=${tab}`)
-    await expect(page.getByRole('tabpanel')).toBeVisible()
+    await openMenu(page, `?tab=${tab}`)
     await expect(tournamentLink(page, 'Test cup'), tab).toHaveCount(0)
   }
   await panel(alice).getByRole('button', { name: t('tournaments.reopen') }).click()
@@ -168,7 +167,7 @@ test('delete a tournament without pools; not one with pools', { tag: ['@e-delete
   acceptNextDialog(page)
   await panel(page).getByRole('button', { name: t('tournaments.delete') }).click()
   await page.waitForURL(/\/tournament$/)
-  await page.goto('/tournament?tab=created')
+  await openMenu(page, '?tab=created')
   await expect(tournamentLink(page, 'Test cup')).toBeVisible()
   await expect(tournamentLink(page, 'NEJ cup')).toHaveCount(0)
   await page.goto(`/tournament/t/${id}`)

@@ -27,3 +27,15 @@ export async function openPoolPage({ openAs, seed }, who, tournamentId, title = 
   await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible()
   return page
 }
+
+// The /tournament hub on a given tab, once its lists are in: the tab panel renders at once
+// with "Loading…" while the session check and the list requests run, so an absence check
+// made earlier would pass on an empty panel.
+export async function openMenu(page, query = '') {
+  await page.goto(`/tournament${query}`)
+  const panel = page.getByRole('tabpanel')
+  await expect(panel).toBeVisible()
+  await expect(panel.getByText(t('tournaments.loading'))).toHaveCount(0)
+  await page.waitForLoadState('networkidle')
+  return panel
+}

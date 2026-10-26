@@ -6,7 +6,7 @@ import { isoDaysFromNow, localDateTime } from '../support/dates.js'
 import { KEYCLOAK_ISSUER } from '../support/env.js'
 import { acceptNextDialog, expectNoHorizontalScroll } from '../support/guards.js'
 import { t, tc } from '../support/i18n.js'
-import { tournamentLink } from '../support/pages.js'
+import { openMenu, tournamentLink } from '../support/pages.js'
 import { startsWith } from '../support/text.js'
 
 test.describe.configure({ mode: 'serial' })
@@ -21,14 +21,6 @@ const tab = (page, key) => page.getByRole('tab', { name: startsWith(t(`tournamen
 const panel = page => page.getByRole('tabpanel')
 const myOngoing = page => page.getByTestId('my-ongoing')
 const changeMyDeck = scope => scope.getByRole('link', { name: t('tournamentPages.changeMyDeck') })
-
-// The menu loads its lists after the session check: wait for the requests to settle before
-// asserting that something is absent.
-async function openMenu(page, query = '') {
-  await page.goto(`/tournament${query}`)
-  await expect(panel(page)).toBeVisible()
-  await page.waitForLoadState('networkidle')
-}
 
 // Card links of the open tab, without the "Change my deck" buttons.
 async function cardLinks(page) {
