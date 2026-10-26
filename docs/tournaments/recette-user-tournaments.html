@@ -246,7 +246,7 @@ details.callout summary { cursor: pointer; font-weight: 600; }
     <p>Spec : <code>docs/tournaments/user-tournaments-spec.md</code> · doc : <code>docs/tournaments/README.md</code> §14. Les groupes suivent un parcours : fais-les dans l'ordre (C à H réutilisent « Test cup » créé en B).</p>
     <p>Coche ✓ ou ✗ à chaque étape. Le bouton ✗ ouvre un champ texte où tu peux coller des captures (Ctrl+V). Le récap se copie depuis l'onglet en haut. L'état est gardé dans ce navigateur (IndexedDB).</p>
     <p>Les étapes marquées <span class="new-tag">nouveau</span> ont été ajoutées ou réécrites après une vague de retours : à (re)passer.</p>
-    <p>Les étapes marquées <span class="new-tag auto">auto</span> sont rejouées par la suite Playwright (<code>make e2e</code>, <code>tests/e2e</code>) : plus besoin de les passer à la main. Survole le badge quand la couverture est partielle. Le filtre « Manuel seulement » ne montre que les autres.</p>
+    <p>Les étapes marquées <span class="new-tag auto">auto</span> sont rejouées par la suite Playwright (<code>make e2e</code>, <code>tests/e2e</code>) : plus besoin de les passer à la main. Un badge « auto (partiel) » garde une part manuelle : survole-le pour savoir laquelle. Le filtre « Manuel seulement » montre les étapes sans badge et les partielles.</p>
     <p>Les étapes marquées <span class="new-tag v11">v1.1</span> couvrent l'option ajoutée au lot 1 : <strong>faction des uniques</strong> (groupe L).</p>
   </div>
 
@@ -316,7 +316,7 @@ const PSQL = (sql) => pre(`docker compose exec -T postgres psql -U altered-draft
 // (scripts/e2e-recette-coverage.mjs) from the tests' tags: do not edit this line by hand.
 const AUTO_STEPS = ['a-grid', 'a-lang', 'a-sealed-run', 'b-cap', 'b-dup', 'b-end-before', 'b-even', 'b-happy', 'b-links', 'b-logged-out', 'b-nej', 'b-options', 'b-past', 'b-session-expired', 'c-404', 'c-anon', 'c-organizer', 'c-step1', 'd-back', 'd-bob', 'd-deck', 'd-one-deck', 'd-open', 'd-same', 'e-cancel', 'e-close', 'e-dates', 'e-delete', 'e-edit-anon', 'e-locked', 'e-relink-taken', 'e-rename', 'e-reopen-past', 'e-stranger', 'f-bga-r3', 'f-button-r3', 'f-delete', 'f-detach-r3', 'f-frozen', 'f-no-button', 'f-players-r3', 'f-redeclare-r3', 'f-squat-r3', 'g-adopt', 'g-adopt-mixed', 'g-carol-menu', 'g-counts', 'g-create', 'g-legacy', 'g-name', 'g-panel', 'h-anon', 'h-created', 'h-generic', 'h-mobile', 'h-my-ongoing', 'h-ongoing', 'h-order', 'h-pools', 'h-tabs-url', 'i-freeze', 'i-legacy-row', 'i-normal', 'j-console', 'j-fr', 'j-mobile', 'j-theme', 'l-api-invalid', 'l-api-no-unique', 'l-create', 'l-form', 'l-imposed', 'l-menu', 'l-pool'];
 // Steps the suite covers with a narrower assertion than the recette (hand-maintained).
-const AUTO_PARTIAL = { 'j-fr': 'raw keys and a FR sample; English leftovers stay a human check', 'j-theme': 'toggle, persistence and screenshots; contrast stays a human check' };
+const AUTO_PARTIAL = { 'b-past': 'everything but « Enter jumps to the first problem » (known gap, still manual)', 'e-dates': 'end-before-start only; the start-side « must be before the end » message is a known gap (manual)', 'e-reopen-past': 'Ended state and the API reopen; the UI offers « Mark as ended » instead of Reopen (known gap, manual)', 'j-fr': 'raw keys and a FR sample; English leftovers stay a human check', 'j-theme': 'toggle, persistence and screenshots; contrast stays a human check' };
 
 const GROUPS = [
   {
@@ -834,7 +834,7 @@ function applyFilter() {
   document.querySelectorAll('.step').forEach((el) => {
     const v = st(el.dataset.id).status;
     const show = filter === 'all' || (filter === 'todo' && !v) || (filter === 'ko' && v === 'ko')
-      || (filter === 'manual' && !AUTO_STEPS.includes(el.dataset.id));
+      || (filter === 'manual' && (!AUTO_STEPS.includes(el.dataset.id) || el.dataset.id in AUTO_PARTIAL));
     el.classList.toggle('hidden', !show);
   });
   document.querySelectorAll('section.group').forEach((g) => {

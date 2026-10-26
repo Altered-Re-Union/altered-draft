@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 // Which recette steps the Playwright suite replays: step ids from the recette's GROUPS ×
 // the tests' tags (`npx playwright test --list`). A step is covered when at least one test
-// that is not a test.fixme carries its tag. Prints covered / partial / fixme-only / no tag;
-// --write rewrites the recette's `const AUTO_STEPS = [...]` line (idempotent). Exits 1 on a
-// tag that is not a recette step id (typo guard).
+// that is not a test.fixme carries its tag; a covered step that ALSO has a fixme (a part the
+// app does not meet yet) must have a note in the recette's AUTO_PARTIAL, so its badge says
+// "partial" instead of telling testers to skip it. Prints covered / partial / fixme-only /
+// no tag; --write rewrites the recette's `const AUTO_STEPS = [...]` line (idempotent).
+// Exits 1 on a tag that is not a recette step id (typo guard) or a fixme without a note.
 //
 //   npm run test:e2e:coverage [-- --write]
 import { execFileSync } from 'node:child_process'
@@ -31,7 +33,7 @@ function* specs(suite) {
 }
 
 const active = new Set()
-const fixmeOnly = new Set()
+const withFixme = new Set()
 const unknown = new Set()
 for (const suite of list.suites) {
   for (const spec of specs(suite)) {
@@ -40,7 +42,7 @@ for (const suite of list.suites) {
       const tag = raw.replace(/^@/, '')
       if (NOT_STEPS.has(tag)) continue
       if (!ids.includes(tag)) unknown.add(tag)
-      else if (isFixme) fixmeOnly.add(tag)
+      else if (isFixme) withFixme.add(tag)
       else active.add(tag)
     }
   }
@@ -50,11 +52,16 @@ if (unknown.size) {
   console.error(`tags that are not recette step ids: ${[...unknown].sort().join(', ')}`)
   process.exit(1)
 }
+const unnoted = ids.filter(id => active.has(id) && withFixme.has(id) && !(id in partialNotes))
+if (unnoted.length) {
+  console.error(`covered steps with a test.fixme but no AUTO_PARTIAL note in the recette: ${unnoted.join(', ')}`)
+  process.exit(1)
+}
 
 const covered = ids.filter(id => active.has(id))
 const partial = covered.filter(id => id in partialNotes)
-const onlyFixme = ids.filter(id => fixmeOnly.has(id) && !active.has(id))
-const noTag = ids.filter(id => !active.has(id) && !fixmeOnly.has(id))
+const onlyFixme = ids.filter(id => withFixme.has(id) && !active.has(id))
+const noTag = ids.filter(id => !active.has(id) && !withFixme.has(id))
 console.log(`covered (${covered.length}): ${covered.join(' ')}`)
 console.log(`partial (${partial.length}): ${partial.join(' ')}`)
 console.log(`fixme only (${onlyFixme.length}): ${onlyFixme.join(' ')}`)
