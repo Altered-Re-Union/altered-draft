@@ -99,6 +99,8 @@ export default function TournamentForm() {
   const touch = field => setTouched(prev => (prev.has(field) ? prev : new Set(prev).add(field)))
   // Wraps a setter: any edit clears the last server error and marks the field touched.
   const edit = (field, setter) => value => { setter(value); setServerError(''); touch(field) }
+  // Crossed dates are reported under the date field changed last (see tournamentFormIssues).
+  const [lastDateEdited, setLastDateEdited] = useState(null)
 
   // A session that expired while the form was being filled: the reconnect goes through
   // Keycloak (full page load), so what was typed is parked in sessionStorage and put back
@@ -211,17 +213,28 @@ export default function TournamentForm() {
     excludeBanlist,
   }
   const body = { name, description, bgaUrl, startsAt: fromLocalInput(startsAt), endsAt: fromLocalInput(endsAt) }
-  const issues = tournamentFormIssues({ body, config, isCreate: !isEdit, locked, takenBgaIds, ownId: id ?? null, mixedBgaIds })
+  const issues = tournamentFormIssues({ body, config, isCreate: !isEdit, locked, takenBgaIds, ownId: id ?? null, mixedBgaIds, lastDateEdited })
   const fieldIssue = field => (touched.has(field) ? issues.find(i => i.field === field) : null)
   const blocked = issues.length > 0 || saving || loading || !!loadError
 
+  function showFirstIssue() {
+    setTouched(new Set(issues.map(i => i.field)))
+    focusField(issues[0].field)
+  }
+
+  // Enter in a field: same as clicking the first listed problem. The submit button is disabled
+  // while problems are listed, and a disabled default button blocks implicit submission, so
+  // the form never sees that Enter; catch it here instead.
+  function handleKeyDown(e) {
+    const el = e.target
+    if (e.key !== 'Enter' || !issues.length || el.tagName !== 'INPUT' || ['checkbox', 'radio'].includes(el.type)) return
+    e.preventDefault()
+    showFirstIssue()
+  }
+
   async function handleSubmit(e) {
     e.preventDefault()
-    if (issues.length) { // Enter in a field: same as clicking the first listed problem
-      setTouched(new Set(issues.map(i => i.field)))
-      focusField(issues[0].field)
-      return
-    }
+    if (issues.length) { showFirstIssue(); return }
     setServerError(''); setSessionExpired(false)
     setSaving(true)
     try {
@@ -304,7 +317,7 @@ export default function TournamentForm() {
   return (
     <div className="min-h-screen flex flex-col">
       <TopNav />
-      <form onSubmit={handleSubmit} noValidate className="max-w-2xl w-full mx-auto px-4 pt-8 flex-1 space-y-6">
+      <form onSubmit={handleSubmit} onKeyDown={handleKeyDown} noValidate className="max-w-2xl w-full mx-auto px-4 pt-8 flex-1 space-y-6">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-display">{isEdit ? t('tournaments.editTitle') : t('tournaments.createTitle')}</h1>
           <Link to={isEdit ? `/tournament/t/${id}` : '/tournament'} className="text-sm text-muted hover:text-ink">{t('lobby.back')}</Link>
@@ -337,13 +350,13 @@ export default function TournamentForm() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm text-muted mb-1" htmlFor="tn-start">{t('tournaments.startsAtLabel')}</label>
-              <input id="tn-start" type="datetime-local" value={startsAt} onChange={e => edit('startsAt', setStartsAt)(e.target.value)}
+              <input id="tn-start" type="datetime-local" value={startsAt} onChange={e => { setLastDateEdited('startsAt'); edit('startsAt', setStartsAt)(e.target.value) }}
                 aria-invalid={!!fieldIssue('startsAt')} className={inputCls(fieldIssue('startsAt'))} />
               <ErrorLine field="startsAt" />
             </div>
             <div>
               <label className="block text-sm text-muted mb-1" htmlFor="tn-end">{t('tournaments.endsAtLabel')}</label>
-              <input id="tn-end" type="datetime-local" value={endsAt} onChange={e => edit('endsAt', setEndsAt)(e.target.value)}
+              <input id="tn-end" type="datetime-local" value={endsAt} onChange={e => { setLastDateEdited('endsAt'); edit('endsAt', setEndsAt)(e.target.value) }}
                 aria-invalid={!!fieldIssue('endsAt')} className={inputCls(fieldIssue('endsAt'))} />
               <ErrorLine field="endsAt" />
             </div>

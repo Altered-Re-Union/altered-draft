@@ -19,13 +19,19 @@ const FIELD_ORDER = ['name', 'description', 'bgaUrl', 'startsAt', 'endsAt', 'set
  * @param {Map<string, string>} [p.takenBgaIds] - BGA id -> id of the live tournament declaring it
  * @param {string|null} [p.ownId] - the tournament being edited (its own link is not "taken")
  * @param {Set<string>} [p.mixedBgaIds] - BGA ids already played with legacy pools of different formats (refused)
+ * @param {'startsAt'|'endsAt'|null} [p.lastDateEdited] - the date field the user changed last: crossed
+ *   dates are reported under it (a start moved past the end is the start's problem)
  * @returns {{ field: string, code: string }[]}
  */
-export function tournamentFormIssues({ body, config, now = new Date(), isCreate, locked = false, takenBgaIds = null, ownId = null, mixedBgaIds = null }) {
+export function tournamentFormIssues({ body, config, now = new Date(), isCreate, locked = false, takenBgaIds = null, ownId = null, mixedBgaIds = null, lastDateEdited = null }) {
   const issues = []
   const checked = { ...body }
   if (locked) delete checked.bgaUrl
   const fields = validateTournamentFields(checked, { now, isCreate, current: null })
+  if (lastDateEdited === 'startsAt' && fields.errors.endsAt === 'must_be_after_start') {
+    delete fields.errors.endsAt
+    fields.errors.startsAt = 'must_be_before_end'
+  }
   for (const [field, code] of Object.entries(fields.errors)) issues.push({ field, code })
 
   if (!locked && !fields.errors.bgaUrl && takenBgaIds) {
