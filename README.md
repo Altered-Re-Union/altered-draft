@@ -111,15 +111,15 @@ npm run test:e2e      # Playwright: real browser, fakes for Keycloak / decks-api
   players' picks clobbering each other. The container is created and torn down
   automatically (`tests/integration/globalSetup.js`); requires Docker running locally.
 - **`make e2e`** (or `npm run test:e2e` after `npm run build`) runs the Playwright suite in
-  `tests/e2e`: the user-tournaments recette (`docs/tournaments/recette-user-tournaments.html`,
+  `tests/e2e`: the user-tournaments acceptance steps (`docs/tournaments/acceptance-user-tournaments.html`,
   groups A–J and L) replayed in Chromium (desktop + a 375 px mobile project) against the
   built app (`node server/index.js` on `:8090`), a throwaway Postgres (`docker-compose.e2e.yml`,
   `:55433`) and ONE fake process on `:8091` standing in for Keycloak, decks-api, the cards API,
   the CDN and the card database — nothing leaves `localhost`. Needs Docker and Chromium
   (`npx playwright install chromium`, done by `make e2e`). `E2E_KEEP_STACK=1` keeps the
   Postgres container between runs (`make e2e-down` removes it), `make e2e-ui` opens the
-  Playwright UI. Each test carries its recette step id as a tag;
-  `npm run test:e2e:coverage -- --write` refreshes the recette's « auto » badges from them.
+  Playwright UI. Each test carries its acceptance step id as a tag;
+  `npm run test:e2e:coverage -- --write` refreshes the acceptance page's « auto » badges from them.
 
 ---
 

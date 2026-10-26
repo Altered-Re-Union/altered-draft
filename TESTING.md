@@ -5,7 +5,7 @@ BGA. Run the whole list before a risky change ships (Lobby refactor, new format,
 change), and the relevant section for any change in that area. Keep it current: a feature that
 ships adds its section here, a behaviour that changes updates its line. Detailed, one-off test
 campaigns (setup steps, curl commands, every edge case of a new feature) belong in a
-per-campaign recette, not here.
+per-campaign acceptance page, not here.
 
 **Automated first.** `npm test` (unit), `npm run test:integration` (API handlers + SQL against
 a throwaway Postgres, needs Docker) and `make e2e` (Playwright, the tournament pages in a real
@@ -58,7 +58,7 @@ link in a second tab as a 2nd player). Locally there is no Realtime: pages poll 
 - [ ] Load a deck as a cube (search + format chips), preview it, draft it.
 
 ## 8. Tournaments (BGA sealed) — see `docs/tournaments/README.md`
-Automated by `tests/e2e` — the steps with an « auto » badge in `docs/tournaments/recette-user-tournaments.html`
+Automated by `tests/e2e` — the steps with an « auto » badge in `docs/tournaments/acceptance-user-tournaments.html`
 no longer need a manual pass; the items below are the smoke check on a real deployment.
 - [ ] **Normal pool** (`/tournament/normal`): pool + pack reveal; **Reset pool** gives a new pool, then a 30-minute cooldown.
 - [ ] **Generic preparation pool** (`/tournament/prep`, bottom of `/tournament`): one-shot pool, no reset.

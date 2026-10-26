@@ -14,7 +14,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const RECETTE = path.join(ROOT, 'docs/tournaments/recette-user-tournaments.html')
+const RECETTE = path.join(ROOT, 'docs/tournaments/acceptance-user-tournaments.html')
 const NOT_STEPS = new Set(['mobile'])
 const AUTO_LINE = /^const AUTO_STEPS = \[.*\];$/m
 
