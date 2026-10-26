@@ -18,6 +18,59 @@ link in a second tab as a 2nd player). Locally there is no Realtime: pages poll 
 
 ---
 
+## E2E suite (`make e2e`)
+
+Playwright replays the user-tournaments acceptance steps
+(`docs/tournaments/acceptance-user-tournaments.html`, groups A–J and L) in Chromium, desktop
+1280 px plus a 375 px mobile project. Needs Docker running and Node 22 (`nvm use`); nothing
+else — no `make dev`, no altered-dev-environment, no `.env`.
+
+```bash
+make e2e        # npm run build + playwright install chromium + the whole suite (~1 min)
+make e2e-ui     # same build, then the Playwright UI: pick a test, rerun it, step through it
+make e2e-down   # remove a Postgres kept with E2E_KEEP_STACK=1
+
+# Against the current dist/ (rebuild first with npm run build after a change in src/):
+npm run test:e2e
+E2E_KEEP_STACK=1 npm run test:e2e        # keep Postgres between runs (faster reruns)
+npx playwright test -c tests/e2e/playwright.config.js --grep @e-dates   # one acceptance step, by id
+npx playwright test -c tests/e2e/playwright.config.js tests/e2e/specs/menu.spec.js   # one spec file
+
+npm run test:e2e:coverage                # which acceptance steps are automated
+npm run test:e2e:coverage -- --write     # refresh the page's “auto” badges from the test tags
+```
+
+**What runs.** The built app (`tests/e2e/app-server.mjs` → `server/index.js`, `:8090`, it
+refuses to start without `dist/`), one fake process on `:8091` for Keycloak, decks-api, the
+cards API, the CDN and the card database (`tests/e2e/fakes/`), and a throwaway Postgres
+(`docker-compose.e2e.yml`, `:55433`, driven by `tests/e2e/db-stack.mjs` on `:8092`). None of
+these ports clash with `make dev` (8080 / 5173 / 5432). Every test fails on a console error, a
+page error, an HTTP 5xx, a request leaving `localhost` or a request no fake answers.
+
+**Reading a failure.** The HTML report opens by itself (`playwright-report/`; the command then
+stays up serving it, Ctrl+C to quit). Traces of failed tests are in `test-results/`:
+`npx playwright show-trace test-results/<test>/trace.zip`. A spec file whose tests share
+data (`menu`, `lifecycle`, `moderation`…) runs serially: after a failure, the rest of that
+file is reported as skipped, so fix the first red test.
+
+**Traps.**
+- `npm run test:e2e` tests the last build, not the code in `src/` (a warning says so when
+  `dist/` is older); `make e2e` always rebuilds.
+- One run at a time: two Playwright runs in the same checkout share `test-results/` (one
+  wipes the other's traces mid-run: `ENOENT … .playwright-artifacts-…`) and the ports.
+- Outside CI, a server already answering on `:8090` / `:8091` / `:8092` is reused as is: stop
+  a server left over from an interrupted run, or it serves its old code.
+- A Postgres kept with `E2E_KEEP_STACK=1` keeps the schema it was created with: `make e2e-down`
+  after changing `sealed-pools-schema.sql` or `draft-rooms-schema.sql`.
+
+**Writing a test.** Import `test` / `expect` from `tests/e2e/support/fixtures.js`, tag it
+with its acceptance step id (`{ tag: ['@b-dup'] }`, plus `@mobile` for the 375 px project), and
+select with `getByRole` / `getByLabel` and the English labels through `t()`. A step the app
+does not meet yet is committed as `test.fixme` with its tag and needs an `AUTO_PARTIAL` note
+on the acceptance page (the coverage script enforces it).
+
+---
+
 ## 1. Lobby wizard (mode → cards → settings)
 - [ ] Step 1 shows **Booster Draft** then **Sealed** first; **▶ Other draft options** expands Rochester / Rotisserie / Winston, and stays expanded when an "other" mode is selected.
 - [ ] **Next** is disabled on step 2 until a valid pool is chosen; **Back** returns without losing choices; the step indicator (1 · 2 · 3) follows.
