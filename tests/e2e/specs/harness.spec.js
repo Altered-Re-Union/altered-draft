@@ -87,15 +87,18 @@ test.describe('fake Keycloak', () => {
     expect((await refused.json()).error).toBe('invalid_grant')
   })
 
-  test('refresh rotates and dies with the session', async ({ request }) => {
+  test('refresh rotates, the old token stays valid, both die with the session', async ({ request }) => {
     const { refresh_token: first } = await (await request.post(`${FAKES_URL}/__control/session`, { data: { user: 'carol' } })).json()
     const rotated = await tokenRequest(request, { grant_type: 'refresh_token', client_secret: CLIENT_SECRET, refresh_token: first })
     expect(rotated.status()).toBe(200)
     const second = (await rotated.json()).refresh_token
     expect(second).not.toBe(first)
-    expect((await tokenRequest(request, { grant_type: 'refresh_token', client_secret: CLIENT_SECRET, refresh_token: first })).status()).toBe(400)
+    // revokeRefreshToken = false in the real realm: a reused refresh token still works.
+    expect((await tokenRequest(request, { grant_type: 'refresh_token', client_secret: CLIENT_SECRET, refresh_token: first })).status()).toBe(200)
     await request.post(`${FAKES_URL}/__control/revoke`, { data: { user: 'carol' } })
-    expect((await tokenRequest(request, { grant_type: 'refresh_token', client_secret: CLIENT_SECRET, refresh_token: second })).status()).toBe(400)
+    for (const token of [first, second]) {
+      expect((await tokenRequest(request, { grant_type: 'refresh_token', client_secret: CLIENT_SECRET, refresh_token: token })).status()).toBe(400)
+    }
   })
 
   test('refresh after revoke → 400 through the app, both cookies cleared', async ({ request }) => {

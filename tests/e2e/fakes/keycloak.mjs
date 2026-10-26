@@ -111,9 +111,11 @@ export function createKeycloak({ issuer, clientId, clientSecret, personas, passw
       return res.json(issueTokens(entry.user))
     }
     if (body.grant_type === 'refresh_token') {
+      // Rotates, but the old refresh token stays valid until its session dies: the realm runs
+      // with revokeRefreshToken = false (AlteredAuth realm export), and the app relies on it —
+      // two refreshes racing on a page load both present the same cookie.
       const entry = alive(refreshTokens.get(body.refresh_token))
       if (!entry) return res.status(400).json({ error: 'invalid_grant', error_description: 'Token is not active' })
-      refreshTokens.delete(body.refresh_token)
       return res.json(issueTokens(entry.user, entry.sid))
     }
     if (body.grant_type === 'password') {
