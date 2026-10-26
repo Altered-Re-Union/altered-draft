@@ -2,9 +2,10 @@
 // deck saved on decks-api, the pool kept across reloads, and one deck only under quick edits.
 import fs from 'node:fs'
 import path from 'node:path'
-import { test, expect } from '../support/fixtures.js'
+import { test, expect, resetStack } from '../support/fixtures.js'
 import { withRequestContext } from '../support/api.js'
 import { ROOT_DIR } from '../support/env.js'
+import { openPoolPage, tournamentLink } from '../support/pages.js'
 import { PERSONAS } from '../support/personas.js'
 import { t, tc } from '../support/i18n.js'
 
@@ -23,22 +24,8 @@ const uniquesOf = refs => refs.filter(r => r.includes('_U_'))
 
 let id
 
-// The reveal shows once per pool and browser (localStorage, TournamentPoolView.jsx's
-// revealKey); tests that are not about it mark it seen before the page loads.
-async function openPoolPage(openAs, seed, who) {
-  const pool = await seed.pool(who, id)
-  const page = await openAs(who)
-  await page.addInitScript(key => localStorage.setItem(key, '1'), `pool_reveal_seen:${pool.id}:${pool.resetAt ?? ''}`)
-  await page.goto(`/tournament/t/${id}/pool`)
-  await expect(page.getByRole('heading', { name: 'Test cup' })).toBeVisible()
-  return page
-}
-
 test.beforeAll(async ({ playwright }) => {
-  const { resetDb } = await import('../support/db.js')
-  const { fakesReset } = await import('../support/fakes-client.js')
-  await resetDb()
-  await fakesReset()
+  await resetStack()
   await withRequestContext(playwright.request, async seed => { id = (await seed.tournament('alice')).id })
 })
 
@@ -72,7 +59,7 @@ test('opening the pool: 7 boosters and the guaranteed unique', { tag: ['@d-open'
 })
 
 test('back on the tournament page', { tag: ['@d-back'] }, async ({ openAs, seed }) => {
-  const page = await openPoolPage(openAs, seed, 'alice')
+  const page = await openPoolPage({ openAs, seed }, 'alice', id)
   await page.getByRole('link', { name: t('tournaments.backToTournament') }).click()
   await expect(page.getByTestId('checklist-step-2')).toHaveAttribute('data-done', 'true')
   await expect(page.getByRole('link', { name: t('tournaments.step2ButtonExisting') })).toBeVisible()
@@ -85,7 +72,7 @@ test('back on the tournament page', { tag: ['@d-back'] }, async ({ openAs, seed 
 })
 
 test('a random deck is saved on decks-api', { tag: ['@d-deck'] }, async ({ openAs, seed, fakes }) => {
-  const page = await openPoolPage(openAs, seed, 'alice')
+  const page = await openPoolPage({ openAs, seed }, 'alice', id)
   const linked = page.waitForResponse(r => r.url().includes('/api/tournament-pool?id=') && r.request().method() === 'POST')
   await page.getByRole('button', { name: t('tournamentPoolView.makeRandomDeck') }).click()
   expect((await linked).ok()).toBe(true)
@@ -100,14 +87,14 @@ test('a random deck is saved on decks-api', { tag: ['@d-deck'] }, async ({ openA
 
 test('the same pool across reloads and from the menu', { tag: ['@d-same'] }, async ({ openAs, seed, db }) => {
   const before = Object.keys((await seed.pool('alice', id)).cards).sort()
-  const page = await openPoolPage(openAs, seed, 'alice')
+  const page = await openPoolPage({ openAs, seed }, 'alice', id)
   await page.reload()
   await expect(page.getByRole('heading', { name: 'Test cup' })).toBeVisible()
   expect(Object.keys((await seed.pool('alice', id)).cards).sort()).toEqual(before)
 
   await page.goto('/tournament')
   await page.getByRole('tab', { name: t('tournaments.tabPools') }).click()
-  await page.getByRole('link', { name: 'Test cup', exact: true }).click()
+  await tournamentLink(page, 'Test cup').click()
   await page.waitForURL(`**/tournament/t/${id}`)
   await page.goBack()
   await page.getByRole('link', { name: t('tournamentPages.changeMyDeck') }).first().click()
@@ -131,13 +118,15 @@ test('another player gets another pool', { tag: ['@d-bob'] }, async ({ openAs, s
 })
 
 test('quick edits right after Make random deck create one deck only', { tag: ['@d-one-deck'] }, async ({ openAs, fakes, seed }) => {
-  const page = await openPoolPage(openAs, seed, 'bob')
+  const page = await openPoolPage({ openAs, seed }, 'bob', id)
   await page.getByRole('button', { name: t('tournamentPoolView.makeRandomDeck') }).click()
-  const plus = page.getByRole('button', { name: '+', exact: true }).first()
-  const minus = page.getByRole('button', { name: '−', exact: true }).first()
-  await plus.click()
+  // Three quick edits on whichever cards can take them (a card already at its pool count
+  // has its + disabled).
+  const plus = page.getByRole('button', { name: '+', exact: true, disabled: false }).first()
+  const minus = page.getByRole('button', { name: '−', exact: true, disabled: false }).first()
   await plus.click()
   await minus.click()
+  await plus.click()
   // The product throttles the deck sync to one call per 2 s: wait past it.
   await page.waitForTimeout(5000)
   const decks = await fakes.decks('bob')

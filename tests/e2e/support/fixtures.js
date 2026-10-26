@@ -9,6 +9,12 @@ import { fakesDecks, fakesRequests, fakesReset, fakesRevoke, fakesSession } from
 import { assertClean, attachGuards, newBucket, pending } from './guards.js'
 import { installNetworkRules } from './network.js'
 
+// For the beforeAll of serial spec files (the db / fakes fixtures are per test).
+export async function resetStack() {
+  await resetDb()
+  await fakesReset()
+}
+
 async function guardContext(context, bucket) {
   await installNetworkRules(context, bucket.leaks)
   attachGuards(context, bucket)
