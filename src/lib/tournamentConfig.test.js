@@ -17,7 +17,7 @@ describe('validateTournamentConfig', () => {
       v: 1, format: 'sealed',
       source: { type: 'set', setCode: 'CYCLONE', boosters: 7 },
       heroes: 'packs',
-      uniques: { inBoosters: 2, guaranteed: 0, evenFactions: false },
+      uniques: { inBoosters: 2, guaranteed: 0, evenFactions: false, faction: null },
       excludeBanlist: false,
     })
   })
@@ -77,6 +77,28 @@ describe('validateTournamentConfig evenFactions', () => {
     expect(one.config.uniques.evenFactions).toBe(false)
     const two = validateTournamentConfig({ ...valid, uniques: { inBoosters: 1, guaranteed: 1, evenFactions: true } })
     expect(two.config.uniques.evenFactions).toBe(true)
+  })
+})
+
+describe('validateTournamentConfig faction', () => {
+  it('keeps a valid faction and rejects an unknown one', () => {
+    expect(validateTournamentConfig({ ...valid, uniques: { ...valid.uniques, faction: 'AX' } }).config.uniques.faction).toBe('AX')
+    expect(validateTournamentConfig({ ...valid, uniques: { ...valid.uniques, faction: 'XX' } }).errors).toContain('uniques.faction')
+    expect(validateTournamentConfig({ ...valid, uniques: { ...valid.uniques, faction: 'ax' } }).errors).toContain('uniques.faction')
+  })
+
+  it('defaults a missing faction to null (all factions)', () => {
+    expect(validateTournamentConfig(valid).config.uniques.faction).toBe(null)
+  })
+
+  it('drops the faction when no unique is drawn', () => {
+    const r = validateTournamentConfig({ ...valid, uniques: { inBoosters: 0, guaranteed: 0, faction: 'BR' } })
+    expect(r.config.uniques.faction).toBe(null)
+  })
+
+  it('drops evenFactions when a faction is set', () => {
+    const r = validateTournamentConfig({ ...valid, uniques: { inBoosters: 2, guaranteed: 2, evenFactions: true, faction: 'YZ' } })
+    expect(r.config.uniques).toEqual({ inBoosters: 2, guaranteed: 2, evenFactions: false, faction: 'YZ' })
   })
 })
 

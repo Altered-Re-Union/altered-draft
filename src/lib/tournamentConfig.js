@@ -1,7 +1,7 @@
 // The sealed configuration object of a tournament (docs/tournaments/user-tournaments-spec.md
 // §5.1). One shape for declared tournaments, for the legacy `current_format` (converted on
 // read) and, from lot 2 on, for the Lobby. Pure: shared by server validation and the form.
-import { SETS } from './cardData.js'
+import { SETS, FACTIONS } from './cardData.js'
 import { hasFactionRanges } from './uniqueFactionRanges.js'
 
 export const CONFIG_VERSION = 1
@@ -39,11 +39,14 @@ export function validateTournamentConfig(input) {
   if (inBoosters === null || inBoosters < 0 || inBoosters > MAX_UNIQUES) errors.push('uniques.inBoosters')
   if (guaranteed === null || guaranteed < 0 || guaranteed > MAX_UNIQUES) errors.push('uniques.guaranteed')
   if (u.evenFactions !== undefined && typeof u.evenFactions !== 'boolean') errors.push('uniques.evenFactions')
+  if (u.faction !== undefined && u.faction !== null && !FACTIONS.includes(u.faction)) errors.push('uniques.faction')
   if (set && ((inBoosters ?? 0) > 0 || (guaranteed ?? 0) > 0) && !hasFactionRanges(set.code)) errors.push('uniques.unsupportedSet')
 
   if (c.excludeBanlist !== undefined && typeof c.excludeBanlist !== 'boolean') errors.push('excludeBanlist')
 
   if (errors.length) return { ok: false, errors, config: null }
+  const uniqueTotal = inBoosters + guaranteed
+  const faction = uniqueTotal > 0 ? u.faction ?? null : null
   return {
     ok: true,
     errors: [],
@@ -52,9 +55,10 @@ export function validateTournamentConfig(input) {
       format: 'sealed',
       source: { type: 'set', setCode: set.code, boosters: SEALED_BOOSTERS },
       heroes: c.heroes,
-      // Even factions only means something from 2 uniques on; a stale "true" would still
-      // change the draw (evenFactionTargets consumes the rng) and mislead the stored config.
-      uniques: { inBoosters, guaranteed, evenFactions: !!u.evenFactions && inBoosters + guaranteed >= 2 },
+      // Even factions only means something from 2 uniques on and without a single faction;
+      // a stale "true" would still change the draw (evenFactionTargets consumes the rng) and
+      // mislead the stored config. Same for a faction left over with no unique at all.
+      uniques: { inBoosters, guaranteed, evenFactions: !!u.evenFactions && uniqueTotal >= 2 && !faction, faction },
       excludeBanlist: !!c.excludeBanlist,
     },
   }

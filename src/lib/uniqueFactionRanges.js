@@ -94,18 +94,22 @@ export function hasFactionRanges(setCode) {
  * identically, so the pool is always reproducible.
  * @param {string} setCode - e.g. 'EOLE'
  * @param {() => number} rng - `() => float in [0,1)`, e.g. from prng.js's seededRng()
- * @param {{uniqueCount?: number, evenFactions?: boolean, isAllowed?: (ref: string) => boolean}} options
+ * @param {{uniqueCount?: number, evenFactions?: boolean, faction?: string|null, isAllowed?: (ref: string) => boolean}} options
+ *   - faction: draw only uniques OF that faction (their real one, out-of-faction prints
+ *     included). Takes precedence over evenFactions.
  *   - evenFactions: true round-robins target factions (wraps past 6, e.g. {12, true} = 2/faction).
  *     false draws freely across the whole combinatorial space, faction unconstrained.
  * @returns {string[]} unique card references
  */
-export function pickDeterministicUniques(setCode, rng, { uniqueCount = 0, evenFactions = false, isAllowed = () => true } = {}) {
+export function pickDeterministicUniques(setCode, rng, { uniqueCount = 0, evenFactions = false, faction = null, isAllowed = () => true } = {}) {
   const rangesForSet = FACTION_RANGES_BY_SET[setCode]
   if (!rangesForSet || uniqueCount <= 0) return []
 
   const seen = new Set()
   const refs = []
-  const targets = evenFactions ? evenFactionTargets(rng, uniqueCount) : Array(uniqueCount).fill(null)
+  const targets = faction
+    ? Array(uniqueCount).fill(faction)
+    : evenFactions ? evenFactionTargets(rng, uniqueCount) : Array(uniqueCount).fill(null)
 
   for (const target of targets) {
     const candidates = buildCandidates(rangesForSet, target)

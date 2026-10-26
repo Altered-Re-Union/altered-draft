@@ -397,6 +397,9 @@ seedStr = sub | set_code | unique_count | even_factions | heroes_in_pool | guara
 - **`tournament_id` is deliberately NOT part of the seed**: a pool must have identical
   contents before and after binding (bug fixed 2026-08-12, "Fix tournament sealed pool
   changing contents when bound").
+- **`uniques.faction` is not part of the seed either** (nor of the snapshot columns): it only
+  narrows the unique candidates, so a config without it draws exactly as before. A pool with a
+  faction only exists as a stored pool (declared tournaments, 2026-10), never regenerated.
 - Two PRNG streams are derived with FNV-1a (`hashSeed`) + `mulberry32`:
   - `mulberry32(hashSeed(seedStr))` drives the booster draws and the unique-slot placement;
   - `mulberry32(hashSeed(seedStr + '#uniques'))` drives the unique draws.
@@ -435,8 +438,11 @@ Details that matter:
   split into non-contiguous windows between its home faction and exactly one out-of-faction
   pairing (per card, not a fixed axis). A draw picks a `(family, faction)` weighted by its
   serial count, then a serial uniformly within that faction's windows, and composes
-  `ALT_<SET>_B_<family>_U_<serial>`. `evenFactions: true` round-robins target factions
-  (the config drops it below 2 uniques). Dedupes within one call (so booster and outside
+  `ALT_<SET>_B_<family>_U_<serial>`. `faction: 'AX'` (`config.uniques.faction`) makes AX
+  the target of every draw: only `(family, AX)` candidates, i.e. uniques whose real faction
+  is AX, out-of-faction prints of other factions' cards included (every set has 14 to 41
+  such families per faction). Otherwise `evenFactions: true` round-robins target factions
+  (the config drops it below 2 uniques and whenever a faction is set). Dedupes within one call (so booster and outside
   uniques never overlap); an optional `isAllowed(ref)` predicate redraws refused refs (the
   ban list).
   Sets covered: CORE, COREKS, ALIZE, BISE, CYCLONE, DUSTER, EOLE. **FUGUE has no table**: a
@@ -1090,6 +1096,9 @@ the raw frames BGA sent (with `decodedEnvelope` and `userId`). altered-draft log
 14. **A declared tournament's config and BGA link are frozen once a pool exists** (checked
     atomically in the UPDATE); name, description and dates stay editable in every status.
 15. **`jsonb` parameters are `JSON.stringify`-ed** (`pg` turns JS arrays into Postgres arrays).
+16. **Config-only options stay out of the snapshot columns and the seed** (`uniques.faction`
+    today): `regeneratePool` rebuilds from the columns, so such an option is only valid on
+    pools stored at creation, which every declared-tournament pool is.
 
 ### 12.2 Pitfalls observed in history
 
@@ -1191,7 +1200,8 @@ mandatory BGA link, start, optional end, sealed configuration) instead of a deve
 changing `current_format`. Design: [`user-tournaments-spec.md`](user-tournaments-spec.md);
 implementation plan: [`user-tournaments-lot1-plan.md`](user-tournaments-lot1-plan.md). Lot 1
 covers `source.type = 'set'` only (7 boosters of one visible set, heroes in boosters or free
-choice, exact uniques inside boosters, guaranteed uniques outside, even factions, ban list).
+choice, exact uniques inside boosters, guaranteed uniques outside, uniques restricted to one
+faction, even factions, ban list).
 
 ### 14.1 Stored pools
 
@@ -1266,6 +1276,17 @@ tournaments stay editable; only pool existence locks the BGA link and the config
 an `ends_at` already reached (else the tournament would stay `ended`). A rename also renames the
 attached pools' `tournament_name`, which every deck name derives from. `evenFactions` is
 normalized to `false` below 2 uniques.
+
+**Faction of the uniques** (added 2026-10-26): `config.uniques.faction` = `null` (all
+factions, the default) or one of `AX BR LY MU OR YZ`, applied to every unique of the pool
+(inside boosters and guaranteed). Uniques stay drawn from the selected set; "an Axiom unique"
+means a unique whose own faction is Axiom, out-of-faction prints included (§4.2). Validation:
+unknown code → `uniques.faction`; normalized to `null` when the tournament has no unique, and
+`evenFactions` is forced to `false` when a faction is set (both would otherwise mislead the
+stored config). The form shows the factions as icon chips under the unique steppers ("All
+factions" + the six), disabled at 0 unique; picking one greys out "even factions". The public
+summary (menu cards, tournament page) adds "[icon] Axiom uniques". A format imposed by legacy
+pools (§14.2) always comes with `faction: null`.
 
 ### 14.5 Detach (moderators, squatting)
 

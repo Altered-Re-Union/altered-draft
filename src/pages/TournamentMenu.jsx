@@ -5,7 +5,7 @@ import { fetchBoundPools, listTournaments, listMyTournaments } from '../lib/tour
 import { useLang } from '../lib/i18n/i18n.jsx'
 import TopNav from '../components/TopNav.jsx'
 import Footer from '../components/Footer.jsx'
-import { StatusPill, formatDateTime, summarizeConfig } from '../components/TournamentBits.jsx'
+import { StatusPill, formatDateTime, ConfigSummary } from '../components/TournamentBits.jsx'
 import { groupCreatedTournaments } from '../lib/tournamentRules.js'
 
 const BGA_TOURNAMENT_LIST_URL = 'https://boardgamearena.com/tournamentlist?d&type=&players_per_match_min=0&players_per_match_max=0&status=future&gamecateg=3&game=1909&full=true&tournament_i_registered=0&time=0&prestige=0&order=recommended'
@@ -28,7 +28,7 @@ function TournamentCard({ tn, t, tc }) {
         {v?.hasPool && <span className="text-xs text-ok">✓ {t('tournaments.youHavePool')}</span>}
       </div>
       <p className="text-sm text-ink2">{t('tournaments.startsAt', { date: formatDateTime(tn.startsAt) })}</p>
-      <p className="text-xs text-muted">{summarizeConfig(tn.config, t, tc)}</p>
+      <ConfigSummary config={tn.config} t={t} tc={tc} className="text-xs text-muted" />
       <p className="text-xs text-faint">
         {t('tournaments.organizedBy', { name: tn.organizer.name })} · {tc('tournaments.poolsPrepared', tn.poolCount ?? 0)}
         {v?.deck ? ` · ${t('tournaments.yourDeck', { name: v.deck.name, n: v.deck.cardQuantity ?? 0 })}` : ''}

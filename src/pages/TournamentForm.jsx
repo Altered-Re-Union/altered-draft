@@ -54,7 +54,10 @@ function issueMessage({ field, code }, t) {
     case 'startsAt': return code === 'must_be_before_end' ? t('tournaments.errStartsAtBeforeEnd') : t('tournaments.errStartsAt')
     case 'endsAt': return t('tournaments.errEndsAt')
     case 'setCode': return t('tournaments.errSelectSet')
-    case 'uniques': return code === 'uniques.unsupportedSet' ? t('tournaments.uniquesUnsupported') : t('tournaments.errGeneric', { msg: code })
+    case 'uniques':
+      if (code === 'uniques.unsupportedSet') return t('tournaments.uniquesUnsupported')
+      if (code === 'uniques.faction') return t('tournaments.errUniquesFaction')
+      return t('tournaments.errGeneric', { msg: code })
     default: return t('tournaments.errGeneric', { msg: code })
   }
 }
@@ -80,7 +83,7 @@ export default function TournamentForm() {
   const [endsAt, setEndsAt] = useState('')
   const [setCode, setSetCode] = useState(null)
   const [heroes, setHeroes] = useState('packs')
-  const [uniques, setUniques] = useState({ inBoosters: 1, guaranteed: 1, evenFactions: false })
+  const [uniques, setUniques] = useState({ inBoosters: 1, guaranteed: 1, evenFactions: false, faction: null })
   const [excludeBanlist, setExcludeBanlist] = useState(false)
 
   const [locked, setLocked] = useState(false)
@@ -191,7 +194,7 @@ export default function TournamentForm() {
   useEffect(() => {
     if (!imposed) return
     const c = legacy.config
-    setSetCode(c.source.setCode); setHeroes(c.heroes); setUniques(c.uniques); setExcludeBanlist(!!c.excludeBanlist)
+    setSetCode(c.source.setCode); setHeroes(c.heroes); setUniques({ ...c.uniques, faction: c.uniques.faction ?? null }); setExcludeBanlist(!!c.excludeBanlist)
   }, [imposed, legacy])
   const mixedBgaIds = new Set([...legacyByBgaId].filter(([, l]) => l.mixed).map(([bgaId]) => bgaId))
   const configFrozen = locked || imposed
@@ -204,7 +207,7 @@ export default function TournamentForm() {
     v: 1, format: 'sealed',
     source: { type: 'set', setCode, boosters: 7 },
     heroes,
-    uniques: uniqueSupport ? uniques : { inBoosters: 0, guaranteed: 0, evenFactions: false },
+    uniques: uniqueSupport ? uniques : { inBoosters: 0, guaranteed: 0, evenFactions: false, faction: null },
     excludeBanlist,
   }
   const body = { name, description, bgaUrl, startsAt: fromLocalInput(startsAt), endsAt: fromLocalInput(endsAt) }

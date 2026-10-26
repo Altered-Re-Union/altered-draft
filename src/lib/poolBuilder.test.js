@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { buildPool, buildPoolSeedString } from './poolBuilder.js'
 import { FACTIONS } from './cardData.js'
+import EOLE from './data/factionRanges/EOLE.json' with { type: 'json' }
 
 // A synthetic set: 2 heroes, 3 commons per faction, 4 rares (+ 1 banned common).
 function fakeSet() {
@@ -76,6 +77,17 @@ describe('buildPool', () => {
     expect(inPacks).toHaveLength(1)
     expect(all).toHaveLength(2)
     expect(inPacks[0]).toMatch(/^ALT_EOLE_B_/)
+  })
+
+  it('restricts every unique, in boosters and guaranteed, to the configured faction', async () => {
+    const cfg = config({ source: { type: 'set', setCode: 'EOLE', boosters: 7 }, uniques: { inBoosters: 3, guaranteed: 2, evenFactions: false, faction: 'LY' } })
+    const { cards } = await buildPool('alice', { config: cfg, nonce: 'n1' }, { fetchCards })
+    const uniques = Object.keys(cards).filter(r => r.includes('_U_'))
+    expect(uniques).toHaveLength(5)
+    for (const ref of uniques) {
+      const [, family, serial] = ref.match(/^ALT_EOLE_B_([A-Z0-9_]+)_U_(\d+)$/)
+      expect(EOLE[family].LY.some(([s, e]) => Number(serial) >= s && Number(serial) <= e)).toBe(true)
+    }
   })
 })
 

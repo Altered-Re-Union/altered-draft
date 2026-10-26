@@ -219,7 +219,7 @@ One shape for tournaments, for the legacy format (converted on read), and later 
   "format": "sealed",
   "source": { "type": "set", "setCode": "CYCLONE", "boosters": 7 },
   "heroes": "packs",
-  "uniques": { "inBoosters": 1, "guaranteed": 1, "evenFactions": false },
+  "uniques": { "inBoosters": 1, "guaranteed": 1, "evenFactions": false, "faction": null },
   "excludeBanlist": false
 }
 ```
@@ -229,7 +229,12 @@ One shape for tournaments, for the legacy format (converted on read), and later 
   (`{ type, mix: { SET: boosters } }`), plus `uniques.random` (per-booster probability).
 - `heroes`: `packs` (one hero per booster) or `free` (no hero in boosters, every hero of the
   set appended to the pool — today's `heroes_in_pool = false`).
-- `uniques.inBoosters` 0–7, `uniques.guaranteed` 0–7, `evenFactions` boolean (normalized to `false` when `inBoosters + guaranteed < 2`).
+- `uniques.inBoosters` 0–7, `uniques.guaranteed` 0–7, `evenFactions` boolean (normalized to `false` when `inBoosters + guaranteed < 2` or when a faction is set).
+- `uniques.faction` (added 2026-10-26): `null` = all factions (default, also when absent), or
+  one of `AX BR LY MU OR YZ`: every unique of the pool (inside boosters and guaranteed) is of
+  that faction, its real one (out-of-faction prints included), still from the selected set.
+  Normalized to `null` without any unique. Config-only: not in the snapshot columns nor the
+  seed (a pool with a faction is always stored, never regenerated).
 - Conversion of a `current_format` row: `set_code → source.setCode`, `heroes_in_pool → heroes`,
   `unique_count → uniques.inBoosters`, `guaranteed_uniques → uniques.guaranteed`,
   `even_factions → uniques.evenFactions`, `excludeBanlist: false`.
@@ -250,7 +255,9 @@ Lot 1 implementation = today's `regeneratePool` body (seeded PRNG from `buildPoo
 `pickDeterministicUniques`, `generateTournamentSealedPool`, appended heroes and guaranteed
 uniques), with two additions: `excludeBanlist` filters the set with `filterBanned` before
 generation and rejects banned unique families (`pickDeterministicUniques` gets an optional
-`isAllowed` predicate; its existing retry loop redraws). Lot 2 ports the Lobby's other sealed
+`isAllowed` predicate; its existing retry loop redraws). `uniques.faction` is passed as
+`pickDeterministicUniques`'s `faction` option: every draw targets that faction (precedence over
+`evenFactions`). Lot 2 ports the Lobby's other sealed
 branches into it.
 
 Rules:
@@ -355,7 +362,8 @@ Routes (added to `App.jsx`; `/tournament/pools/:id` and the other existing route
 - Settings step: `SettingsFields` reused with `mode="sealed"`, a new `showLang={false}` prop
   (default `true` so the Lobby is unchanged), `showUniques={false}` (lot 1), `showBanlist`.
   Below it, the new `TournamentUniqueFields.jsx`: steppers for uniques in boosters and
-  guaranteed uniques, "even factions" checkbox (enabled when their sum ≥ 2), with the set's
+  guaranteed uniques, the faction of the uniques (icon chips: all factions or one, disabled at
+  0 unique), "even factions" checkbox (enabled when their sum ≥ 2 and no faction), with the set's
   faction-range availability driving a disabled state + hint for sets without data.
 - Live validation (decided after the first recette: errors far from the submit button went
   unnoticed): `tournamentFormIssues` runs the same pure checks as the API on every change, plus

@@ -6,7 +6,7 @@ import { getTournament, updateTournament, deleteTournament, fetchTournamentPool 
 import TopNav from '../components/TopNav.jsx'
 import Footer from '../components/Footer.jsx'
 import TournamentChecklist from '../components/TournamentChecklist.jsx'
-import { StatusPill, formatDateTime, summarizeConfig } from '../components/TournamentBits.jsx'
+import { StatusPill, formatDateTime, ConfigSummary } from '../components/TournamentBits.jsx'
 
 export default function TournamentDetail() {
   const { id } = useParams()
@@ -105,7 +105,7 @@ export default function TournamentDetail() {
               <p className="text-xs text-faint">
                 {t('tournaments.organizedBy', { name: tournament.organizer.name })} · {tc('tournaments.poolsPrepared', tournament.poolCount ?? 0)}
               </p>
-              <p className="text-sm text-muted">{summarizeConfig(tournament.config, t, tc)}</p>
+              <ConfigSummary config={tournament.config} t={t} tc={tc} className="text-sm text-muted" />
               {tournament.description && <p className="text-sm text-ink whitespace-pre-wrap pt-2">{tournament.description}</p>}
               {detached && <p className="text-sm text-danger pt-2">{t('tournaments.detachedNotice')}</p>}
             </header>

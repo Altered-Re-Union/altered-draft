@@ -48,6 +48,7 @@ export async function buildPool(sub, { config, nonce }, { fetchCards = fetchSet 
   const allUniques = pickDeterministicUniques(setCode, mulberry32(hashSeed(`${seedStr}#uniques`)), {
     uniqueCount: wanted,
     evenFactions: config.uniques.evenFactions,
+    faction: config.uniques.faction ?? null,
     ...(isAllowed ? { isAllowed } : {}),
   })
   if (allUniques.length < wanted) {

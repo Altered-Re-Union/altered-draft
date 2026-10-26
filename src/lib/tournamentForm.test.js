@@ -52,6 +52,11 @@ describe('tournamentFormIssues', () => {
     expect(tournamentFormIssues({ body, config: { ...config, source: { type: 'set', setCode: 'FUGUE' } }, now: NOW, isCreate: true }))
       .toEqual([{ field: 'uniques', code: 'uniques.unsupportedSet' }])
   })
+
+  it('reports an unknown unique faction on the uniques field', () => {
+    expect(tournamentFormIssues({ body, config: { ...config, uniques: { ...config.uniques, faction: 'XX' } }, now: NOW, isCreate: true }))
+      .toEqual([{ field: 'uniques', code: 'uniques.faction' }])
+  })
 })
 
 describe('tournamentFormIssues (BGA tournament already played with mixed legacy formats)', () => {

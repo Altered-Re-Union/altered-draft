@@ -1,5 +1,7 @@
 import { useLang } from '../lib/i18n/i18n.jsx'
 import { MAX_UNIQUES } from '../lib/tournamentConfig.js'
+import { FACTIONS, FACTION_NAMES } from '../lib/cardData.js'
+import { FACTION_ICONS } from '../lib/assets.js'
 
 function Stepper({ value, onChange, min = 0, max = MAX_UNIQUES, disabled }) {
   return (
@@ -14,7 +16,7 @@ function Stepper({ value, onChange, min = 0, max = MAX_UNIQUES, disabled }) {
 }
 
 // The tournament-only unique knobs (spec §5.1 `uniques`): exact uniques inside boosters,
-// guaranteed uniques outside, even factions. `uniqueSupport` is false for sets without
+// guaranteed uniques outside, one faction for all of them, even factions. `uniqueSupport` is false for sets without
 // faction-range data (FUGUE): both counts are forced to 0 and the controls disabled.
 export default function TournamentUniqueFields({ uniques, onChange, uniqueSupport = true, disabled = false }) {
   const { t } = useLang()
@@ -22,10 +24,17 @@ export default function TournamentUniqueFields({ uniques, onChange, uniqueSuppor
   const total = (uniques.inBoosters ?? 0) + (uniques.guaranteed ?? 0)
   const set = patch => {
     const next = { ...uniques, ...patch }
-    // Even factions only means something from 2 uniques on (the server drops it too).
-    if ((next.inBoosters ?? 0) + (next.guaranteed ?? 0) < 2) next.evenFactions = false
+    const nextTotal = (next.inBoosters ?? 0) + (next.guaranteed ?? 0)
+    // Even factions only means something from 2 uniques on and without a single faction,
+    // a faction only with at least one unique (the server drops them too).
+    if (nextTotal < 2 || next.faction) next.evenFactions = false
+    if (nextTotal === 0) next.faction = null
     onChange(next)
   }
+  const faction = uniqueSupport && total > 0 ? uniques.faction ?? null : null
+  const factionOff = off || total === 0
+  const chip = active => `flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs disabled:opacity-40 ${
+    active ? 'border-accent bg-accent/15 text-ink' : 'border-line bg-surface2 text-ink2 hover:bg-surface3'}`
 
   return (
     <div className="space-y-3">
@@ -39,12 +48,29 @@ export default function TournamentUniqueFields({ uniques, onChange, uniqueSuppor
         <span className="text-sm text-ink2">{t('tournaments.uniquesGuaranteed')}</span>
         <Stepper value={uniqueSupport ? uniques.guaranteed : 0} onChange={v => set({ guaranteed: v })} disabled={off} />
       </div>
+      <div className="space-y-1.5">
+        <span className={`text-sm ${factionOff ? 'text-faint' : 'text-ink2'}`}>{t('tournaments.uniquesFaction')}</span>
+        <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label={t('tournaments.uniquesFaction')}>
+          <button type="button" role="radio" aria-checked={!faction} disabled={factionOff}
+            onClick={() => set({ faction: null })} className={chip(!faction)}>
+            {t('tournaments.uniquesFactionAll')}
+          </button>
+          {FACTIONS.map(f => (
+            <button key={f} type="button" role="radio" aria-checked={faction === f} disabled={factionOff}
+              onClick={() => set({ faction: f })} className={chip(faction === f)}>
+              {FACTION_ICONS[f] && <img src={FACTION_ICONS[f]} alt="" className="w-3.5 h-3.5 object-contain" />}
+              {FACTION_NAMES[f]}
+            </button>
+          ))}
+        </div>
+        <p className="text-xs text-muted">{t('tournaments.uniquesFactionHint')}</p>
+      </div>
       <div className="flex items-center gap-3">
-        <input type="checkbox" id="even-factions" checked={!!uniques.evenFactions && total >= 2}
-          disabled={off || total < 2}
+        <input type="checkbox" id="even-factions" checked={!!uniques.evenFactions && total >= 2 && !faction}
+          disabled={off || total < 2 || !!faction}
           onChange={e => set({ evenFactions: e.target.checked })}
           className="accent-accent w-4 h-4" />
-        <label htmlFor="even-factions" className={`text-sm cursor-pointer ${total < 2 ? 'text-faint' : 'text-ink2'}`}>
+        <label htmlFor="even-factions" className={`text-sm cursor-pointer ${total < 2 || faction ? 'text-faint' : 'text-ink2'}`}>
           {t('tournaments.evenFactions')}
         </label>
       </div>
