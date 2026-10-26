@@ -1,7 +1,7 @@
 // Playwright config for the user-tournaments e2e suite. One worker, one DB, one fake
 // process: spec files run serially and each seeds its own data (README.md › Testing).
 import { defineConfig, devices } from '@playwright/test'
-import { APP_ENV, APP_URL, FAKES_PORT, FAKES_URL, ROOT_DIR } from './support/env.js'
+import { APP_ENV, APP_URL, DB_STACK_PORT, FAKES_PORT, FAKES_URL, ROOT_DIR } from './support/env.js'
 
 export default defineConfig({
   testDir: './specs',
@@ -13,7 +13,6 @@ export default defineConfig({
   reporter: [['list'], ['html', { open: 'on-failure', outputFolder: `${ROOT_DIR}/playwright-report` }]],
   outputDir: `${ROOT_DIR}/test-results`,
   globalSetup: './global-setup.js',
-  globalTeardown: './global-teardown.js',
   use: {
     baseURL: APP_URL,
     locale: 'en-GB',
@@ -36,7 +35,16 @@ export default defineConfig({
       use: { ...devices['Pixel 5'], viewport: { width: 375, height: 667 } },
     },
   ],
+  // Torn down in reverse order, after the tests: the app first, Postgres last.
   webServer: [
+    {
+      command: 'node tests/e2e/db-stack.mjs',
+      url: `http://localhost:${DB_STACK_PORT}/health`,
+      cwd: ROOT_DIR,
+      reuseExistingServer: !process.env.CI,
+      timeout: 120_000,
+      gracefulShutdown: { signal: 'SIGTERM', timeout: 30_000 },
+    },
     {
       command: 'node tests/e2e/fakes/server.mjs',
       url: `${FAKES_URL}/__control/health`,

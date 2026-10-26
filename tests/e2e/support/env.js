@@ -10,6 +10,7 @@ export const COMPOSE_FILE = path.join(ROOT_DIR, 'docker-compose.e2e.yml')
 export const APP_PORT = 8090
 export const FAKES_PORT = 8091
 export const DB_PORT = 55433
+export const DB_STACK_PORT = 8092 // readiness of tests/e2e/db-stack.mjs
 
 export const APP_URL = `http://localhost:${APP_PORT}`
 export const FAKES_URL = `http://localhost:${FAKES_PORT}`

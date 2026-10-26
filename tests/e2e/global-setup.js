@@ -1,6 +1,6 @@
-// Playwright globalSetup: refuses to run against a missing build, warns on a stale one,
-// then brings up the throwaway Postgres (docker-compose.e2e.yml). The fakes and the app are
-// started by the config's webServer entries.
+// Playwright globalSetup: refuses to run against a missing build and warns on a stale one.
+// Postgres (db-stack.mjs), the fakes and the app are the config's webServer entries; the
+// `up --wait` here is idempotent and only guarantees a healthy DB before the first test.
 import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
