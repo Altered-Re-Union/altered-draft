@@ -4,7 +4,12 @@
 // change. Plus a few page helpers.
 import { expect } from '@playwright/test'
 
-export const ALLOWED_NOISE = []
+export const ALLOWED_NOISE = [
+  // Chrome logs every 4xx fetch as a console error. 4xx answers are normal flows here (a
+  // session that expired, a tournament not found, a BGA link already declared); 5xx are
+  // caught separately, from the responses themselves.
+  /^console: Failed to load resource: the server responded with a status of 4\d\d /,
+]
 
 export function newBucket() {
   return { consoleErrors: [], pageErrors: [], serverErrors: [], leaks: [] }
