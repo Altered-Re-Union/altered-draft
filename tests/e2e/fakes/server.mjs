@@ -52,6 +52,8 @@ export function createFakeServer() {
   app.get(['/deckbuilder/*path', '/reunion/*path'], (req, res) => res.type('text/plain').send('placeholder'))
 
   app.get('/__control/health', (req, res) => res.json({ ok: true }))
+  // Only for the guard self-test (smoke.spec.js): a 5xx the guard must report.
+  app.get('/__control/boom', (req, res) => res.status(500).json({ error: 'boom' }))
   app.post('/__control/session', (req, res) => {
     const user = req.body?.user
     if (!PERSONAS[user]) return res.status(404).json({ error: 'unknown_user' })
