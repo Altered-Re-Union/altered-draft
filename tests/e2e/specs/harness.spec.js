@@ -2,7 +2,9 @@
 // browser. A red here means every other spec would fail for the wrong reason.
 import { test, expect } from '@playwright/test'
 import { createHash, randomBytes } from 'node:crypto'
-import { APP_URL, CLIENT_ID, CLIENT_SECRET, FAKES_URL, KEYCLOAK_ISSUER } from '../support/env.js'
+import fs from 'node:fs'
+import path from 'node:path'
+import { APP_URL, CLIENT_ID, CLIENT_SECRET, FAKES_URL, KEYCLOAK_ISSUER, ROOT_DIR } from '../support/env.js'
 import { PASSWORD, PERSONAS } from '../support/personas.js'
 import { decodeJwt } from '../fakes/keycloak.mjs'
 
@@ -112,5 +114,77 @@ test.describe('fake Keycloak', () => {
     const res = await request.get(`${FAKES_URL}/nope`)
     expect(res.status()).toBe(404)
     expect(await res.json()).toEqual({ error: 'not_found' })
+  })
+})
+
+async function accessToken(request, username) {
+  const res = await tokenRequest(request, { grant_type: 'password', username, password: PASSWORD })
+  return (await res.json()).access_token
+}
+
+test.describe('fake decks-api, cards API, CDN, placeholders', () => {
+  test('decks: create, list owner-filtered, get, merge-patch, delete', async ({ request }) => {
+    const alice = { Authorization: `Bearer ${await accessToken(request, 'alice')}` }
+    const bob = { Authorization: `Bearer ${await accessToken(request, 'bob')}` }
+    const DECKS = `${FAKES_URL}/decks/api/decks`
+    const created = await request.post(DECKS, {
+      headers: alice,
+      data: { name: 'Alpha', format: 'sealed', isDraft: true, isPublic: false, deckCards: [{ cardReference: 'ALT_CYCLONE_B_AX_01_C', quantity: 3 }] },
+    })
+    expect(created.status()).toBe(201)
+    const { id } = await created.json()
+    expect(id).toBeTruthy()
+    expect((await (await request.get(DECKS, { headers: alice })).json())['hydra:totalItems']).toBe(1)
+    expect((await (await request.get(DECKS, { headers: bob })).json())['hydra:totalItems']).toBe(0)
+    expect((await (await request.get(`${DECKS}?name=lph`, { headers: alice })).json())['hydra:member']).toHaveLength(1)
+    expect((await request.get(`${DECKS}/${id}`, { headers: bob })).status()).toBe(404)
+    expect((await request.get(DECKS)).status()).toBe(401)
+
+    const asJson = await request.patch(`${DECKS}/${id}`, { headers: { ...alice, 'Content-Type': 'application/json' }, data: JSON.stringify({ isDraft: false }) })
+    expect(asJson.status()).toBe(415)
+    const patched = await request.patch(`${DECKS}/${id}`, {
+      headers: { ...alice, 'Content-Type': 'application/merge-patch+json' }, data: JSON.stringify({ isDraft: false }),
+    })
+    expect(patched.status()).toBe(200)
+    expect(await patched.json()).toMatchObject({ isDraft: false, name: 'Alpha' })
+    expect((await request.delete(`${DECKS}/${id}`, { headers: alice })).status()).toBe(204)
+    expect((await request.get(`${DECKS}/${id}`, { headers: alice })).status()).toBe(404)
+  })
+
+  test('cards: a unique resolves to its real faction from the range data', async ({ request }) => {
+    const ranges = JSON.parse(fs.readFileSync(path.join(ROOT_DIR, 'src/lib/data/factionRanges/CYCLONE.json'), 'utf8'))
+    const [family, windows] = Object.entries(ranges)[0]
+    const [faction, [[serial]]] = Object.entries(windows)[0]
+    const CARDS = `${FAKES_URL}/cards/api/cards`
+    const hit = await (await request.get(`${CARDS}?reference=ALT_CYCLONE_B_${family}_U_${serial}`)).json()
+    expect(hit.member[0].faction.code).toBe(faction)
+    expect(hit.member[0].rarity.reference).toBe('UNIQUE')
+    const miss = await (await request.get(`${CARDS}?reference=ALT_CYCLONE_B_${family}_U_99999999`)).json()
+    expect(miss.member).toEqual([])
+    const random = await (await request.get(`${CARDS}?rarity=UNIQUE&set.reference=CYCLONE&random=1`)).json()
+    expect(random.member).toEqual([])
+  })
+
+  test('cdn answers any path with a png', async ({ request }) => {
+    const res = await request.get(`${FAKES_URL}/cdn/marketing/anything.webp`)
+    expect(res.status()).toBe(200)
+    expect(res.headers()['content-type']).toBe('image/png')
+    expect((await res.body()).length).toBeLessThan(200)
+  })
+
+  test('placeholders answer 200', async ({ request }) => {
+    expect((await request.get(`${FAKES_URL}/deckbuilder/decks/x`)).status()).toBe(200)
+    expect((await request.get(`${FAKES_URL}/reunion/x`)).status()).toBe(200)
+  })
+
+  test('control: decks and requests', async ({ request }) => {
+    const alice = { Authorization: `Bearer ${await accessToken(request, 'alice')}` }
+    await request.post(`${FAKES_URL}/decks/api/decks`, { headers: alice, data: { name: 'Beta', format: 'sealed', isDraft: true, deckCards: [] } })
+    const decks = await (await request.get(`${FAKES_URL}/__control/decks?user=alice`)).json()
+    expect(decks).toHaveLength(1)
+    const log = await (await request.get(`${FAKES_URL}/__control/requests`)).json()
+    expect(log).toContainEqual(expect.objectContaining({ method: 'POST', path: '/api/decks', sub: PERSONAS.alice.sub }))
+    await request.post(`${FAKES_URL}/__control/reset`)
+    expect(await (await request.get(`${FAKES_URL}/__control/decks?user=alice`)).json()).toEqual([])
   })
 })
