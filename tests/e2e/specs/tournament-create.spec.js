@@ -7,14 +7,11 @@ import { localDateTime } from '../support/dates.js'
 import { KEYCLOAK_ISSUER } from '../support/env.js'
 import { expectNoHorizontalScroll } from '../support/guards.js'
 import { t } from '../support/i18n.js'
+import { escapeRegExp as escape, startsWith } from '../support/text.js'
 
 const BGA_URL = 'https://fr.boardgamearena.com/tournament/?id=123456'
 const CANON = 'https://boardgamearena.com/tournament?id=123456'
 const bga = id => `https://boardgamearena.com/tournament?id=${id}`
-
-const escape = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-// Buttons whose accessible name is a label followed by a description.
-const startsWith = label => new RegExp(`^${escape(label)}`)
 
 const field = (page, key) => page.getByLabel(t(`tournaments.${key}`), { exact: true })
 const tile = (page, name) => page.getByRole('button', { name })
