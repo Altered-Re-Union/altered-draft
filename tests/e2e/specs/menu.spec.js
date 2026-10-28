@@ -225,30 +225,26 @@ test('the generic prep path still works', { tag: ['@h-generic'] }, async ({ open
   await expect(page.getByText(t('packReveal.boosterOf', { n: 1, total: 8 })).first()).toBeVisible()
 })
 
-// Beta masking: regular users keep the legacy menu on /tournament (Home still leads there),
-// the hub only answers on HUB_PATH, and the hub's own pages link back to it.
-test('beta: /tournament keeps the legacy menu, the hub lives on its own path', { tag: ['@h-beta'] }, async ({ openAs, page }) => {
+// After the beta: the hub is back on /tournament (Home leads there), its beta address
+// redirects there with the query kept, and the legacy menu is gone.
+test('the hub answers on /tournament, its beta address redirects there', { tag: ['@h-unmask'] }, async ({ openAs, page }) => {
   const alice = await openAs('alice')
   await alice.goto('/')
   await alice.getByRole('button', { name: t('home.tournamentsBtn') }).click()
   await alice.waitForURL(/\/tournament$/)
-  await expect(alice.getByRole('heading', { name: t('tournamentPages.myOngoingTournaments') })).toBeVisible()
-  await expect(alice.getByRole('button', { name: t('tournamentPages.prepareNext') })).toBeVisible()
-  await expect(alice.getByRole('tablist')).toHaveCount(0)
-  await expect(alice.getByRole('button', { name: t('tournaments.createButton') })).toHaveCount(0)
-  await expect(alice.getByRole('link', { name: t('tournamentPages.changeMyDeck') }).first()).toHaveAttribute('href', /^\/tournament\/pools\/[0-9a-f-]{36}$/)
-
-  await openMenu(alice)
-  await expect(alice).toHaveURL(new RegExp(`${escapeRegExp(HUB_PATH)}$`))
   await expect(alice.getByRole('tablist')).toBeVisible()
   await expect(alice.getByRole('button', { name: t('tournaments.createButton') })).toBeVisible()
-  await alice.goto(`/tournament/t/${testCup.id}`)
-  await expect(alice.getByRole('link', { name: `← ${t('tournamentPages.menuTitle')}` })).toHaveAttribute('href', HUB_PATH)
+  // The legacy menu's top button is gone (the hub keeps it inside "My pools" only).
+  await expect(alice.getByRole('button', { name: t('tournamentPages.prepareNext') })).toHaveCount(0)
 
-  // Logged out: the legacy menu asks to connect; the hub keeps its public tabs.
-  await page.goto('/tournament')
-  await expect(page.getByText(t('home.bgaConnectRequired'))).toBeVisible()
-  await expect(page.getByRole('tablist')).toHaveCount(0)
-  await openMenu(page)
+  await alice.goto('/tournament/beta?tab=created')
+  await expect(alice).toHaveURL(/\/tournament\?tab=created$/)
+  await expect(tab(alice, 'tabCreated')).toHaveAttribute('aria-selected', 'true')
+  await alice.goto(`/tournament/t/${testCup.id}`)
+  await expect(alice.getByRole('link', { name: `← ${t('tournamentPages.menuTitle')}` })).toHaveAttribute('href', '/tournament')
+
+  await page.goto('/tournament/beta')
+  await expect(page).toHaveURL(/\/tournament$/)
   await expect(page.getByRole('tablist')).toBeVisible()
+  await expect(page.getByText(t('home.bgaConnectRequired'))).toHaveCount(0)
 })

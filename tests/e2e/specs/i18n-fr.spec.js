@@ -21,7 +21,7 @@ test('French UI: no raw keys, French copy on every tournament page', { tag: ['@j
 
   const pages = [
     [HUB_PATH, tFr('tournaments.tabUpcoming')],
-    ['/tournament', tFr('tournamentPages.myOngoingTournaments')],
+    ['/tournament/beta', tFr('tournaments.tabUpcoming')],
     ['/tournament/new', tFr('tournaments.createTitle')],
     [`/tournament/t/${id}`, tFr('tournaments.step2ButtonExisting')],
     [`/tournament/t/${id}/pool`, tFr('tournaments.backToTournament')],

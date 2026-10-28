@@ -28,9 +28,9 @@ export async function openPoolPage({ openAs, seed }, who, tournamentId, title = 
   return page
 }
 
-// Where the tournaments hub lives. During the beta it is hidden at /tournament/beta while
-// /tournament keeps the legacy menu (acceptance step h-beta); the unmasking PR moves it back.
-export const HUB_PATH = '/tournament/beta'
+// Where the tournaments hub lives (/tournament/beta, its beta address, redirects there —
+// acceptance step h-unmask).
+export const HUB_PATH = '/tournament'
 
 // The hub's own pages come back to the hub (after a delete, the "← Tournaments" link).
 export const waitForHub = page => page.waitForURL(new RegExp(`${escapeRegExp(HUB_PATH)}$`))
