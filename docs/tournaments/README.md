@@ -1001,6 +1001,10 @@ signature, `server/index.js` mounts them.
 4. **Moderators (optional):** `TOURNAMENT_MODERATORS` and/or `TOURNAMENT_MODERATOR_ROLE` in
    the AlteredOps env of the service (§8.4). Without them, nobody can detach.
 
+The order across repositories (altered-bga-api, AlteredOps, this one, then the unmasking PR), the
+PR links and the in-flight-tournament check are kept in the acceptance page's last group
+(`docs/tournaments/acceptance-user-tournaments.html`, "Before going to production").
+
 ### 10.2 altered-bga-api
 
 | Setting (env form) | Purpose |
@@ -1267,9 +1271,19 @@ token payload only after userinfo accepted that token (`api/_lib/auth.js` `verif
 
 ### 14.4 Routes
 
+**Beta masking (until the unmasking PR ships).** `/tournament` serves the legacy menu
+(`TournamentMenuLegacy.jsx`, the pre-lot-1 page: "Prepare my next tournament" + the player's
+bound pools, every "Change my deck" on `/tournament/pools/:id`) and Home still links there, so
+regular users see no change; the hub below answers on **`/tournament/beta`** only
+(`TOURNAMENT_HUB_PATH` in `src/lib/links.js`, also used by the hub's own back links). Nothing
+else is hidden: the tournament pages stay reachable by URL and the API is live. The unmasking
+PR swaps the two routes, redirects `/tournament/beta` to `/tournament` and deletes the legacy
+file. Read every `/tournament?tab=…` below as `/tournament/beta?tab=…` meanwhile.
+
 | Route | Page | Notes |
 | --- | --- | --- |
-| `/tournament` | `TournamentMenu.jsx` (reworked) | Header (title, "Create a tournament", BGA registration notice); **"My ongoing tournaments"** (logged in, when any): a grid of the started tournaments the player has a pool in, each card opening the tournament page with a direct "Change my deck" button; then **tabs**, each with a one-line explanation, the active one kept in the URL (`?tab=upcoming|ongoing|pools|created`): **Upcoming** (default, public), **Ongoing** (public: pools can still be prepared until the end), **My pools** (every bound pool, declared tournaments first; a card opens the tournament page, or the pool itself for a BGA tournament nobody declared, plus "Change my deck"; the generic "Prepare my next tournament" block sits at the bottom of this tab), **My created tournaments** (`GET /api/tournaments?mine=1`, every status, grouped: ongoing then upcoming, each chronological, then a folded "Ended and cancelled (N)" block with the ended, cancelled and detached ones). The two personal tabs show a Connect box when logged out. |
+| `/tournament` | `TournamentMenuLegacy.jsx` | **Beta:** the legacy menu, unchanged for regular users (see the note below). |
+| `/tournament/beta` | `TournamentMenu.jsx` (reworked) | **Beta: the hub.** Header (title, "Create a tournament", BGA registration notice); **"My ongoing tournaments"** (logged in, when any): a grid of the started tournaments the player has a pool in, each card opening the tournament page with a direct "Change my deck" button; then **tabs**, each with a one-line explanation, the active one kept in the URL (`?tab=upcoming|ongoing|pools|created`): **Upcoming** (default, public), **Ongoing** (public: pools can still be prepared until the end), **My pools** (every bound pool, declared tournaments first; a card opens the tournament page, or the pool itself for a BGA tournament nobody declared, plus "Change my deck"; the generic "Prepare my next tournament" block sits at the bottom of this tab), **My created tournaments** (`GET /api/tournaments?mine=1`, every status, grouped: ongoing then upcoming, each chronological, then a folded "Ended and cancelled (N)" block with the ended, cancelled and detached ones). The two personal tabs show a Connect box when logged out. |
 | `/tournament/new` | `TournamentForm.jsx` | Create mode. Live validation (`src/lib/tournamentForm.js` `tournamentFormIssues`, the API's own pure checks + a duplicate-link lookup, `GET /api/tournaments?bgaId=`, debounced while typing; the unique index + 409 on submit stay the real guard): the submit button sits in a bar stuck to the bottom of the screen, disabled while problems remain, with the list of problems next to it (each one jumps to its field; Enter in a field jumps to the first one, caught on the form's `keydown` since a disabled default button blocks implicit submission). Crossed dates are reported under the date field changed last: a start moved past the end says "The start must be before the end." under the start, an end moved before the start the reverse. A session expired while filling the form (401 on submit) shows "Reconnect (your input is kept)": the input is parked in `sessionStorage` (`tournament_form_draft:<id\|new>`) across the Keycloak round trip and put back when the form comes back (in edit mode over the server values, the config only while unlocked). |
 | `/tournament/t/:id` | `TournamentDetail.jsx` | Header, description, 3-step checklist (register on BGA → open your pool → build your deck), organizer panel. |
 | `/tournament/t/:id/edit` | `TournamentForm.jsx` | Edit mode; BGA link + config disabled once a pool exists. Nothing of the form renders until `GET /api/tournaments/:id` (its `viewer` block) says the viewer may edit; anyone else goes straight to the tournament page (the PATCH is refused server-side anyway, 403). |

@@ -7,6 +7,7 @@ import TopNav from '../components/TopNav.jsx'
 import Footer from '../components/Footer.jsx'
 import TournamentChecklist from '../components/TournamentChecklist.jsx'
 import { StatusPill, formatDateTime, ConfigSummary } from '../components/TournamentBits.jsx'
+import { TOURNAMENT_HUB_PATH } from '../lib/links.js'
 
 export default function TournamentDetail() {
   const { id } = useParams()
@@ -71,7 +72,7 @@ export default function TournamentDetail() {
     setBusy(true)
     try {
       await deleteTournament(id)
-      navigate('/tournament')
+      navigate(TOURNAMENT_HUB_PATH)
     } catch (e) {
       setError(e.status === 409 ? t('tournaments.deleteBlocked') : t('tournaments.errGeneric', { msg: e.message }))
       setBusy(false)
@@ -87,7 +88,7 @@ export default function TournamentDetail() {
     <div className="min-h-screen flex flex-col">
       <TopNav />
       <div className="max-w-2xl w-full mx-auto px-4 py-8 flex-1 space-y-6">
-        <Link to="/tournament" className="text-xs text-muted hover:text-ink">← {t('tournamentPages.menuTitle')}</Link>
+        <Link to={TOURNAMENT_HUB_PATH} className="text-xs text-muted hover:text-ink">← {t('tournamentPages.menuTitle')}</Link>
         {error && <p className="text-danger text-sm">{error}</p>}
         {!tournament && !error && <p className="text-muted text-sm">{t('tournaments.loading')}</p>}
 

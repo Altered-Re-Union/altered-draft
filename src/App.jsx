@@ -6,6 +6,8 @@ import Results from './pages/Results.jsx'
 import Sealed from './pages/Sealed.jsx'
 import AuthCallback from './pages/AuthCallback.jsx'
 import TournamentMenu from './pages/TournamentMenu.jsx'
+import TournamentMenuLegacy from './pages/TournamentMenuLegacy.jsx'
+import { TOURNAMENT_HUB_PATH } from './lib/links.js'
 import TournamentNormal from './pages/TournamentNormal.jsx'
 import TournamentPrep from './pages/TournamentPrep.jsx'
 import TournamentBoundDetail from './pages/TournamentBoundDetail.jsx'
@@ -23,7 +25,8 @@ export default function App() {
       <Route path="/room/:code/draft" element={<Draft />} />
       <Route path="/room/:code/sealed" element={<Sealed />} />
       <Route path="/room/:code/results" element={<Results />} />
-      <Route path="/tournament" element={<TournamentMenu />} />
+      <Route path="/tournament" element={<TournamentMenuLegacy />} />
+      <Route path={TOURNAMENT_HUB_PATH} element={<TournamentMenu />} />
       <Route path="/tournament/normal" element={<TournamentNormal />} />
       <Route path="/tournament/prep" element={<TournamentPrep />} />
       <Route path="/tournament/pools/:id" element={<TournamentBoundDetail />} />

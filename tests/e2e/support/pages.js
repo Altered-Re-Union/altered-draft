@@ -28,11 +28,18 @@ export async function openPoolPage({ openAs, seed }, who, tournamentId, title = 
   return page
 }
 
-// The /tournament hub on a given tab, once its lists are in: the tab panel renders at once
+// Where the tournaments hub lives. During the beta it is hidden at /tournament/beta while
+// /tournament keeps the legacy menu (acceptance step h-beta); the unmasking PR moves it back.
+export const HUB_PATH = '/tournament/beta'
+
+// The hub's own pages come back to the hub (after a delete, the "← Tournaments" link).
+export const waitForHub = page => page.waitForURL(new RegExp(`${escapeRegExp(HUB_PATH)}$`))
+
+// The tournaments hub on a given tab, once its lists are in: the tab panel renders at once
 // with "Loading…" while the session check and the list requests run, so an absence check
 // made earlier would pass on an empty panel.
 export async function openMenu(page, query = '') {
-  await page.goto(`/tournament${query}`)
+  await page.goto(`${HUB_PATH}${query}`)
   const panel = page.getByRole('tabpanel')
   await expect(panel).toBeVisible()
   await expect(panel.getByText(t('tournaments.loading'))).toHaveCount(0)

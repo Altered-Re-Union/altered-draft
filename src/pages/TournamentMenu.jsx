@@ -7,6 +7,7 @@ import TopNav from '../components/TopNav.jsx'
 import Footer from '../components/Footer.jsx'
 import { StatusPill, formatDateTime, ConfigSummary } from '../components/TournamentBits.jsx'
 import { groupCreatedTournaments } from '../lib/tournamentRules.js'
+import { TOURNAMENT_HUB_PATH } from '../lib/links.js'
 
 const BGA_TOURNAMENT_LIST_URL = 'https://boardgamearena.com/tournamentlist?d&type=&players_per_match_min=0&players_per_match_max=0&status=future&gamecateg=3&game=1909&full=true&tournament_i_registered=0&time=0&prestige=0&order=recommended'
 
@@ -89,7 +90,7 @@ function ConnectBox({ t, login }) {
   return (
     <div className="bg-surface rounded-xl p-6 text-center space-y-3">
       <p className="text-muted text-sm">{t('home.bgaConnectRequired')}</p>
-      <button onClick={() => login('/tournament')}
+      <button onClick={() => login(TOURNAMENT_HUB_PATH)}
         className="bg-accent hover:bg-accent2 text-on-accent font-semibold py-2 px-4 rounded-lg transition-colors">
         {t('reunion.connect')}
       </button>

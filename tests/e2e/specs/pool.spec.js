@@ -5,7 +5,7 @@ import path from 'node:path'
 import { test, expect, resetStack } from '../support/fixtures.js'
 import { withRequestContext } from '../support/api.js'
 import { ROOT_DIR } from '../support/env.js'
-import { openPoolPage, tournamentLink } from '../support/pages.js'
+import { HUB_PATH, openPoolPage, tournamentLink } from '../support/pages.js'
 import { PERSONAS } from '../support/personas.js'
 import { t, tc } from '../support/i18n.js'
 
@@ -92,7 +92,7 @@ test('the same pool across reloads and from the menu', { tag: ['@d-same'] }, asy
   await expect(page.getByRole('heading', { name: 'Test cup' })).toBeVisible()
   expect(Object.keys((await seed.pool('alice', id)).cards).sort()).toEqual(before)
 
-  await page.goto('/tournament')
+  await page.goto(HUB_PATH)
   await page.getByRole('tab', { name: t('tournaments.tabPools') }).click()
   await tournamentLink(page, 'Test cup').click()
   await page.waitForURL(`**/tournament/t/${id}`)

@@ -2,6 +2,7 @@
 // config and its summary, the pool's uniques (real faction through the range data), the API
 // guards, and the faction reset when a played format is imposed.
 import { test, expect } from '../support/fixtures.js'
+import { HUB_PATH } from '../support/pages.js'
 import { tournamentBody } from '../support/api.js'
 import { FAKES_URL } from '../support/env.js'
 import { expectNoHorizontalScroll } from '../support/guards.js'
@@ -92,7 +93,7 @@ test('create "Axiom cup": stored config and summary', { tag: ['@l-create'] }, as
 test('menu: the card carries the faction, in both themes', { tag: ['@l-menu'] }, async ({ openAs, seed }) => {
   await seed.tournament('alice', AXIOM_CUP)
   const page = await openAs('alice')
-  await page.goto('/tournament')
+  await page.goto(HUB_PATH)
   const summary = page.getByRole('tabpanel').getByTestId('tournament-summary')
   await expectAxiomSummary(summary)
   const before = await page.locator('html').getAttribute('data-theme')
@@ -104,7 +105,7 @@ test('menu: the card carries the faction, in both themes', { tag: ['@l-menu'] },
 test('menu card at 375 px', { tag: ['@l-menu', '@mobile', '@j-mobile'] }, async ({ openAs, seed }) => {
   await seed.tournament('alice', AXIOM_CUP)
   const page = await openAs('alice')
-  await page.goto('/tournament')
+  await page.goto(HUB_PATH)
   const summary = page.getByRole('tabpanel').getByTestId('tournament-summary')
   await expectAxiomSummary(summary)
   await expectNoHorizontalScroll(page)

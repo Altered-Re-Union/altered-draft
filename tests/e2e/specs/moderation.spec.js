@@ -4,7 +4,7 @@
 import { test, expect, resetStack } from '../support/fixtures.js'
 import { acceptNextDialog, captureNextDialog } from '../support/guards.js'
 import { t, tc } from '../support/i18n.js'
-import { openMenu, tournamentLink } from '../support/pages.js'
+import { openMenu, tournamentLink, waitForHub } from '../support/pages.js'
 import { PERSONAS } from '../support/personas.js'
 
 test.describe.configure({ mode: 'serial' })
@@ -157,6 +157,6 @@ test('the detached trace can be deleted', { tag: ['@f-delete'] }, async ({ openA
   const page = await openDetail(openAs, 'bob', squatId)
   acceptNextDialog(page)
   await panel(page).getByRole('button', { name: t('tournaments.delete') }).click()
-  await page.waitForURL(/\/tournament$/)
+  await waitForHub(page)
   expect((await api(null).get(`/api/tournaments/${squatId}`)).status).toBe(404)
 })

@@ -87,6 +87,7 @@ Lets users log in with their official **Re:Union** account (to load cubes from t
 - `/room/:code/draft` Draft — desktop split (pack | sidebar), mobile bottom tab bar (Pack/Picks/Stats)
 - `/room/:code/sealed` Sealed — tabs Boosters(per-pack nav)/Full Pool/Deck/Stats
 - `/room/:code/results` Results — tabs All Picks/Deck/Stats/Players
+- `/tournament` — **beta:** the legacy sealed menu (`TournamentMenuLegacy.jsx`, prep pool + bound pools), what Home links to; `/tournament/beta` (`TOURNAMENT_HUB_PATH`, `src/lib/links.js`) — the user-created tournaments hub (`TournamentMenu.jsx`), hidden until the unmasking PR swaps the two. The other tournament routes (`/tournament/new`, `/tournament/t/:id[/edit|/pool]`, `/tournament/prep|normal|pools/:id`) are in `docs/tournaments/README.md` §14.4.
 
 ## Shared components
 - `PoolGrid.jsx` — faction filter + group-by (faction/type/cost/set) + hover preview + ×N badge + deck +/- controls. Also exports `SimpleCardGrid` (grid+preview, no controls). Heroes grouped INSIDE their faction (top) when grouping by faction.

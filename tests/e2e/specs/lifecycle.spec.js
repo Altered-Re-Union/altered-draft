@@ -6,7 +6,7 @@ import { loginViaUi } from '../support/auth.js'
 import { isoDaysFromNow, localDateTime } from '../support/dates.js'
 import { acceptNextDialog } from '../support/guards.js'
 import { t } from '../support/i18n.js'
-import { openMenu, openPoolPage, tournamentLink } from '../support/pages.js'
+import { openMenu, openPoolPage, tournamentLink, waitForHub } from '../support/pages.js'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -152,7 +152,7 @@ test('delete a tournament without pools; not one with pools', { tag: ['@e-delete
   const page = await openDetail(openAs, 'alice', nejId)
   acceptNextDialog(page)
   await panel(page).getByRole('button', { name: t('tournaments.delete') }).click()
-  await page.waitForURL(/\/tournament$/)
+  await waitForHub(page)
   await openMenu(page, '?tab=created')
   await expect(tournamentLink(page, 'Test cup')).toBeVisible()
   await expect(tournamentLink(page, 'NEJ cup')).toHaveCount(0)

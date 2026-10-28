@@ -3,7 +3,7 @@
 // human glance; contrast stays a human check.
 import { test, expect } from '../support/fixtures.js'
 import { t } from '../support/i18n.js'
-import { markRevealSeen } from '../support/pages.js'
+import { HUB_PATH, markRevealSeen } from '../support/pages.js'
 
 test.beforeEach(async ({ db, fakes }) => {
   await db.resetDb()
@@ -18,7 +18,7 @@ test('the theme toggle flips and persists on the tournament pages', { tag: ['@j-
   const html = page.locator('html')
   const shoot = async (name, theme) => testInfo.attach(`${name}-${theme}.png`, { body: await page.screenshot({ fullPage: true }), contentType: 'image/png' })
 
-  for (const [name, path] of [['menu', '/tournament'], ['form', '/tournament/new'], ['detail', `/tournament/t/${id}`]]) {
+  for (const [name, path] of [['menu', HUB_PATH], ['form', '/tournament/new'], ['detail', `/tournament/t/${id}`]]) {
     await page.goto(path)
     await page.waitForLoadState('networkidle')
     const before = await html.getAttribute('data-theme')
