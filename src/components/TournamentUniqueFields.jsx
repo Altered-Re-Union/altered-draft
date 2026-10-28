@@ -3,9 +3,9 @@ import { MAX_UNIQUES } from '../lib/tournamentConfig.js'
 import { FACTIONS, FACTION_NAMES } from '../lib/cardData.js'
 import { FACTION_ICONS } from '../lib/assets.js'
 
-function Stepper({ value, onChange, min = 0, max = MAX_UNIQUES, disabled }) {
+function Stepper({ value, onChange, min = 0, max = MAX_UNIQUES, disabled, testId }) {
   return (
-    <div className="flex items-center gap-1.5">
+    <div data-testid={testId} className="flex items-center gap-1.5">
       <button type="button" onClick={() => onChange(Math.max(min, value - 1))} disabled={disabled || value <= min}
         className="w-7 h-7 rounded bg-surface2 hover:bg-surface3 disabled:opacity-30 text-ink2 font-bold flex items-center justify-center leading-none">−</button>
       <span className="w-6 text-center text-sm font-bold text-ink tabular-nums">{value}</span>
@@ -42,11 +42,11 @@ export default function TournamentUniqueFields({ uniques, onChange, uniqueSuppor
       {!uniqueSupport && <p className="text-xs text-accent-ink">{t('tournaments.uniquesUnsupported')}</p>}
       <div className="flex items-center justify-between gap-3">
         <span className="text-sm text-ink2">{t('tournaments.uniquesInBoosters')}</span>
-        <Stepper value={uniqueSupport ? uniques.inBoosters : 0} onChange={v => set({ inBoosters: v })} disabled={off} />
+        <Stepper value={uniqueSupport ? uniques.inBoosters : 0} onChange={v => set({ inBoosters: v })} disabled={off} testId="uniques-in-boosters" />
       </div>
       <div className="flex items-center justify-between gap-3">
         <span className="text-sm text-ink2">{t('tournaments.uniquesGuaranteed')}</span>
-        <Stepper value={uniqueSupport ? uniques.guaranteed : 0} onChange={v => set({ guaranteed: v })} disabled={off} />
+        <Stepper value={uniqueSupport ? uniques.guaranteed : 0} onChange={v => set({ guaranteed: v })} disabled={off} testId="uniques-guaranteed" />
       </div>
       <div className="space-y-1.5">
         <span className={`text-sm ${factionOff ? 'text-faint' : 'text-ink2'}`}>{t('tournaments.uniquesFaction')}</span>

@@ -1056,8 +1056,13 @@ Or call altered-draft directly: `curl -s "http://localhost:8080/api/tournament-b
 | --- | --- | --- |
 | altered-draft | `npm test` (Vitest) | Pool generation (`generateTournamentSealedPool`, `buildPool`), PRNG, unique draws, config / rules / BGA link / form validation, moderator check, card helpers. |
 | altered-draft | `npm run test:integration` (Vitest + throwaway Postgres in Docker) | `api/rooms`, and `tests/integration/tournaments.test.js`: stored pools, the BGA resolution order, adoption, concurrent creation, `tournamentStore`, every `api/tournaments*` handler, the freeze script. Pool generation is mocked there (no network). |
+| altered-draft | `npm run test:e2e` / `make e2e` (Playwright + fake services + throwaway Postgres) | The user-tournaments acceptance steps (groups A–J and L): creation form, tournament page, pools and deck sync, lifecycle, moderation, BGA path, menu, normal / legacy pools, FR / theme / mobile; tags = acceptance step ids. |
 | altered-bga-api | `dotnet test` | `SealedDecklistHandlerTests` (params, parent id, quoted ids, auth forwarding, 502 paths), `SealedDecklistEndpointTests` (real pipeline, never-fall-through, startup without `AlteredDraft:BaseUrl`). |
 | decks-api | PHPUnit | `SealedFormatValidatorTest`, `SealedFormatValidatorUserDeckTest`, `AlteredDraftSealedPoolClientTest`, `BgaDeckSealedIntegrationTest`. |
+
+The manual campaign lives in `docs/tournaments/acceptance-user-tournaments.html`: the steps the
+Playwright suite replays carry an « auto » badge (refreshed by `npm run test:e2e:coverage -- --write`),
+and its « Manual only » filter lists what still needs a hand.
 
 **Debugging in prod**: altered-bga-api `GET /api/request-logs?apiKey=<ApiKeys:EndGame>` shows
 the raw frames BGA sent (with `decodedEnvelope` and `userId`). altered-draft logs

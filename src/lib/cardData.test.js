@@ -219,3 +219,22 @@ describe('fetchRandomUniques', () => {
     expect(await fetchRandomUniques('EOLE')).toEqual([])
   })
 })
+
+describe('fetchSet', () => {
+  const originalFetch = global.fetch
+
+  afterEach(() => {
+    global.fetch = originalFetch
+    vi.unstubAllEnvs()
+    vi.resetModules()
+  })
+
+  it('reads the set file from the configured card DB', async () => {
+    vi.stubEnv('CARD_DB_URL', 'http://localhost:8091/carddb')
+    vi.resetModules()
+    const { fetchSet: fetchSetFresh } = await import('./cardData.js')
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => [] })
+    await fetchSetFresh('CYCLONE')
+    expect(global.fetch).toHaveBeenCalledWith('http://localhost:8091/carddb/CYCLONE/CYCLONE_EN.json')
+  })
+})

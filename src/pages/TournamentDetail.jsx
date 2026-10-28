@@ -117,7 +117,7 @@ export default function TournamentDetail() {
             />
 
             {canManage && (
-              <section className="bg-surface2 rounded-xl border border-line p-4 space-y-3">
+              <section data-testid="organizer-panel" className="bg-surface2 rounded-xl border border-line p-4 space-y-3">
                 <h2 className="font-semibold text-sm">{t('tournaments.organizerPanel')}</h2>
                 {tournament.poolsByOrigin && (
                   <p className="text-xs text-muted">

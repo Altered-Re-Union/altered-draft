@@ -49,7 +49,7 @@ export default function SettingsFields({
           <label className="block text-sm text-muted mb-2">{t('settingsFields.cardLanguage')}</label>
           <div className="flex gap-2 flex-wrap">
             {LANGS.map(l => (
-              <button key={l} onClick={() => setLang(l)}
+              <button key={l} onClick={() => setLang(l)} aria-pressed={lang === l}
                 className={`px-3 py-1 rounded text-sm font-mono transition-colors ${lang === l
                   ? 'bg-accent text-on-accent font-bold'
                   : 'bg-surface2 hover:bg-surface3 text-ink2'}`}>
@@ -67,7 +67,7 @@ export default function SettingsFields({
           {heroOptions.map(o => {
             const active = heroMode === o.v
             return (
-              <button key={o.v} type="button" onClick={() => setHeroMode(o.v)}
+              <button key={o.v} type="button" onClick={() => setHeroMode(o.v)} aria-pressed={active}
                 className={`w-full flex items-start gap-2.5 text-left px-3 py-2 rounded-lg border transition-colors ${
                   active ? 'border-accent bg-accent/5' : 'border-line bg-surface2 hover:bg-surface3'}`}>
                 <span className={`mt-0.5 w-4 h-4 rounded-full border shrink-0 flex items-center justify-center ${

@@ -169,7 +169,7 @@ export default function TournamentMenu() {
 
         {/* My ongoing tournaments: what a player in the middle of a tournament needs first */}
         {user && myOngoing.length > 0 && (
-          <section className="space-y-2">
+          <section data-testid="my-ongoing" className="space-y-2">
             <h2 className="font-semibold text-lg">{t('tournaments.myOngoingTitle')}</h2>
             <p className="text-xs text-faint">{t('tournaments.myOngoingHint')}</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

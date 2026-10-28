@@ -5,15 +5,69 @@ BGA. Run the whole list before a risky change ships (Lobby refactor, new format,
 change), and the relevant section for any change in that area. Keep it current: a feature that
 ships adds its section here, a behaviour that changes updates its line. Detailed, one-off test
 campaigns (setup steps, curl commands, every edge case of a new feature) belong in a
-per-campaign recette, not here.
+per-campaign acceptance page, not here.
 
-**Automated first.** `npm test` (unit) and `npm run test:integration` (API handlers + SQL against
-a throwaway Postgres, needs Docker) must be green; `npm run build` must succeed.
+**Automated first.** `npm test` (unit), `npm run test:integration` (API handlers + SQL against
+a throwaway Postgres, needs Docker) and `make e2e` (Playwright, the tournament pages in a real
+browser against fake Re:Union services, needs Docker) must be green; `npm run build` must succeed.
 
 **Where to test.** Locally with `make dev` (+ `../altered-dev-environment` for login: users
 `alice` / `bob`, password `TestPassword1234`; Chrome or Firefox), or on preprod
 (https://altered-draft-preprod.altered.re, AlteredOps). Multiplayer items need **two browsers / tabs** (open the room
 link in a second tab as a 2nd player). Locally there is no Realtime: pages poll every 1.5 s.
+
+---
+
+## E2E suite (`make e2e`)
+
+Playwright replays the user-tournaments acceptance steps
+(`docs/tournaments/acceptance-user-tournaments.html`, groups A–J and L) in Chromium, desktop
+1280 px plus a 375 px mobile project. Needs Docker running and Node 22 (`nvm use`); nothing
+else — no `make dev`, no altered-dev-environment, no `.env`.
+
+```bash
+make e2e        # npm run build + playwright install chromium + the whole suite (~1 min)
+make e2e-ui     # same build, then the Playwright UI: pick a test, rerun it, step through it
+make e2e-down   # remove a Postgres kept with E2E_KEEP_STACK=1
+
+# Against the current dist/ (rebuild first with npm run build after a change in src/):
+npm run test:e2e
+E2E_KEEP_STACK=1 npm run test:e2e        # keep Postgres between runs (faster reruns)
+npx playwright test -c tests/e2e/playwright.config.js --grep @e-dates   # one acceptance step, by id
+npx playwright test -c tests/e2e/playwright.config.js tests/e2e/specs/menu.spec.js   # one spec file
+
+npm run test:e2e:coverage                # which acceptance steps are automated
+npm run test:e2e:coverage -- --write     # refresh the page's “auto” badges from the test tags
+```
+
+**What runs.** The built app (`tests/e2e/app-server.mjs` → `server/index.js`, `:8090`, it
+refuses to start without `dist/`), one fake process on `:8091` for Keycloak, decks-api, the
+cards API, the CDN and the card database (`tests/e2e/fakes/`), and a throwaway Postgres
+(`docker-compose.e2e.yml`, `:55433`, driven by `tests/e2e/db-stack.mjs` on `:8092`). None of
+these ports clash with `make dev` (8080 / 5173 / 5432). Every test fails on a console error, a
+page error, an HTTP 5xx, a request leaving `localhost` or a request no fake answers.
+
+**Reading a failure.** The HTML report opens by itself (`playwright-report/`; the command then
+stays up serving it, Ctrl+C to quit). Traces of failed tests are in `test-results/`:
+`npx playwright show-trace test-results/<test>/trace.zip`. A spec file whose tests share
+data (`menu`, `lifecycle`, `moderation`…) runs serially: after a failure, the rest of that
+file is reported as skipped, so fix the first red test.
+
+**Traps.**
+- `npm run test:e2e` tests the last build, not the code in `src/` (a warning says so when
+  `dist/` is older); `make e2e` always rebuilds.
+- One run at a time: two Playwright runs in the same checkout share `test-results/` (one
+  wipes the other's traces mid-run: `ENOENT … .playwright-artifacts-…`) and the ports.
+- Outside CI, a server already answering on `:8090` / `:8091` / `:8092` is reused as is: stop
+  a server left over from an interrupted run, or it serves its old code.
+- A Postgres kept with `E2E_KEEP_STACK=1` keeps the schema it was created with: `make e2e-down`
+  after changing `sealed-pools-schema.sql` or `draft-rooms-schema.sql`.
+
+**Writing a test.** Import `test` / `expect` from `tests/e2e/support/fixtures.js`, tag it
+with its acceptance step id (`{ tag: ['@b-dup'] }`, plus `@mobile` for the 375 px project), and
+select with `getByRole` / `getByLabel` and the English labels through `t()`. A step the app
+does not meet yet is committed as `test.fixme` with its tag and needs an `AUTO_PARTIAL` note
+on the acceptance page (the coverage script enforces it).
 
 ---
 
@@ -57,6 +111,8 @@ link in a second tab as a 2nd player). Locally there is no Realtime: pages poll 
 - [ ] Load a deck as a cube (search + format chips), preview it, draft it.
 
 ## 8. Tournaments (BGA sealed) — see `docs/tournaments/README.md`
+Automated by `tests/e2e` — the steps with an « auto » badge in `docs/tournaments/acceptance-user-tournaments.html`
+no longer need a manual pass; the items below are the smoke check on a real deployment.
 - [ ] **Normal pool** (`/tournament/normal`): pool + pack reveal; **Reset pool** gives a new pool, then a 30-minute cooldown.
 - [ ] **Generic preparation pool** (`/tournament/prep`, bottom of `/tournament`): one-shot pool, no reset.
 - [ ] **Declare a tournament** (`/tournament/new`, logged in): validation is live — the BGA link is parsed as you paste it ("Tournament id … detected", or "already exists"), and the submit bar stuck to the bottom of the screen stays disabled while it lists the remaining problems (too-short name, past start, end before start, no set…), each one jumping to its field; a set without unique data disables the unique steppers. Session expired before submitting (wait out the access token, or block `/api/token`): "Reconnect (your input is kept)" brings the form back filled in.
