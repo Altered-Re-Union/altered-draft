@@ -100,7 +100,8 @@ function ConnectBox({ t, login }) {
 
 // /tournament — the tournaments hub (spec §8): "my ongoing tournaments" first, then tabs
 // for the upcoming / ongoing public lists, the player's pools and the tournaments they
-// created. The active tab lives in the URL (?tab=) so it survives a reload and can be shared.
+// created, then the generic prep block for a tournament not listed. The active tab lives in
+// the URL (?tab=) so it survives a reload and can be shared.
 export default function TournamentMenu() {
   const navigate = useNavigate()
   const { user, login, loading: authLoading } = useAuth()
@@ -112,6 +113,7 @@ export default function TournamentMenu() {
   const [tournaments, setTournaments] = useState(null)
   const [listError, setListError] = useState('')
   const [pools, setPools] = useState(null)
+  const [pending, setPending] = useState(null)
   const [poolsError, setPoolsError] = useState('')
   const [created, setCreated] = useState(null)
   const [createdError, setCreatedError] = useState('')
@@ -127,7 +129,7 @@ export default function TournamentMenu() {
   useEffect(() => {
     if (!user) return
     fetchBoundPools()
-      .then(data => setPools(data.pools))
+      .then(data => { setPools(data.pools); setPending(data.pending ?? null) })
       .catch(e => setPoolsError(e.message || t('tournamentPages.couldNotLoadTournaments')))
     listMyTournaments()
       .then(data => setCreated(data.tournaments))
@@ -209,35 +211,25 @@ export default function TournamentMenu() {
               ?? ongoing.map(tn => <TournamentCard key={tn.id} tn={tn} t={t} tc={tc} />))}
 
             {tab === 'pools' && (!user && !authLoading ? <ConnectBox t={t} login={login} /> : (
-              <>
-                {listState(user ? pools : null, poolsError, 'tournamentPages.noOngoingTournaments')
-                  ?? pools.map(p => (
-                    // A declared tournament has a page; a pool bound to an undeclared BGA
-                    // tournament doesn't, so its card opens the pool itself.
-                    <CardWithDeckCta key={p.id} t={t} label={p.tournamentName || t('tournamentPages.sealedPoolFallback', { set: p.setCode })}
-                      to={p.tournament ? `/tournament/t/${p.tournament.id}` : `/tournament/pools/${p.id}`}
-                      deckTo={p.tournament ? `/tournament/t/${p.tournament.id}/pool` : `/tournament/pools/${p.id}`}>
-                      <p className="font-semibold text-sm flex items-center gap-2 flex-wrap">
-                        {p.tournamentName || t('tournamentPages.sealedPoolFallback', { set: p.setCode })}
-                        {p.tournament && <StatusPill status={p.tournament.status} t={t} />}
-                      </p>
-                      <p className="text-xs text-faint">
-                        {p.tournament
-                          ? t('tournaments.startsAt', { date: formatDateTime(p.tournament.startsAt) })
-                          : t('tournamentPages.boundAt', { date: p.boundAt ? new Date(p.boundAt).toLocaleString() : '—' })}
-                        {' · '}{deckLine(p.deck, t, tc)}
-                      </p>
-                    </CardWithDeckCta>
-                  ))}
-                <div className="border-t border-line pt-4 mt-4 space-y-2">
-                  <h3 className="font-semibold text-sm text-ink2">{t('tournaments.genericPrepTitle')}</h3>
-                  <p className="text-xs text-faint">{t('tournaments.genericPrepHint')}</p>
-                  <button onClick={() => navigate('/tournament/prep')}
-                    className="text-sm px-3 py-1.5 rounded-lg bg-surface2 hover:bg-surface3 text-ink transition-colors">
-                    {t('tournamentPages.prepareNext')}
-                  </button>
-                </div>
-              </>
+              listState(user ? pools : null, poolsError, 'tournamentPages.noOngoingTournaments')
+                ?? pools.map(p => (
+                  // A declared tournament has a page; a pool bound to an undeclared BGA
+                  // tournament doesn't, so its card opens the pool itself.
+                  <CardWithDeckCta key={p.id} t={t} label={p.tournamentName || t('tournamentPages.sealedPoolFallback', { set: p.setCode })}
+                    to={p.tournament ? `/tournament/t/${p.tournament.id}` : `/tournament/pools/${p.id}`}
+                    deckTo={p.tournament ? `/tournament/t/${p.tournament.id}/pool` : `/tournament/pools/${p.id}`}>
+                    <p className="font-semibold text-sm flex items-center gap-2 flex-wrap">
+                      {p.tournamentName || t('tournamentPages.sealedPoolFallback', { set: p.setCode })}
+                      {p.tournament && <StatusPill status={p.tournament.status} t={t} />}
+                    </p>
+                    <p className="text-xs text-faint">
+                      {p.tournament
+                        ? t('tournaments.startsAt', { date: formatDateTime(p.tournament.startsAt) })
+                        : t('tournamentPages.boundAt', { date: p.boundAt ? new Date(p.boundAt).toLocaleString() : '—' })}
+                      {' · '}{deckLine(p.deck, t, tc)}
+                    </p>
+                  </CardWithDeckCta>
+                ))
             ))}
 
             {tab === 'created' && (!user && !authLoading ? <ConnectBox t={t} login={login} /> : (
@@ -245,6 +237,17 @@ export default function TournamentMenu() {
                 ?? <CreatedTournaments list={created} t={t} tc={tc} />
             ))}
           </div>
+        </section>
+
+        {/* A BGA tournament nobody declared: one pool prepared ahead, in the default format.
+            Once it exists the CTA opens it instead of offering to prepare one. */}
+        <section aria-labelledby="generic-prep-title" className="bg-surface border border-line rounded-lg p-4 space-y-2">
+          <h2 id="generic-prep-title" className="font-semibold text-sm text-ink2">{t('tournaments.genericPrepTitle')}</h2>
+          <p className="text-xs text-faint">{t('tournaments.genericPrepHint')}</p>
+          <button onClick={() => user ? navigate('/tournament/prep') : login('/tournament/prep')}
+            className="text-sm px-3 py-1.5 rounded-lg bg-surface2 hover:bg-surface3 text-ink transition-colors">
+            {t(pending ? 'tournamentPages.openNextPrep' : 'tournamentPages.prepareNext')}
+          </button>
         </section>
       </div>
       <Footer />

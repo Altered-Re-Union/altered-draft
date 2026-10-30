@@ -129,24 +129,26 @@ export async function resetNormalPool(sub) {
   return { pool: rows[0], previousDeckId: pool.deck_id ?? null }
 }
 
-/** The player's single pending (not yet bound, not attached) tournament pool, creating it if absent. */
-export async function getOrCreatePreparationPool(sub, { createdBy = 'page' } = {}) {
+/** The player's single pending (not yet bound, not attached) tournament pool, or null — never creates it. */
+export async function getPreparationPool(sub) {
   const { rows } = await query(
     "SELECT * FROM sealed_pools WHERE sub = $1 AND kind = 'tournament' AND tournament_id IS NULL",
     [sub],
   )
-  if (rows[0]) return rows[0]
+  return rows[0] ?? null
+}
+
+/** The player's single pending (not yet bound, not attached) tournament pool, creating it if absent. */
+export async function getOrCreatePreparationPool(sub, { createdBy = 'page' } = {}) {
+  const existing = await getPreparationPool(sub)
+  if (existing) return existing
 
   const format = await getActiveFormat()
   if (!format) throw new Error('no active competitive format configured')
 
   const inserted = await insertPool(sub, 'tournament', { config: configFromLegacyFormat(format), createdBy })
   if (inserted) return inserted
-  const retry = await query(
-    "SELECT * FROM sealed_pools WHERE sub = $1 AND kind = 'tournament' AND tournament_id IS NULL",
-    [sub],
-  )
-  return retry.rows[0]
+  return getPreparationPool(sub)
 }
 
 /** The caller's pool for a declared tournament, owner-scoped. */

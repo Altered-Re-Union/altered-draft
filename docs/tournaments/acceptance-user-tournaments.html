@@ -248,7 +248,6 @@ details.callout summary { cursor: pointer; font-weight: 600; }
     <p>Steps marked <span class="new-tag">new</span> were added or rewritten after a round of feedback: run them (again).</p>
     <p>Steps marked <span class="new-tag auto">auto</span> are replayed by the Playwright suite (<code>make e2e</code>, <code>tests/e2e</code>): no need to run them by hand. An “auto (partial)” badge keeps a manual part: hover it to see which. The “Manual only” filter shows the steps without a badge and the partial ones.</p>
     <p>Steps marked <span class="new-tag v11">v1.1</span> cover the option added to lot 1: <strong>faction of the uniques</strong> (group L).</p>
-    <p><strong>Beta masking:</strong> the hub of groups B–H answers on <code>/tournament/beta</code>; <code>/tournament</code> keeps the legacy menu that Home links to (step h-beta). Read every <code>/tournament?tab=…</code> of this page as <code>/tournament/beta?tab=…</code> until the unmasking PR ships (group K).</p>
   </div>
 
   <div class="cast" id="cast"></div>
@@ -315,7 +314,7 @@ const PSQL = (sql) => pre(`docker compose exec -T postgres psql -U altered-draft
 
 // Steps replayed by the Playwright suite. Rewritten by `npm run test:e2e:coverage -- --write`
 // (scripts/e2e-acceptance-coverage.mjs) from the tests' tags: do not edit this line by hand.
-const AUTO_STEPS = ['a-grid', 'a-lang', 'a-sealed-run', 'b-cap', 'b-dup', 'b-end-before', 'b-even', 'b-happy', 'b-links', 'b-logged-out', 'b-nej', 'b-options', 'b-past', 'b-session-expired', 'c-404', 'c-anon', 'c-organizer', 'c-step1', 'd-back', 'd-bob', 'd-deck', 'd-one-deck', 'd-open', 'd-same', 'e-cancel', 'e-close', 'e-dates', 'e-delete', 'e-edit-anon', 'e-locked', 'e-relink-taken', 'e-rename', 'e-reopen-past', 'e-stranger', 'f-bga-r3', 'f-button-r3', 'f-delete', 'f-detach-r3', 'f-frozen', 'f-no-button', 'f-players-r3', 'f-redeclare-r3', 'f-squat-r3', 'g-adopt', 'g-adopt-mixed', 'g-carol-menu', 'g-counts', 'g-create', 'g-legacy', 'g-name', 'g-panel', 'h-anon', 'h-beta', 'h-created', 'h-generic', 'h-mobile', 'h-my-ongoing', 'h-ongoing', 'h-order', 'h-pools', 'h-tabs-url', 'i-freeze', 'i-legacy-row', 'i-normal', 'j-console', 'j-fr', 'j-mobile', 'j-theme', 'l-api-invalid', 'l-api-no-unique', 'l-create', 'l-form', 'l-imposed', 'l-menu', 'l-pool'];
+const AUTO_STEPS = ['a-grid', 'a-lang', 'a-sealed-run', 'b-cap', 'b-dup', 'b-end-before', 'b-even', 'b-happy', 'b-links', 'b-logged-out', 'b-nej', 'b-options', 'b-past', 'b-session-expired', 'c-404', 'c-anon', 'c-organizer', 'c-step1', 'd-back', 'd-bob', 'd-deck', 'd-one-deck', 'd-open', 'd-same', 'e-cancel', 'e-close', 'e-dates', 'e-delete', 'e-edit-anon', 'e-locked', 'e-relink-taken', 'e-rename', 'e-reopen-past', 'e-stranger', 'f-bga-r3', 'f-button-r3', 'f-delete', 'f-detach-r3', 'f-frozen', 'f-no-button', 'f-players-r3', 'f-redeclare-r3', 'f-squat-r3', 'g-adopt', 'g-adopt-mixed', 'g-carol-menu', 'g-counts', 'g-create', 'g-legacy', 'g-name', 'g-panel', 'h-anon', 'h-created', 'h-generic-r2', 'h-mobile', 'h-my-ongoing', 'h-ongoing', 'h-order', 'h-pools-r2', 'h-tabs-url', 'h-unmask-r2', 'i-freeze', 'i-legacy-row', 'i-normal', 'j-console', 'j-fr', 'j-mobile', 'j-theme', 'l-api-invalid', 'l-api-no-unique', 'l-create', 'l-form', 'l-imposed', 'l-menu', 'l-pool'];
 // Steps the suite covers with a narrower assertion than the acceptance steps (hand-maintained).
 const AUTO_PARTIAL = { 'j-fr': 'raw keys and a FR sample; English leftovers stay a human check', 'j-theme': 'toggle, persistence and screenshots; contrast stays a human check' };
 
@@ -580,11 +579,11 @@ ${pre(`curl -s "${API}/api/tournament-bga-decklist?tournamentId=484848&tournamen
         html: `<ul><li>Click “My pools”: the URL becomes ${chip(WEB + '/tournament?tab=pools')}. Reload: the tab stays open.</li>
 <li>Open ${url(WEB + '/tournament?tab=created')} directly: “My created tournaments” is open. An unknown value (${chip(WEB + '/tournament?tab=nope')}) opens “Upcoming”.</li>
 <li>The counters next to the tabs match the number of cards in each tab.</li></ul>` },
-      { id: 'h-pools', who: 'carol', title: '“My pools”: clickable cards + “Change my deck”',
+      { id: 'h-pools-r2', v2: true, who: 'carol', title: '“My pools”: clickable cards + “Change my deck”',
         html: `<ul><li>Explanation sentence at the top; one pool per tournament, the declared tournaments <strong>first</strong>, then the pools of undeclared BGA tournaments.</li>
 <li>Card of a declared tournament: click → tournament page; “Change my deck” → pool page.</li>
 <li>Card of a legacy pool (undeclared BGA tournament, e.g. “Legacy cup” from G5): click → the pool page (there is no tournament page); “Change my deck” → same page.</li>
-<li>At the bottom of the tab: “Tournament not listed here?” + “Prepare my next tournament” → ${url(WEB + '/tournament/prep')}.</li></ul>` },
+<li>Below the tabs (outside them, whatever tab is open): the “Tournament not listed here?” block + “Prepare my next tournament” (carol has no pending prep pool) → ${url(WEB + '/tournament/prep')}.</li></ul>` },
       { id: 'h-order', who: 'carol', title: '“My pools” order: declared first',
         html: `<p>carol has a declared pool (G1) and a legacy pool “Legacy cup” bound more recently (G5). If G6 adopted it, bind another legacy pool:</p>${pre(`curl -s "${API}/api/tournament-bga-decklist?tournamentId=434343&tournamentName=Legacy%20cup%202&gameId=g5" -H "Authorization: Bearer $TOKEN_CAROL" | node -pe 'const j = JSON.parse(require("fs").readFileSync(0)); j["hydra:member"]?.map(m => m.name) ?? j'`)}<p>Expected: in “My pools”, the declared tournaments are listed <strong>before</strong> the legacy one, even if they were bound earlier.</p>` },
       { id: 'h-created', who: 'alice', title: '“My created tournaments”: active first, archive folded',
@@ -596,11 +595,13 @@ ${pre(`curl -s "${API}/api/tournament-bga-decklist?tournamentId=484848&tournamen
         html: `<p>Edit an upcoming tournament where alice has a pool (e.g. “Coupe d’automne”): start = yesterday. Expected: it moves from the “Upcoming” tab to “Ongoing”, and shows in “My ongoing tournaments” at the top of the page.</p>` },
       { id: 'h-mobile', title: 'Mobile',
         html: `<p>DevTools at 375 px: the grid goes to one column, the tab bar scrolls horizontally if needed (no page scroll), the “Change my deck” buttons stay clickable.</p>` },
-      { id: 'h-generic', who: 'alice', title: 'The generic path still works',
-        html: `<p>“My pools” tab › “Prepare my next tournament” → <code>/tournament/prep</code>: prep pool, no Reset pool button.</p>` },
-      { id: 'h-beta', v2: true, who: 'alice', title: 'Beta masking: /tournament keeps the legacy menu, the hub answers on /tournament/beta',
-        html: `<ul><li>Home › “Tournaments” → ${url(WEB + '/tournament')}: the <strong>legacy</strong> menu (“Prepare my next tournament”, “My ongoing tournaments” with “Change my deck” → <code>/tournament/pools/:id</code>), no tabs, no “Create a tournament”. Logged out: the “Connect Re:Union” box.</li>
-<li>${url(WEB + '/tournament/beta')}: the hub of this group (tabs, “Create a tournament”); its “← Tournaments” link on a tournament page comes back to <code>/tournament/beta</code>. Every <code>/tournament?tab=…</code> of this page reads <code>/tournament/beta?tab=…</code> until the unmasking PR ships (group K).</li></ul>` },
+      { id: 'h-generic-r2', v2: true, who: 'alice', title: 'The generic path still works; its button follows the prep pool',
+        html: `<ul><li>${url(WEB + '/tournament')} › block “Tournament not listed here?” below the tabs › “Prepare my next tournament” → <code>/tournament/prep</code>: prep pool, no Reset pool button.</li>
+<li>Back on ${url(WEB + '/tournament')}: the button now reads “See my pool and deck for my next tournament” and still opens <code>/tournament/prep</code> (the same pool).</li>
+<li>Logged out, the block is there too; its button leads to the Re:Union login, then to <code>/tournament/prep</code>.</li></ul>` },
+      { id: 'h-unmask-r2', v2: true, who: 'alice', title: 'After the beta: the hub is back on /tournament, /tournament/beta redirects there',
+        html: `<ul><li>Home › “Tournaments” → ${url(WEB + '/tournament')}: the hub of this group (tabs, “Create a tournament”), no “Prepare my next tournament” button at the top any more (it sits in the block below the tabs).</li>
+<li>${url(WEB + '/tournament/beta?tab=created')} redirects to <code>/tournament?tab=created</code> (bookmarks of the beta keep working); a tournament page's “← Tournaments” link comes back to <code>/tournament</code>. Logged out, <code>/tournament/beta</code> lands on the public tabs.</li></ul>` },
     ],
   },
   {
@@ -736,7 +737,7 @@ SQL`)}<p>Expected: <code>UPDATE M</code>, M = the listed players with a “Rando
 <li><strong>altered-draft, this branch</strong> — ${url('https://github.com/Altered-Re-Union/altered-draft/pull/20')}: the hub hidden on <code>/tournament/beta</code> (h-beta), preprod then prod through AlteredOps. Before: k-format and k-in-flight on the target host. After: k-migrate-r3 (freeze) once the new container serves. The legacy flow is untouched by the deploy: an undeclared BGA tournament still binds the pending pool as before, a declared one adopts the pools already bound to its id.</li>
 <li><strong>altered-draft, unmasking</strong> — the follow-up PR (link in k-unmask) once the beta is validated with the reviewers: <code>/tournament</code> becomes the hub, <code>/tournament/beta</code> redirects there, the legacy menu is deleted.</li></ol>` },
       { id: 'k-unmask', v2: true, title: 'Unmasking PR, after the beta',
-        html: `<p>${url('https://github.com/Altered-Re-Union/altered-draft/pull/22')} — merge it after the beta: its e2e suite expects <code>/tournament</code> to serve the hub and <code>/tournament/beta</code> to redirect there. Home then leads to the hub; nothing else changes.</p>` },
+        html: `<p>${url('https://github.com/Altered-Re-Union/altered-draft/pull/22')} (this is it) — merge it after the beta: its e2e suite expects <code>/tournament</code> to serve the hub and <code>/tournament/beta</code> to redirect there (h-unmask-r2). Home then leads to the hub; nothing else changes.</p>` },
     ],
   },
 ];
