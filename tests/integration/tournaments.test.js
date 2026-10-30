@@ -35,10 +35,14 @@ vi.mock('../../src/lib/poolBuilder.js', async importOriginal => {
   const mod = await importOriginal()
   return {
     ...mod,
-    buildPool: vi.fn(async (sub, { config, nonce }) => ({
-      cards: { [`ALT_${config.source.setCode}_B_AX_01_C`]: 2, [`ALT_${config.source.setCode}_B_BR_02_R1`]: 1, [`NONCE_${nonce}`]: 1 },
-      boosters: [[`ALT_${config.source.setCode}_B_AX_01_C`, `ALT_${config.source.setCode}_B_AX_01_C`, `ALT_${config.source.setCode}_B_BR_02_R1`, `NONCE_${nonce}`]],
-    })),
+    buildPool: vi.fn(async (sub, { config, nonce }) => {
+      const sets = config.source.type === 'faction' ? Object.keys(config.source.sets) : [config.source.setCode]
+      const refs = sets.map(s => `ALT_${s}_B_AX_01_C`)
+      return {
+        cards: { ...Object.fromEntries(refs.map(r => [r, 2])), [`ALT_${sets[0]}_B_BR_02_R1`]: 1, [`NONCE_${nonce}`]: 1 },
+        boosters: [[...refs, ...refs, `ALT_${sets[0]}_B_BR_02_R1`, `NONCE_${nonce}`]],
+      }
+    }),
   }
 })
 
@@ -781,5 +785,42 @@ describe('PR #20 review fixes', () => {
     const idx = (await query("SELECT indexname FROM pg_indexes WHERE tablename IN ('sealed_pools', 'tournaments')")).rows.map(r => r.indexname)
     expect(idx).toEqual(expect.arrayContaining(['tournaments_bga_tournament_id_live', 'sealed_pools_one_per_sub_per_tournament_ref', 'sealed_pools_by_tournament_ref', 'sealed_pools_legacy_by_bga_id']))
     expect(idx).not.toContain('tournaments_bga_tournament_id')
+  })
+})
+
+const FACTION_CONFIG = { ...CONFIG, source: { type: 'faction', faction: 'AX', sets: { CYCLONE: 1, EOLE: 2 }, boosters: 7 }, uniques: { inBoosters: 0, guaranteed: 0, evenFactions: false, faction: null } }
+
+describe('mono-faction tournaments', () => {
+  it('stores a faction pool with a null set_code and the config', async () => {
+    const tn = await mkTournament({ config: FACTION_CONFIG })
+    const pool = await getOrCreateTournamentPool('alice', tn, { createdBy: 'page' })
+    const { rows: [row] } = await query('SELECT set_code, config, cards, boosters FROM sealed_pools WHERE id = $1', [pool.id])
+    expect(row.set_code).toBeNull()
+    expect(row.config.source).toEqual(FACTION_CONFIG.source)
+    expect(Object.keys(row.cards).some(r => r.startsWith('ALT_CYCLONE_'))).toBe(true)
+    expect(Object.keys(row.cards).some(r => r.startsWith('ALT_EOLE_'))).toBe(true)
+  })
+
+  it('BGA path: the deck-list call resolves cards from every set of a faction pool', async () => {
+    const tn = await mkTournament({ config: FACTION_CONFIG, bgaTournamentId: '737373' })
+    const { fetchSet } = await import('../../src/lib/cardData.js')
+    fetchSet.mockClear()
+    vi.mocked(verifySub).mockResolvedValue('frank')
+    let posted = null
+    vi.stubGlobal('fetch', vi.fn(async (url, init = {}) => {
+      if ((init.method ?? 'GET') === 'POST') { posted = JSON.parse(init.body); return { ok: true, status: 201, json: async () => ({ id: 'deck-frank', ...posted }) } }
+      return { ok: true, status: 200, json: async () => ({}) }
+    }))
+    try {
+      const res = await call(bgaDecklist, { query: { tournamentId: tn.bga_tournament_id, tournamentName: 'x', gameId: 'g1' } })
+      expect(res.statusCode).toBe(200)
+      expect(fetchSet.mock.calls.map(c => c[0])).toEqual(expect.arrayContaining(['CYCLONE', 'EOLE'])) // the mock's NONCE_ ref adds a harmless extra call
+      const pool = (await query("SELECT cards FROM sealed_pools WHERE sub = 'frank'")).rows[0]
+      expect(posted.deckCards.length).toBeGreaterThan(0)
+      for (const { cardReference } of posted.deckCards) expect(Object.keys(pool.cards)).toContain(cardReference)
+    } finally {
+      vi.unstubAllGlobals()
+      vi.mocked(verifySub).mockResolvedValue(null)
+    }
   })
 })
