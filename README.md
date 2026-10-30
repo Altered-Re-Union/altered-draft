@@ -82,9 +82,9 @@ Ctrl+C stops the API and Vite; Postgres keeps running. Other targets: `make db-d
 
 ### Re:Union services (optional)
 
-Anonymous play needs nothing more. For login, deck save/load and the tournament pages, run the Re:Union services from [altered-dev-environment](https://github.com/Altered-Community/altered-dev-environment) (`./run.sh` there — Keycloak on `:18080`, decks-api on `:8001`). `make dev` points `.env` at them and (re)registers the `altered-draft` client in the local realm — the realm is re-imported on every Keycloak restart, so re-run `make keycloak-client` after restarting it.
+Anonymous play needs nothing more. For login, deck save/load and the tournament pages, the Re:Union services come from [altered-dev-environment](https://github.com/Altered-Community/altered-dev-environment), cloned next to this repo (`DEV_ENV_DIR` to point elsewhere): `make dev` starts it when it isn't answering (`./run.sh`, detached — Keycloak on `:18080`, decks-api on `:8001`; Ctrl+C leaves it running, `make dev-env-down` stops it), points `.env` at it, (re)registers the `altered-draft` client in the local realm and creates the `carol` test account, then prints a summary of URLs and accounts. The realm is re-imported on every Keycloak restart, so re-run `make keycloak-client keycloak-users` (or just `make dev`) after restarting it.
 
-- Test users: `alice` / `bob`, password `TestPassword1234`.
+- Test users: `alice` / `bob` (with the realm) and `carol@example.test` (created by `make dev`), password `TestPassword1234`.
 - Use Chrome or Firefox: the session cookies are `Secure`, which Safari rejects on `http://localhost`.
 - Every Re:Union / Community service URL is overridable — Keycloak, decks API, deckbuilder, altered.re, cards API, CDN, community card database (`CARD_DB_URL`). They default to prod; see `.env.example` to point any of them at a local version (`src/lib/endpoints.js`).
 

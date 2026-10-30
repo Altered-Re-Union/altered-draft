@@ -8,7 +8,7 @@ export default defineConfig({
   plugins: [react()],
   test: {
     environment: 'node',
-    include: ['src/**/*.test.js', 'api/**/*.test.js'],
+    include: ['src/**/*.test.js', 'api/**/*.test.js', 'scripts/**/*.test.js'],
     exclude: ['tests/integration/**'],
   },
 })
