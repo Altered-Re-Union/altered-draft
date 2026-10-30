@@ -257,7 +257,7 @@ uniques), with two additions: `excludeBanlist` filters the set with `filterBanne
 generation and rejects banned unique families (`pickDeterministicUniques` gets an optional
 `isAllowed` predicate; its existing retry loop redraws). `uniques.faction` is passed as
 `pickDeterministicUniques`'s `faction` option: every draw targets that faction (precedence over
-`evenFactions`). **V2 branch:** `source.type = 'faction'` goes to `buildFactionPool` (`quotas()` exact split of the 7 boosters over the weighted sets, `generateFactionSealedPool`, uniques from range-capable sets only); the `set` branch is unchanged. Lot 2 ports the Lobby's other sealed
+`evenFactions`). **V2 branch:** `source.type = 'faction'` goes to `buildFactionPool` (`quotas()` exact split of the hero, common and rare card slots over the weighted sets, `generateFactionSealedPool`, uniques from range-capable sets only); the `set` branch is unchanged. Lot 2 ports the Lobby's other sealed
 branches into it.
 
 Rules:

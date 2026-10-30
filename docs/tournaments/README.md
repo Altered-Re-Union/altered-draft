@@ -1339,14 +1339,17 @@ Design: `docs/superpowers/specs/2026-10-30-mono-faction-sealed-design.md` (local
 `src/lib/tournamentConfig.js` (`SOURCE_TYPES = ['set', 'faction']`, `MAX_SET_WEIGHT = 3`,
 `configSetCodes`). Zero weights are dropped; COREKS is refused; error codes `source.type`,
 `source.faction`, `source.sets`. For this source `uniques.faction` is forced to the source faction
-and `evenFactions` to `false`; `uniques.unsupportedSet` is raised only when the sets are otherwise
+(only when the pool has uniques, else `null`) and `evenFactions` to `false`; `uniques.unsupportedSet` is raised only when the sets are otherwise
 valid but none of the included ones has faction-range data. `legacyColumnsFromConfig` writes
 `set_code: null`.
 
-**Generation.** `quotas(weights, n, rng)` (`src/lib/packGenerator.js`) splits the 7 boosters over
-the sets by **largest remainder**, ties broken by shuffling the tied group with the pool rng, so
-the split is exact and deterministic per pool. `generateFactionSealedPool` then builds each
-booster from one set: de-duplication happens **within a booster only**, reprints of the same
+**Generation.** `quotas(weights, n, rng)` (`src/lib/packGenerator.js`) splits n card **slots** over
+the sets by **largest remainder**, ties broken by shuffling the tied group with the pool rng.
+`generateFactionSealedPool` applies it separately to the 7 hero slots (heroes `packs`), the 63
+common slots and the 21 rare slots (over the sets that have a card of that rarity in the
+faction), then shuffles the set labels over the slots: each set's share is exact per rarity
+across the pool, and a booster mixes sets. Each slot is drawn from the set its label assigns,
+falling back to the other included sets, then left empty (never another rarity). De-duplication happens **within a booster only**, reprints of the same
 card in different sets stay distinct, and out-of-faction `_R2` prints of the faction are included
 (faction = `card.faction`, never the ref letters). `buildPool` routes to `buildFactionPool`
 (`src/lib/poolBuilder.js`); the `set` branch and its golden digest are untouched.
@@ -1354,8 +1357,10 @@ card in different sets stay distinct, and out-of-faction `_R2` prints of the fac
 **Heroes.** Through the existing `heroes` option: `packs` = one hero per booster, distinct until the
 pool of faction heroes is exhausted; `free` = every hero of that faction in the included sets.
 
-**Uniques.** Drawn only from included sets that have faction-range data (**NEJ is excluded**),
-split between those sets with the same quotas, always of the source faction.
+**Uniques.** The total (in boosters + guaranteed) is split by `quotas()` over the included sets that
+have faction-range data, with their weights renormalised over those sets (**NEJ is excluded**),
+drawn with `pickDeterministicUniques` per set, always of the source faction, then shuffled: the
+first `inBoosters` replace rare slots, the rest are guaranteed.
 
 **Data and server.** `sealed_pools.set_code` becomes nullable (idempotent `alter` in
 `sealed-pools-schema.sql`); faction pools store `NULL`. A pool can now span several sets, so
@@ -1364,9 +1369,9 @@ one set; the pool page does the same client-side and skips the single-set booste
 pools.
 
 **UI.** The tournament form's Cards step has a source switch "One set" / "Mono-faction mix": faction
-pills, a weight stepper per set (x0 to x3) with its share in %, and a fixed-faction line for the
+pills, a weight stepper per set (×0 to ×3) with its share in %, and a fixed-faction line for the
 uniques. Public summary: `7 boosters · [icon] Axiom mono-faction · all sets`, or
-`... · SKY, ROC x2, NEJ` when weights are not uniform.
+`... · SKY, ROC ×2, NEJ` when weights are not uniform.
 
 **Recette.** `docs/tournaments/acceptance-mono-faction-sealed.html` (step ids `mf-<group>-<slug>`,
 11 replayed by `tests/e2e/specs/faction-sealed.spec.js`). `scripts/e2e-acceptance-coverage.mjs`
