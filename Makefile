@@ -5,7 +5,8 @@
 #
 #   make dev           everything in one command, ends with a summary of URLs + accounts
 #                      (Ctrl+C stops API + Vite; Postgres and the dev env keep running)
-#   make dev-env-down  stop the dev env started by make dev    make db-down   stop Postgres
+#   make down          stop everything: API + Vite, Postgres (data kept), the dev env
+#   make dev-env-down  stop only the dev env     make db-down    stop only Postgres
 #   make db-reset      wipe + recreate the DB
 #
 # Without the dev env (repo not cloned, DEV_ENV_DIR to point elsewhere) the app still
@@ -46,12 +47,13 @@ ifneq ($(filter command line environment,$(origin DB_PORT)),)
 API_ENV += DATABASE_URL=$(LOCAL_DB_URL)
 endif
 
-# API server with file watching. NODE_EXTRA_CA_CERTS is only honoured as a real env var
-# at process start (not via --env-file), so it's lifted out of .env (quotes stripped,
-# spaces kept) — needed to trust a local service's self-signed CA (see .env.example).
+# API server with file watching (--watch-preserve-output: a restart must not wipe the
+# terminal, the dev summary lives there). NODE_EXTRA_CA_CERTS is only honoured as a real
+# env var at process start (not via --env-file), so it's lifted out of .env (quotes
+# stripped, spaces kept) — needed to trust a local service's self-signed CA (see .env.example).
 API_CMD = ca="$$(sed -n 's/^NODE_EXTRA_CA_CERTS=//p' .env | tail -n 1 | tr -d "\"'")"; \
 	env $(API_ENV) $${ca:+"NODE_EXTRA_CA_CERTS=$$ca"} \
-	$(NODE) --env-file=.env --watch-path=api --watch-path=src/lib --watch-path=server server/index.js
+	$(NODE) --env-file=.env --watch-path=api --watch-path=src/lib --watch-path=server --watch-preserve-output server/index.js
 
 # Same order as the `migrations` target in build/Dockerfile (minus realtime-schema.sql).
 SCHEMAS := sealed-pools-schema.sql draft-rooms-schema.sql
@@ -65,30 +67,28 @@ ENV_DEFAULTS := \
 	KEYCLOAK_CLIENT_SECRET=dev-altered-draft-secret \
 	DECKS_API_URL=http://localhost:8001
 
-.PHONY: dev dev-summary dev-env dev-env-down check-node install env keycloak-client keycloak-users db-up db-migrate db-freeze-pools db-down db-reset db-shell api web test e2e e2e-ui e2e-down
+.PHONY: dev down dev-summary dev-env dev-env-down check-node install env keycloak-client keycloak-users db-up db-migrate db-freeze-pools db-down db-reset db-shell api web test e2e e2e-ui e2e-down
 
-dev: check-node install env dev-env db-up db-migrate keycloak-client keycloak-users dev-summary
+dev: check-node install env dev-env db-up db-migrate keycloak-client keycloak-users
 	@trap 'trap - INT TERM EXIT; kill 0' INT TERM EXIT; \
 	$(API_CMD) & \
-	$(NPX) vite
+	( until curl -sf -o /dev/null http://localhost:$(API_PORT)/api/config && curl -sf -o /dev/null http://localhost:5173/; do sleep 1; done; sh scripts/dev-summary.sh ) & \
+	$(NPX) vite --clearScreen false
 
-# What just started and how to get in. Printed before the API + Vite banners.
+# What just started and how to get in (scripts/dev-summary.sh). `make dev` prints it once
+# the API and Vite answer, so it lands after their banners — neither clears the terminal.
 dev-summary:
-	@kc="$$(sed -n 's/^KEYCLOAK_ISSUER=//p' .env | tail -n 1 | sed 's|/realms/.*||')"; \
-	decks="$$(sed -n 's/^DECKS_API_URL=//p' .env | tail -n 1)"; \
-	mods="$$(sed -n 's/^TOURNAMENT_MODERATORS=//p' .env | tail -n 1)"; \
-	printf '\n────────────────────────────── local stack ──────────────────────────────\n'; \
-	printf '  app        http://localhost:5173\n'; \
-	printf '  API        http://localhost:$(API_PORT)\n'; \
-	printf '  Keycloak   %s/admin   (admin / admin, realm players)\n' "$$kc"; \
-	printf '  decks-api  %s\n' "$$decks"; \
-	if [ -f /tmp/altered-dev-environment.pid ]; then printf '  dev env    started by make dev · log /tmp/altered-dev-environment.log (Aspire dashboard link inside)\n'; \
-	else printf '  dev env    started outside make dev (./run.sh in altered-dev-environment)\n'; fi; \
-	printf '  accounts   alice · bob · carol@example.test   password TestPassword1234\n'; \
-	case ",$$mods," in *,22222222-2222-2222-2222-222222222222,*) printf '             bob is a tournament moderator (TOURNAMENT_MODERATORS in .env)\n';; \
-	  *) printf '             no tournament moderator: add TOURNAMENT_MODERATORS=22222222-2222-2222-2222-222222222222 to .env for bob\n';; esac; \
-	printf '  stop       Ctrl+C stops API + Vite · make db-down · make dev-env-down\n'; \
-	printf '─────────────────────────────────────────────────────────────────────────\n\n'
+	@sh scripts/dev-summary.sh
+
+# Stops the whole local stack: the API and Vite (whatever listens on their ports, so it
+# works from another terminal than make dev's), Postgres (data kept) and the dev env.
+down: dev-env-down
+	@for port in $(API_PORT) 5173; do \
+	  pids="$$(lsof -nP -t -iTCP:$$port -sTCP:LISTEN 2>/dev/null)"; \
+	  if [ -n "$$pids" ]; then kill $$pids && echo "→ stopped what listened on :$$port"; fi; \
+	done
+	@$(COMPOSE) down
+	@echo "→ local stack down (Postgres data kept: make db-reset wipes it)"
 
 # Starts ../altered-dev-environment (Keycloak + decks-api) unless it already answers, and
 # waits for it; detached, so Ctrl+C on make dev leaves it running (see the script).
