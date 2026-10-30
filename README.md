@@ -2,7 +2,7 @@
 
 A browser-based multiplayer **draft + sealed** simulator for the [Altered TCG](https://altered.re). Players open the same URL from their own devices, draft or build pools together in real time, and export the result — copy a decklist for altered.re, or (optionally) save it straight to their **Re:Union** account.
 
-**No accounts/database of its own.** It's a React SPA with a thin API layer in front of Postgres: shared room state lives in one `draft_rooms` table, written through a couple of small server-side handlers and streamed to clients over a Realtime (Supabase-protocol) subscription. Two supported deployment targets run the exact same handler code — Vercel serverless functions (paired with a Supabase project as the Postgres + Realtime provider), or a self-hosted Docker image (its own Postgres + a self-hosted `supabase/realtime` sidecar). Live at **[altered-draft.vercel.app](https://altered-draft.vercel.app)**.
+**No accounts/database of its own.** It's a React SPA with a thin API layer in front of Postgres: shared room state lives in one `draft_rooms` table, written through a couple of small server-side handlers and streamed to clients over a Realtime (Supabase-protocol) subscription. Two supported deployment targets run the exact same handler code — a self-hosted Docker image (its own Postgres + a self-hosted `supabase/realtime` sidecar), or Vercel serverless functions (paired with a Supabase project as the Postgres + Realtime provider). The Re:Union fork ships only through **AlteredOps** (the self-hosted Docker target, GitOps pull-deployed) — live at **[altered-draft.altered.re](https://altered-draft.altered.re)** (preprod: [altered-draft-preprod.altered.re](https://altered-draft-preprod.altered.re)). The Vercel target stays in the code (it's how altered-draft.vercel.app historically ran) but is no longer deployed since October 2026.
 
 > New here as a player? Just open the live site and hit **Help** in the top bar — this README is for people running or contributing to the code.
 
@@ -45,7 +45,7 @@ Per-room player identity and in-progress decks live in `localStorage` (so a refr
 
 - **Set card lists** → [`PolluxTroy0/Altered-TCG-Card-Database`](https://github.com/PolluxTroy0/Altered-TCG-Card-Database) (per-set JSON). Only the standard booster printing is kept; alt-art (`_A_`) / promo (`_P_`) reprints are canonicalised to it.
 - **Uniques, promos, alt-art, non-EN** → [`cards.alteredcore.org`](https://cards.alteredcore.org) by reference (`needsCardApi()` decides what `fetchSet` can't supply).
-- **Card art images** → the Altered prod S3 bucket (`altered-prod-eu`). _This is the one remaining dependency on Equinox infrastructure;_ `card-images-backup/` holds a local snapshot for the community cubes as a hedge.
+- **Card art images** → the community CDN, `https://cdn.alteredcore.org/cards/<lang>/<SET>/<REF>.webp`, built from the card reference by `cardImageUrl` — never from the `imagePath` field: Altered disabled public access to both its S3 buckets (`altered-prod-eu` and `altered-dev`), so every stored image path points at a dead host. Uniques aren't on the CDN and reuse the art of their base `_R1` printing. No Equinox infrastructure is needed anymore; `card-images-backup/` holds a local snapshot for the community cubes as a hedge.
 
 **Cubes** live in `src/lib/cubes.js` (`COMMUNITY_CUBES` + a `SPOTLIGHT`). Users can also paste a decklist or load decks from Re:Union; both resolve through the shared `resolveCubeRefs` so they behave like a built-in cube.
 
