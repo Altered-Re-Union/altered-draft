@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   generateAllPacks, generateChaosPacks, generateStructuredPacks,
   generateCubeDraftPacks, generateCubeRecipePacks, dealHeroSlots,
-  generateTournamentSealedPool, generatePacksFromPool, quotas,
+  generateTournamentSealedPool, generatePacksFromPool, quotas, generateFactionSealedPool,
 } from './packGenerator.js'
 import { FACTIONS } from './cardData.js'
 import { mulberry32 } from './prng.js'
@@ -234,5 +234,79 @@ describe('quotas', () => {
     const q = quotas({ S2: 1, S1: 1, CORE: 2 }, 4, mulberry32(1))
     expect(Object.keys(q)).toEqual(['CORE', 'S2', 'S1'])
     expect(q).toEqual({ CORE: 2, S2: 1, S1: 1 })
+  })
+})
+
+describe('generateFactionSealedPool', () => {
+  function fakeFactionSets() {
+    const mk = (set, faction, rarity, n, cardType = 'CHARACTER', refFaction = faction, name) => ({
+      reference: `ALT_${set}_B_${refFaction}_${n}_${rarity}`, name: name ?? `${set} ${faction} ${rarity} ${cardType} ${n}`, faction, rarity, cardType,
+    })
+    const sets = { S1: [], S2: [], S3: [] }
+    const add = (set, f, { heroes, commons, rares }) => {
+      for (let i = 1; i <= heroes; i++) sets[set].push(mk(set, f, 'C', 100 + i, 'HERO'))
+      for (let i = 1; i <= commons; i++) sets[set].push(mk(set, f, 'C', i, 'CHARACTER', f, `Common ${f} ${i}`))
+      for (let i = 1; i <= rares; i++) sets[set].push(mk(set, f, 'R1', 50 + i))
+    }
+    add('S1', 'AX', { heroes: 3, commons: 12, rares: 8 })
+    add('S2', 'AX', { heroes: 1, commons: 9, rares: 2 })
+    sets.S2.push({ reference: 'ALT_S2_B_YZ_45_R2', name: 'S2 OOF', faction: 'AX', rarity: 'R2', cardType: 'CHARACTER' })
+    add('S3', 'AX', { heroes: 1, commons: 9, rares: 0 })
+    for (const set of Object.keys(sets)) {
+      add(set, 'BR', { heroes: 1, commons: 10, rares: 4 })
+      sets[set].push(mk(set, 'AX', 'C', 900, 'TOKEN'))
+    }
+    return sets
+  }
+  const sets = fakeFactionSets()
+  const byRef = new Map(Object.values(sets).flat().map(c => [c.reference, c]))
+  const rareStart = pack => pack.length - 3
+
+  it('deals 7 boosters of 13 (12 without heroes), all of the faction, no duplicate inside a booster', () => {
+    const packs = generateFactionSealedPool(sets, mulberry32(1), { faction: 'AX', weights: { S1: 1, S2: 2, S3: 1 } })
+    expect(packs).toHaveLength(7)
+    for (const p of packs) {
+      expect(p).toHaveLength(13)
+      expect(new Set(p).size).toBe(13)
+      expect(p.every(r => byRef.get(r).faction === 'AX')).toBe(true)
+      expect(byRef.get(p[0]).cardType).toBe('HERO')
+      expect(p.slice(1, 10).every(r => byRef.get(r).rarity === 'C')).toBe(true)
+      expect(p.slice(10).every(r => ['R1', 'R2', 'EX'].includes(byRef.get(r).rarity))).toBe(true)
+    }
+    expect(generateFactionSealedPool(sets, mulberry32(1), { faction: 'AX', weights: { S1: 1 }, includeHeroes: false })[0]).toHaveLength(12)
+  })
+  it('gives every pool the exact per-set quotas for commons and rares', () => {
+    const packs = generateFactionSealedPool(sets, mulberry32(2), { faction: 'AX', weights: { S1: 1, S2: 2 } })
+    const count = (slice, set) => packs.flatMap(slice).filter(r => r.split('_')[1] === set).length
+    expect(count(p => p.slice(1, 10), 'S1')).toBe(21); expect(count(p => p.slice(1, 10), 'S2')).toBe(42)
+    expect(count(p => p.slice(10), 'S1')).toBe(7); expect(count(p => p.slice(10), 'S2')).toBe(14)
+    expect(count(p => p, 'S3')).toBe(0)
+  })
+  it('includes out-of-faction rares and keeps reprints as distinct cards', () => {
+    const packs = generateFactionSealedPool(sets, mulberry32(3), { faction: 'AX', weights: { S2: 1 } })
+    expect(packs.flat()).toContain('ALT_S2_B_YZ_45_R2')
+    const both = generateFactionSealedPool(sets, mulberry32(3), { faction: 'AX', weights: { S1: 1, S2: 1 } })
+    expect(both.flatMap(p => p.slice(1, 10)).filter(r => r.startsWith('ALT_S2_')).length).toBeGreaterThanOrEqual(31)
+  })
+  it('falls back to the other sets when a set has no rare of the faction', () => {
+    const packs = generateFactionSealedPool(sets, mulberry32(4), { faction: 'AX', weights: { S1: 1, S3: 1 } })
+    for (const p of packs) expect(p.slice(10).every(r => r.startsWith('ALT_S1_'))).toBe(true)
+    for (const p of packs) expect(p).toHaveLength(13)
+  })
+  it('deals distinct heroes until exhausted, then repeats', () => {
+    const packs = generateFactionSealedPool(sets, mulberry32(5), { faction: 'AX', weights: { S1: 1, S2: 1, S3: 1 } })
+    const heroes = packs.map(p => p[0])
+    expect(new Set(heroes).size).toBe(5) // 3 + 1 + 1 distinct heroes, then 2 repeats
+    const single = generateFactionSealedPool(sets, mulberry32(5), { faction: 'AX', weights: { S2: 1 } })
+    expect(new Set(single.map(p => p[0])).size).toBe(1)
+  })
+  it('is deterministic for a seed and places the in-booster uniques in rare slots', () => {
+    const opts = { faction: 'AX', weights: { S1: 1, S2: 1 }, uniqueRefs: ['ALT_S1_B_AX_01_U_7', 'ALT_S2_B_AX_02_U_9'] }
+    const a = generateFactionSealedPool(sets, mulberry32(6), opts)
+    expect(a).toEqual(generateFactionSealedPool(sets, mulberry32(6), opts))
+    expect(a).not.toEqual(generateFactionSealedPool(sets, mulberry32(7), opts))
+    const positions = a.flatMap((p, i) => p.map((r, j) => [r, i, j])).filter(([r]) => r.includes('_U_'))
+    expect(positions).toHaveLength(2)
+    for (const [, i, j] of positions) expect(j).toBeGreaterThanOrEqual(rareStart(a[i]))
   })
 })

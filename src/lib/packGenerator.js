@@ -440,6 +440,78 @@ export function generateTournamentSealedPool(cards, rng, options = {}) {
 }
 
 /**
+ * Mono-faction SEALED pool over several weighted sets: `boosters` boosters (hero? + 9
+ * commons + 3 rares) holding only cards whose `faction` is `faction`, set shares fixed
+ * EXACTLY by `quotas` (per rarity), then `uniqueRefs` swapped into rare slots. Pure and
+ * seeded: rng order is hero labels, common labels, rare labels, boosters in order, unique
+ * swap. Pools are deduplicated by name within a set, never across sets (reprints stay
+ * distinct). A slot whose set is exhausted falls back to the other sets, then stays empty.
+ * @param {{[set: string]: object[]}} cardsBySet - fetchSet output per set
+ * @param {() => number} rng
+ * @param {{faction: string, weights: {[set: string]: number}, boosters?: number, uniqueRefs?: string[], includeHeroes?: boolean}} options
+ * @returns {string[][]}
+ */
+export function generateFactionSealedPool(cardsBySet, rng, options) {
+  const { faction, weights, boosters = 7, uniqueRefs = [], includeHeroes = true } = options
+  const rank = code => { const i = SETS.findIndex(s => s.code === code); return i === -1 ? SETS.length : i }
+  const codes = Object.keys(weights)
+    .filter(c => weights[c] > 0 && cardsBySet[c])
+    .map((code, order) => ({ code, order }))
+    .sort((a, b) => rank(a.code) - rank(b.code) || a.order - b.order)
+    .map(k => k.code)
+  const pools = {}
+  for (const code of codes) {
+    pools[code] = splitPools(cardsBySet[code].filter(c => c.faction === faction), true)
+  }
+
+  // Shuffled list of `slots` set labels, only over sets that have a card of that rarity.
+  const labelsFor = (kind, slots) => {
+    const w = {}
+    for (const code of codes) if (pools[code][kind].length) w[code] = weights[code]
+    if (!Object.keys(w).length) return []
+    const q = quotas(w, slots, rng)
+    return shuffle(Object.keys(q).flatMap(code => Array(q[code]).fill(code)), rng)
+  }
+  const heroLabels = includeHeroes ? labelsFor('heroes', boosters) : []
+  const commonLabels = labelsFor('commons', 9 * boosters)
+  const rareLabels = labelsFor('rares', 3 * boosters)
+
+  // One draw: slot's set first, else the other sets, never padding with another rarity.
+  const draw = (kind, label, taken) => {
+    const free = code => pools[code][kind].filter(c => !taken.has(c.reference))
+    const own = label ? pickRandom(free(label), rng) : null
+    if (own) return own
+    return pickRandom(codes.filter(c => c !== label).flatMap(free), rng)
+  }
+
+  const usedHeroes = new Set()
+  const packs = []
+  for (let b = 0; b < boosters; b++) {
+    const pack = []
+    const taken = new Set()
+    if (includeHeroes) {
+      let hero = draw('heroes', heroLabels[b], usedHeroes)
+      if (!hero) {
+        usedHeroes.clear() // every hero of the faction was dealt: repeat
+        hero = draw('heroes', heroLabels[b], usedHeroes)
+      }
+      if (hero) { usedHeroes.add(hero.reference); pack.push(hero.reference) }
+    }
+    for (let i = 0; i < 9; i++) {
+      const c = draw('commons', commonLabels[b * 9 + i], taken)
+      if (c) { taken.add(c.reference); pack.push(c.reference) }
+    }
+    for (let i = 0; i < 3; i++) {
+      const r = draw('rares', rareLabels[b * 3 + i], taken)
+      if (r) { taken.add(r.reference); pack.push(r.reference) }
+    }
+    packs.push(pack)
+  }
+  if (uniqueRefs.length) swapUniquesIntoRareSlots(packs, uniqueRefs, rng, (includeHeroes ? 1 : 0) + 9)
+  return packs
+}
+
+/**
  * Generate packs from a custom card pool (raw reference list).
  */
 export function generatePacksFromPool(references, playerCount, packsPerPlayer = 4) {
