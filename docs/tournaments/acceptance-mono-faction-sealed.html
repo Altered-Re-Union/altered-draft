@@ -313,9 +313,9 @@ const PSQL = (sql) => pre(`docker compose exec -T postgres psql -U altered-draft
 
 // Steps replayed by the Playwright suite. Rewritten by `npm run test:e2e:coverage -- --write`
 // (scripts/e2e-acceptance-coverage.mjs) from the tests' tags: do not edit this line by hand.
-const AUTO_STEPS = [];
+const AUTO_STEPS = ['mf-a-issues', 'mf-a-switch', 'mf-b-create', 'mf-c-pool', 'mf-d-nej', 'mf-d-nej-alone', 'mf-e-api', 'mf-e-forced', 'mf-f-bga', 'mf-g-locked', 'mf-h-mobile'];
 // Steps the suite covers with a narrower assertion than the acceptance steps (hand-maintained).
-const AUTO_PARTIAL = {};
+const AUTO_PARTIAL = { 'mf-a-switch': 'switch, pills, weights, shares and disabled buttons; the greyed look of an excluded row stays a human check', 'mf-c-pool': 'reveal and stored pool on the e2e fixtures (SKY ×1, ROC ×2, NEJ ×1); the psql line on the real card data (no Trial by Frost ref) stays manual', 'mf-h-mobile': 'no horizontal scroll on the form, tournament page and pool page, stepper and share on one line; truncated set names stay a human check' };
 
 const GROUPS = [
   {
@@ -429,10 +429,10 @@ ${pre(`docker compose exec -T postgres psql -U altered-draft -d altered-draft -A
 <p>Expected: two lines (<code>1111|…</code> alice, <code>2222|…</code> bob), each with 3 <strong>distinct</strong> sets among CORE, ALIZE, BISE, CYCLONE, DUSTER, EOLE (never FUGUE). The two lines usually differ (1 chance in 20 that they match: then check a third pool, e.g. carol through the tournament page). Also check the tournament page’s summary: “7 boosters · <em>[Axiom icon]</em> Axiom mono-faction · all sets · 3 uniques in boosters”.</p>` },
       { id: 'mf-d-nej-alone', who: 'alice', title: 'Neverending Journey alone: uniques disabled',
         html: `<ul><li>${url(WEB + '/tournament/new')}: name ${chip('NEJ only mix')}, link ${chip('https://boardgamearena.com/tournament?id=123483')}, “Mono-faction mix”, Axiom, every set at ×0 except Neverending Journey ×1.</li>
-<li>Expected: both unique steppers greyed out at 0 with “No unique data for this set yet: uniques are disabled.”. Put Skybound Odyssey at ×1: they come back; back to ×0: disabled again.</li>
+<li>Expected: both unique steppers greyed out at 0 with “No unique data for the included sets yet: uniques are disabled.”. Put Skybound Odyssey at ×1: they come back; back to ×0: disabled again.</li>
 <li>Create. Then:</li></ul>
 ${pre(`curl -s "${API}/api/tournaments?bgaId=123483" | node -pe 'JSON.parse(require("fs").readFileSync(0)).tournaments.map(t => JSON.stringify(t.config.source.sets) + " " + JSON.stringify(t.config.uniques)).join("\\n")'`)}
-<p>Expected: <code>{"FUGUE":1} {"inBoosters":0,"guaranteed":0,"evenFactions":false,"faction":null}</code>. The API refuses the same config with uniques: step mf-e-guards.</p>` },
+<p>Expected: <code>{"FUGUE":1} {"inBoosters":0,"guaranteed":0,"evenFactions":false,"faction":null}</code>. The API refuses the same config with uniques: step mf-e-api.</p>` },
       { id: 'mf-d-free', title: 'Heroes “Free choice”: 12-card boosters and the 11 Axiom heroes',
         html: `${pre(`T=$TOKEN_ALICE node -e '(async () => { const h = { Authorization: "Bearer " + process.env.T, "Content-Type": "application/json" }; const r = await fetch("${API}/api/tournaments", { method: "POST", headers: h, body: JSON.stringify({ name: "Free heroes mix", bgaUrl: "https://boardgamearena.com/tournament?id=123484", startsAt: new Date(Date.now() + 864e5).toISOString(), config: { source: { type: "faction", faction: "AX", sets: { CORE: 1, ALIZE: 1, BISE: 1, CYCLONE: 1, DUSTER: 1, EOLE: 1, FUGUE: 1 } }, heroes: "free", uniques: { inBoosters: 0, guaranteed: 0 } } }) }); const tn = await r.json(); console.log(r.status, tn.id ?? JSON.stringify(tn)); if (!tn.id) return; const p = await fetch("${API}/api/tournaments/" + tn.id + "/pool", { headers: h }); console.log("alice pool", p.status) })()'`)}
 <p>Expected: <code>201 &lt;id&gt;</code> then <code>alice pool 200</code>.</p>

@@ -42,6 +42,22 @@ export function tournamentBody(overrides = {}) {
   }
 }
 
+// The mono-faction "Axiom mix" of the V2 acceptance page, on the e2e card fixtures: only
+// CYCLONE / EOLE / FUGUE exist there, so the four other sets stay at ×0 (left out).
+export function factionTournamentBody(overrides = {}) {
+  return tournamentBody({
+    name: 'Axiom mix',
+    bgaUrl: 'https://boardgamearena.com/tournament?id=123480',
+    config: {
+      source: { type: 'faction', faction: 'AX', sets: { CYCLONE: 1, EOLE: 2, FUGUE: 1 } },
+      heroes: 'packs',
+      uniques: { inBoosters: 0, guaranteed: 1, evenFactions: false, faction: 'AX' },
+      excludeBanlist: false,
+    },
+    ...overrides,
+  })
+}
+
 function expectStatus(res, status, what) {
   if (res.status !== status) throw new Error(`${what} → ${res.status} ${JSON.stringify(res.body)}`)
   return res.body
