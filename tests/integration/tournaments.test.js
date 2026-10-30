@@ -480,6 +480,23 @@ describe('GET /api/tournament-bound-pools', () => {
     expect(byName['Declared'].tournament).toMatchObject({ id: t.id, name: 'Declared', status: 'upcoming' })
     expect(byName['Legacy one'].tournament).toBeNull()
   })
+
+  it('reports the pending prep pool without creating one', async () => {
+    const { verifySub } = await import('../../api/_lib/auth.js')
+    verifySub.mockResolvedValue('alice')
+    let res = await call(boundPools)
+    expect(res.body.pending).toBeNull()
+    expect((await query("SELECT count(*)::int AS n FROM sealed_pools WHERE sub = 'alice'")).rows[0].n).toBe(0)
+
+    const prep = await getOrCreatePreparationPool('alice')
+    res = await call(boundPools)
+    expect(res.body.pending).toEqual({ id: prep.id, deck: null })
+
+    await bindTournamentId('alice', '6006', 'Now bound')
+    res = await call(boundPools)
+    expect(res.body.pending).toBeNull()
+    expect(res.body.pools.map(p => p.id)).toEqual([prep.id])
+  })
 })
 
 describe('freeze-sealed-pools', () => {

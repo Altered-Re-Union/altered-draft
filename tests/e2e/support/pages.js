@@ -29,7 +29,7 @@ export async function openPoolPage({ openAs, seed }, who, tournamentId, title = 
 }
 
 // Where the tournaments hub lives (/tournament/beta, its beta address, redirects there —
-// acceptance step h-unmask).
+// acceptance step h-unmask-r2).
 export const HUB_PATH = '/tournament'
 
 // The hub's own pages come back to the hub (after a delete, the "← Tournaments" link).
