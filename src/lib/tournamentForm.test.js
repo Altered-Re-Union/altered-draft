@@ -73,6 +73,19 @@ describe('tournamentFormIssues', () => {
   })
 })
 
+describe('tournamentFormIssues (faction source)', () => {
+  const factionConfig = { source: { type: 'faction', faction: null, sets: {} }, heroes: 'packs', uniques: { inBoosters: 1, guaranteed: 1 } }
+  it('reports a missing faction and empty weights under their own fields, in form order', () => {
+    expect(tournamentFormIssues({ body, config: factionConfig, now: NOW, isCreate: true })).toEqual([
+      { field: 'faction', code: 'required' }, { field: 'sets', code: 'required' },
+    ])
+  })
+  it('reports unsupported uniques for a faction source under uniques', () => {
+    const config = { ...factionConfig, source: { type: 'faction', faction: 'AX', sets: { FUGUE: 1 } } }
+    expect(tournamentFormIssues({ body, config, now: NOW, isCreate: true })).toEqual([{ field: 'uniques', code: 'uniques.unsupportedSet' }])
+  })
+})
+
 describe('tournamentFormIssues (BGA tournament already played with mixed legacy formats)', () => {
   it('blocks the link when its legacy pools have mixed formats', () => {
     const mixedBgaIds = new Set(['7'])
