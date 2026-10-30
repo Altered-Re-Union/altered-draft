@@ -166,7 +166,10 @@ export default function TournamentForm() {
         setSourceType(src.type === 'faction' ? 'faction' : 'set')
         if (src.type === 'faction') { setFaction(src.faction); setSetWeights(setWeightsFrom(src.sets)) } else setSetCode(src.setCode)
         setHeroes(tn.config.heroes)
-        setUniques(tn.config.uniques); setExcludeBanlist(!!tn.config.excludeBanlist)
+        // A faction source stores its own faction as the uniques faction (forced server-side):
+        // keep it out of the shared uniques state, or switching to "One set" would preselect it.
+        setUniques(src.type === 'faction' ? { ...tn.config.uniques, faction: null, evenFactions: false } : tn.config.uniques)
+        setExcludeBanlist(!!tn.config.excludeBanlist)
         setLocked(!!tn.locked)
         const d = readDraft()
         if (d) applyDraft(d, { withConfig: !tn.locked })
