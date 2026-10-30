@@ -97,3 +97,63 @@ describe('buildPoolSeedString', () => {
     expect(s).toBe('sub1|EOLE|1|false|false|1|N')
   })
 })
+
+// A faction-source fixture: per faction (AX, BR) 2 heroes, 10 commons, 6 rares (one OOF _R2 print).
+function fakeFactionSet(setCode) {
+  const cards = []
+  for (const f of ['AX', 'BR']) {
+    for (let h = 1; h <= 2; h++) cards.push({ reference: `ALT_${setCode}_B_${f}_0${h}_C`, name: `Hero ${f} ${h}`, faction: f, rarity: 'C', cardType: 'HERO' })
+    for (let i = 0; i < 10; i++) cards.push({ reference: `ALT_${setCode}_B_${f}_${10 + i}_C`, name: `Common ${f} ${i}`, faction: f, rarity: 'C', cardType: 'CHARACTER' })
+    for (let i = 0; i < 5; i++) cards.push({ reference: `ALT_${setCode}_B_${f}_${30 + i}_R1`, name: `Rare ${f} ${i}`, faction: f, rarity: 'R1', cardType: 'SPELL' })
+    // OOF print: ref letters say YZ, the card object says AX/BR
+    cards.push({ reference: `ALT_${setCode}_B_YZ_${f === 'AX' ? 45 : 46}_R2`, name: `Rare ${f} oof`, faction: f, rarity: 'R2', cardType: 'SPELL' })
+  }
+  if (setCode === 'CORE') cards.push({ reference: 'ALT_CORE_B_AX_17_C', name: 'Banned AX', faction: 'AX', rarity: 'C', cardType: 'CHARACTER' })
+  return cards
+}
+
+describe('buildPool faction source', () => {
+  const fetchCards = async code => fakeFactionSet(code)
+  const factionConfig = (over = {}) => ({
+    v: 1, format: 'sealed',
+    source: { type: 'faction', faction: 'AX', sets: { CORE: 1, EOLE: 2 }, boosters: 7 },
+    heroes: 'packs', uniques: { inBoosters: 0, guaranteed: 0, evenFactions: false, faction: null }, excludeBanlist: false, ...over,
+  })
+  it('is deterministic and fetches each included set once', async () => {
+    const calls = []
+    const fetchCards = async code => { calls.push(code); return fakeFactionSet(code) }
+    const a = await buildPool('sub', { config: factionConfig(), nonce: 'n1' }, { fetchCards })
+    const b = await buildPool('sub', { config: factionConfig(), nonce: 'n1' }, { fetchCards })
+    expect(a).toEqual(b); expect(calls.slice(0, 2)).toEqual(['CORE', 'EOLE'])
+    expect((await buildPool('sub', { config: factionConfig(), nonce: 'n2' }, { fetchCards })).boosters).not.toEqual(a.boosters)
+  })
+  it('deals 7 boosters of 13 with exact per-set quotas and only faction cards', async () => {
+    const { boosters, cards } = await buildPool('sub', { config: factionConfig(), nonce: 'n' }, { fetchCards })
+    expect(boosters).toHaveLength(7); for (const p of boosters) expect(p).toHaveLength(13)
+    expect(boosters.flatMap(p => p.slice(1, 10)).filter(r => r.startsWith('ALT_CORE_')).length).toBe(21)
+    expect(Object.values(cards).reduce((a, b) => a + b, 0)).toBe(91)
+    expect(Object.keys(cards).every(r => fakeFactionSet(r.split('_')[1]).find(c => c.reference === r).faction === 'AX')).toBe(true)
+  })
+  it('appends every hero of the faction from every included set with heroes "free"', async () => {
+    const { boosters, cards } = await buildPool('sub', { config: factionConfig({ heroes: 'free' }), nonce: 'n' }, { fetchCards })
+    for (const p of boosters) expect(p).toHaveLength(12)
+    const heroes = Object.keys(cards).filter(r => fakeFactionSet(r.split('_')[1]).find(c => c.reference === r).cardType === 'HERO')
+    expect(heroes.sort()).toEqual(['ALT_CORE_B_AX_01_C', 'ALT_CORE_B_AX_02_C', 'ALT_EOLE_B_AX_01_C', 'ALT_EOLE_B_AX_02_C'])
+  })
+  it('applies the ban list set by set', async () => {
+    const { cards } = await buildPool('sub', { config: factionConfig({ excludeBanlist: true }), nonce: 'n' }, { fetchCards })
+    expect(Object.keys(cards).some(r => r.startsWith('ALT_CORE_B_AX_17'))).toBe(false)
+  })
+  it('draws the uniques from the included sets that have range data, never from FUGUE', async () => {
+    const config = factionConfig({ source: { type: 'faction', faction: 'AX', sets: { FUGUE: 2, EOLE: 1 }, boosters: 7 }, uniques: { inBoosters: 2, guaranteed: 1, evenFactions: false, faction: 'AX' } })
+    const { boosters, cards } = await buildPool('sub', { config, nonce: 'n' }, { fetchCards })
+    const uniques = Object.keys(cards).filter(r => r.includes('_U_'))
+    expect(uniques).toHaveLength(3); expect(uniques.every(r => r.startsWith('ALT_EOLE_B_'))).toBe(true)
+    expect(boosters.flat().filter(r => r.includes('_U_'))).toHaveLength(2)
+    expect(boosters.flat().filter(r => !r.includes('_U_') && r.split('_')[5]?.startsWith('R')).length).toBe(19)
+  })
+  it('throws when uniques are wanted and no included set has range data', async () => {
+    const config = factionConfig({ source: { type: 'faction', faction: 'AX', sets: { FUGUE: 1 }, boosters: 7 }, uniques: { inBoosters: 1, guaranteed: 0, evenFactions: false, faction: 'AX' } })
+    await expect(buildPool('sub', { config, nonce: 'n' }, { fetchCards })).rejects.toThrow(/unique/)
+  })
+})

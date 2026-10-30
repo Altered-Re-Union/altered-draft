@@ -64,7 +64,7 @@ function pickRandom(pool, rng = Math.random) {
  * @param {number} packsPerPlayer - typically 4
  * @returns {string[][]} array of packs, each pack is an array of card references
  */
-function deduplicateByNameFaction(cards) {
+export function deduplicateByNameFaction(cards) {
   const seen = new Set()
   return cards.filter(c => {
     const key = `${c.name}__${c.faction}`
