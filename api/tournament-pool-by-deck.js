@@ -9,7 +9,7 @@
 // so by the time any real validation happens the link is already in place.
 import { verifySub } from './_lib/auth.js'
 import { getPoolByDeckId, countGamesPlayed } from '../src/lib/poolStore.js'
-import { regeneratePoolCounts, poolResponse } from './_lib/tournamentPool.js'
+import { loadPoolCounts, poolResponse } from './_lib/tournamentPool.js'
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -34,7 +34,7 @@ export default async function handler(req, res) {
   }
   console.log(`tournament-pool-by-deck: OK sub=${sub} deckId=${deckId} poolId=${pool.id}`)
 
-  const cards = await regeneratePoolCounts(sub, pool)
+  const cards = await loadPoolCounts(sub, pool)
   const gamesPlayed = await countGamesPlayed(pool.id)
   return res.status(200).json(poolResponse(pool, cards, null, gamesPlayed))
 }

@@ -38,3 +38,23 @@ export function getPool() {
 export function query(text, params) {
   return getPool().query(text, params)
 }
+
+/**
+ * Runs `fn(q)` in a transaction on one pooled client (`q` has query()'s signature);
+ * commits on success, rolls back and rethrows on error. For the read-lock-then-write
+ * sequences that a single statement can't express (see tournamentStore.js).
+ */
+export async function withTransaction(fn) {
+  const client = await getPool().connect()
+  try {
+    await client.query('BEGIN')
+    const result = await fn((text, params) => client.query(text, params))
+    await client.query('COMMIT')
+    return result
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {})
+    throw e
+  } finally {
+    client.release()
+  }
+}

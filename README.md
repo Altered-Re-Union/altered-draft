@@ -86,7 +86,7 @@ Anonymous play needs nothing more. For login, deck save/load and the tournament 
 
 - Test users: `alice` / `bob`, password `TestPassword1234`.
 - Use Chrome or Firefox: the session cookies are `Secure`, which Safari rejects on `http://localhost`.
-- Every Re:Union / Community service URL is overridable — Keycloak, decks API, deckbuilder, altered.re, cards API, CDN. They default to prod; see `.env.example` to point any of them at a local version (`src/lib/endpoints.js`).
+- Every Re:Union / Community service URL is overridable — Keycloak, decks API, deckbuilder, altered.re, cards API, CDN, community card database (`CARD_DB_URL`). They default to prod; see `.env.example` to point any of them at a local version (`src/lib/endpoints.js`).
 
 ---
 
@@ -96,6 +96,7 @@ Anonymous play needs nothing more. For login, deck save/load and the tournament 
 npm test              # unit tests — pure logic, no DB, runs in a couple of seconds
 npm run test:watch    # unit tests in watch mode
 npm run test:integration   # api/rooms/*.js against a real Postgres in Docker
+make e2e              # Playwright: build, then a real browser against fakes + a throwaway Postgres
 ```
 
 - **`npm test`** (Vitest) covers the pure-logic modules: draft/sealed pack generation
@@ -109,6 +110,12 @@ npm run test:integration   # api/rooms/*.js against a real Postgres in Docker
   optimistic-concurrency compare-and-swap (`state->>'version'`) that guards against two
   players' picks clobbering each other. The container is created and torn down
   automatically (`tests/integration/globalSetup.js`); requires Docker running locally.
+- **`make e2e`** (build + Chromium + the suite, about a minute; needs Docker) runs the Playwright
+  suite in `tests/e2e`: the user-tournaments acceptance steps
+  (`docs/tournaments/acceptance-user-tournaments.html`) replayed in Chromium against the built
+  app, a throwaway Postgres and fake Re:Union services — nothing leaves `localhost`, no need for
+  `make dev` or altered-dev-environment. How to run one test, the UI mode, keeping the database
+  between runs and reading a failure: [TESTING.md › E2E suite](TESTING.md#e2e-suite-make-e2e).
 
 ---
 

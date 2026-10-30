@@ -59,7 +59,7 @@ ENV_DEFAULTS := \
 	KEYCLOAK_CLIENT_SECRET=dev-altered-draft-secret \
 	DECKS_API_URL=http://localhost:8001
 
-.PHONY: dev check-node install env keycloak-client db-up db-migrate db-down db-reset db-shell api web test
+.PHONY: dev check-node install env keycloak-client db-up db-migrate db-freeze-pools db-down db-reset db-shell api web test e2e e2e-ui e2e-down
 
 dev: check-node install env db-up db-migrate keycloak-client
 	@echo "→ API on http://localhost:$(API_PORT) · app on http://localhost:5173"
@@ -105,6 +105,11 @@ db-up:
 db-migrate:
 	@for f in $(SCHEMAS); do echo "→ applying $$f"; $(PSQL) -f /schemas/$$f || exit 1; done
 
+# One-shot after the lot-1 migration: store the contents of legacy pools (see the script).
+# Same env as `make api`, so `make db-freeze-pools DB_PORT=…` hits the overridden DB.
+db-freeze-pools: check-node env
+	env $(API_ENV) $(NODE) --env-file=.env scripts/freeze-sealed-pools.mjs
+
 db-down:
 	@$(COMPOSE) down
 
@@ -123,3 +128,19 @@ web:
 
 test: check-node install
 	$(NPM) test
+
+# Playwright suite (tests/e2e): fresh build, Chromium, throwaway Postgres on 55433 (Docker),
+# fake Keycloak / decks-api / cards on 8091, the app on 8090. E2E_KEEP_STACK=1 keeps the DB.
+e2e: check-node install
+	$(NPM) run build
+	$(NPX) playwright install chromium
+	$(NPM) run test:e2e
+
+e2e-ui: check-node install
+	$(NPM) run build
+	$(NPX) playwright install chromium
+	$(NPM) run test:e2e:ui
+
+# Stops a stack kept with E2E_KEEP_STACK=1.
+e2e-down:
+	docker compose -f docker-compose.e2e.yml down -v

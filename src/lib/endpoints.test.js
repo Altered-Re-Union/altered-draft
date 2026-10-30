@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 
-const ENV_KEYS = ['KEYCLOAK_ISSUER', 'KEYCLOAK_CLIENT_ID', 'DECKS_API_URL', 'DECKBUILDER_URL', 'REUNION_URL', 'CARDS_API_URL', 'CDN_URL']
+const ENV_KEYS = ['KEYCLOAK_ISSUER', 'KEYCLOAK_CLIENT_ID', 'DECKS_API_URL', 'DECKBUILDER_URL', 'REUNION_URL', 'CARDS_API_URL', 'CDN_URL', 'CARD_DB_URL']
 
 // endpoints.js reads process.env at module load — re-import it per scenario.
 async function loadWithEnv(env) {
@@ -25,7 +25,19 @@ describe('endpoints', () => {
       reunionUrl: 'https://altered.re',
       cardsApiUrl: 'https://cards.alteredcore.org',
       cdnUrl: 'https://cdn.alteredcore.org',
+      cardDbUrl: 'https://raw.githubusercontent.com/PolluxTroy0/Altered-TCG-Card-Database/main/SETS',
     })
+  })
+
+  it('defaults the card DB to the PolluxTroy0 SETS folder and exposes it publicly', async () => {
+    const { endpoints, publicEndpoints } = await loadWithEnv({})
+    expect(endpoints().cardDbUrl).toBe('https://raw.githubusercontent.com/PolluxTroy0/Altered-TCG-Card-Database/main/SETS')
+    expect(publicEndpoints().cardDbUrl).toBe(endpoints().cardDbUrl)
+  })
+
+  it('takes CARD_DB_URL from env', async () => {
+    const { endpoints } = await loadWithEnv({ CARD_DB_URL: 'http://localhost:8091/carddb/' })
+    expect(endpoints().cardDbUrl).toBe('http://localhost:8091/carddb')
   })
 
   it('takes overrides from env, ignoring blanks and trailing slashes', async () => {

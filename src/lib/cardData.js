@@ -1,8 +1,6 @@
 import { UNIQUES_EN } from './uniquesData.js'
 import { endpoints } from './endpoints.js'
 
-const BASE_URL = 'https://raw.githubusercontent.com/PolluxTroy0/Altered-TCG-Card-Database/main/SETS'
-
 // Card images: the community CDN (cdn.alteredcore.org) — the ONLY working host since Altered
 // disabled public access to BOTH its S3 buckets (altered-prod-eu AND altered-dev now return
 // 403 "AllAccessDisabled") and retired api.altered.gg (DNS gone). Web-optimized .webp keyed by
@@ -29,7 +27,7 @@ export async function fetchSet(setCode, lang = 'EN') {
   const key = `${setCode}_${lang}`
   if (cache[key]) return cache[key]
 
-  const url = `${BASE_URL}/${setCode}/${setCode}_${lang}.json`
+  const url = `${endpoints().cardDbUrl}/${setCode}/${setCode}_${lang}.json`
   const res = await fetch(url)
   if (!res.ok) throw new Error(`Failed to fetch set ${setCode} (${lang}): ${res.status}`)
 

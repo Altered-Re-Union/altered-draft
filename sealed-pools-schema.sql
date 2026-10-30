@@ -5,14 +5,18 @@
 -- Hosted by Re:Union (not Supabase — this DB is accessed directly via DATABASE_URL from
 -- server-side code only, never from the browser, so no RLS/anon policies are needed here).
 --
--- Card pools are never stored: a pool's contents are always the deterministic output of
--- generateTournamentSealedPool() fed by the columns below (set_code, unique_count,
--- even_factions, heroes_in_pool, guaranteed_uniques, nonce) — see src/lib/poolStore.js's
--- buildPoolSeedString(). tournament_id is deliberately NOT one of those inputs: a pool's
--- contents must stay identical before and after binding, so a player's prepared pool
--- doesn't change out from under them the moment a real tournament binds to it.
--- tournament_id is pure metadata (which tournament this nonce committed to). Only enough
--- state to reproduce and to lazily bind a pool is kept here.
+-- Card pools are generated once (src/lib/poolBuilder.js, a deterministic function of the
+-- snapshot columns below — set_code, unique_count, even_factions, heroes_in_pool,
+-- guaranteed_uniques — and the nonce) and STORED on the row (cards + boosters, added by the
+-- user-created tournaments migration at the end of this file). Rows created before that
+-- change have no cards and are regenerated from those columns until
+-- scripts/freeze-sealed-pools.mjs stores them. tournament_id is deliberately NOT a seed
+-- input: a pool's contents must stay identical before and after binding, so a player's
+-- prepared pool doesn't change the moment a real tournament binds to it. tournament_id is
+-- metadata (which BGA tournament this pool committed to); tournament_ref attaches a pool
+-- to a tournament declared on altered-draft (docs/tournaments/README.md §14).
+--
+-- The whole file is idempotent: the AlteredOps migrations image applies it on EVERY deploy.
 
 -- Append-only: the currently active competitive format is simply the most recent row.
 -- Changing format = INSERT a new row, never UPDATE — old pools keep referencing whatever
@@ -154,3 +158,58 @@ where not exists (select 1 from current_format);
 -- deliberately, when rolling the new format out:
 --   insert into current_format (type, set_code, unique_count, even_factions, heroes_in_pool, guaranteed_uniques)
 --   values ('sealed', 'EOLE', 1, false, false, 1);
+
+-- ---------------------------------------------------------------------------------
+-- User-created tournaments (docs/tournaments/user-tournaments-spec.md §4).
+-- ---------------------------------------------------------------------------------
+create table if not exists tournaments (
+  id                uuid primary key default gen_random_uuid(),
+  name              text not null,
+  description       text not null default '',
+  format            text not null default 'sealed' check (format in ('sealed')),
+  bga_url           text not null,
+  bga_tournament_id text not null,
+  starts_at         timestamptz not null,
+  ends_at           timestamptz,
+  organizer_sub     text not null,
+  organizer_name    text not null,
+  config            jsonb not null,
+  cancelled_at      timestamptz,
+  ended_at          timestamptz,
+  created_at        timestamptz not null default now(),
+  updated_at        timestamptz not null default now()
+);
+-- A moderator can DETACH a declaration (someone declared a BGA tournament they don't
+-- organize): its pools are deleted and its BGA id is freed for a new declaration.
+alter table tournaments add column if not exists detached_at timestamptz;
+-- One live altered-draft tournament per BGA tournament, cancelled ones included (a cancelled
+-- tournament's pools still answer BGA for that id; reuse = restore it). Detached ones don't
+-- count: they no longer answer BGA at all.
+drop index if exists tournaments_bga_tournament_id;
+create unique index if not exists tournaments_bga_tournament_id_live
+  on tournaments (bga_tournament_id) where detached_at is null;
+create index if not exists tournaments_organizer on tournaments (organizer_sub);
+create index if not exists tournaments_starts_at on tournaments (starts_at);
+
+-- Pools attached to a declared tournament, and stored pool contents (every pool created
+-- after this migration stores what it generated; older rows keep being regenerated until
+-- scripts/freeze-sealed-pools.mjs stores them too).
+alter table sealed_pools add column if not exists tournament_ref uuid references tournaments(id);
+alter table sealed_pools add column if not exists config jsonb;
+alter table sealed_pools add column if not exists cards jsonb;
+alter table sealed_pools add column if not exists boosters jsonb;
+alter table sealed_pools add column if not exists created_by text;
+-- Set when a legacy pool (bound to a BGA id before anyone declared that tournament) is
+-- adopted by a declaration: a moderator's detach then releases it (back to legacy, adopted
+-- again by the real organizer's declaration) instead of deleting it.
+alter table sealed_pools add column if not exists adopted_at timestamptz;
+update sealed_pools set created_by = 'legacy' where created_by is null;
+create unique index if not exists sealed_pools_one_per_sub_per_tournament_ref
+  on sealed_pools (sub, tournament_ref) where tournament_ref is not null;
+-- Lookups by tournament alone (pool counts on the public list, detach, the FK on delete)
+-- and by BGA id for unattached pools (adoption, the form's imposed-format lookup) would
+-- otherwise scan the table.
+create index if not exists sealed_pools_by_tournament_ref
+  on sealed_pools (tournament_ref) where tournament_ref is not null;
+create index if not exists sealed_pools_legacy_by_bga_id
+  on sealed_pools (tournament_id) where tournament_ref is null and tournament_id is not null;

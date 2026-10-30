@@ -3,7 +3,7 @@
 // cooldown between resets, enforced in poolStore.js).
 import { verifySub } from './_lib/auth.js'
 import { getOrCreateNormalPool, resetNormalPool, countGamesPlayed } from '../src/lib/poolStore.js'
-import { regeneratePool, poolResponse } from './_lib/tournamentPool.js'
+import { loadPool, poolResponse } from './_lib/tournamentPool.js'
 import { endpoints } from '../src/lib/endpoints.js'
 
 const DECKS_API = `${endpoints().decksApiUrl}/api/decks`
@@ -25,7 +25,7 @@ export default async function handler(req, res) {
 
   if (req.method === 'GET') {
     const pool = await getOrCreateNormalPool(sub)
-    const { counts, boosters } = await regeneratePool(sub, pool)
+    const { counts, boosters } = await loadPool(sub, pool)
     const gamesPlayed = await countGamesPlayed(pool.id)
     return res.status(200).json(poolResponse(pool, counts, boosters, gamesPlayed))
   }
@@ -38,7 +38,7 @@ export default async function handler(req, res) {
     if (result.previousDeckId) {
       await deleteDeck(result.previousDeckId, req.headers.authorization)
     }
-    const { counts, boosters } = await regeneratePool(sub, result.pool)
+    const { counts, boosters } = await loadPool(sub, result.pool)
     const gamesPlayed = await countGamesPlayed(result.pool.id)
     return res.status(200).json(poolResponse(result.pool, counts, boosters, gamesPlayed))
   }

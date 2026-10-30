@@ -82,6 +82,11 @@ function evenFactionTargets(rng, count) {
   return seq.slice(0, count)
 }
 
+/** Whether per-family faction-window data exists for `setCode` (FUGUE has none yet). */
+export function hasFactionRanges(setCode) {
+  return !!FACTION_RANGES_BY_SET[setCode]
+}
+
 /**
  * Deterministically draw `uniqueCount` unique card refs for `setCode`, using the
  * per-family faction-window tables above. Same `rng` (a seeded PRNG, see prng.js) in,
@@ -89,28 +94,33 @@ function evenFactionTargets(rng, count) {
  * identically, so the pool is always reproducible.
  * @param {string} setCode - e.g. 'EOLE'
  * @param {() => number} rng - `() => float in [0,1)`, e.g. from prng.js's seededRng()
- * @param {{uniqueCount?: number, evenFactions?: boolean}} options
+ * @param {{uniqueCount?: number, evenFactions?: boolean, faction?: string|null, isAllowed?: (ref: string) => boolean}} options
+ *   - faction: draw only uniques OF that faction (their real one, out-of-faction prints
+ *     included). Takes precedence over evenFactions.
  *   - evenFactions: true round-robins target factions (wraps past 6, e.g. {12, true} = 2/faction).
  *     false draws freely across the whole combinatorial space, faction unconstrained.
  * @returns {string[]} unique card references
  */
-export function pickDeterministicUniques(setCode, rng, { uniqueCount = 0, evenFactions = false } = {}) {
+export function pickDeterministicUniques(setCode, rng, { uniqueCount = 0, evenFactions = false, faction = null, isAllowed = () => true } = {}) {
   const rangesForSet = FACTION_RANGES_BY_SET[setCode]
   if (!rangesForSet || uniqueCount <= 0) return []
 
   const seen = new Set()
   const refs = []
-  const targets = evenFactions ? evenFactionTargets(rng, uniqueCount) : Array(uniqueCount).fill(null)
+  const targets = faction
+    ? Array(uniqueCount).fill(faction)
+    : evenFactions ? evenFactionTargets(rng, uniqueCount) : Array(uniqueCount).fill(null)
 
   for (const target of targets) {
     const candidates = buildCandidates(rangesForSet, target)
     if (!candidates.length) continue
-    // Retry on the (astronomically unlikely) chance of drawing a serial already picked.
+    // Retry on a serial already picked (astronomically unlikely) or one the caller
+    // rejects (e.g. a banned unique family when the ban list is on).
     for (let attempt = 0; attempt < 10; attempt++) {
       const { family, faction, windows } = pickWeighted(candidates, rng)
       const serial = pickSerialInWindows(windows, rng)
       const ref = `ALT_${setCode}_B_${family}_U_${serial}`
-      if (!seen.has(ref)) {
+      if (!seen.has(ref) && isAllowed(ref)) {
         seen.add(ref)
         refs.push(ref)
         break

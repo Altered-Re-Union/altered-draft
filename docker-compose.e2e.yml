@@ -1,0 +1,27 @@
+# Throwaway Postgres for the Playwright suite (`npm run test:e2e` / `make e2e`). Mirrors the
+# integration one (docker-compose.test.yml) on another port so both can run side by side,
+# on postgres:17 like dev and prod. Started and removed by tests/e2e/db-stack.mjs, the
+# suite's first webServer (kept between runs with E2E_KEEP_STACK=1, removed by `make e2e-down`).
+# Own project name: the dev stack (docker-compose.yml) lives in the same folder and would
+# otherwise share the `altered-draft` project and its network.
+name: altered-draft-e2e
+services:
+  postgres-e2e:
+    image: postgres:17-alpine
+    restart: "no"
+    environment:
+      POSTGRES_DB: altered_draft_e2e
+      POSTGRES_USER: altered_draft_e2e
+      POSTGRES_PASSWORD: altered_draft_e2e
+    ports:
+      - '55433:5432'
+    volumes:
+      - ./draft-rooms-schema.sql:/docker-entrypoint-initdb.d/01-draft-rooms-schema.sql:ro
+      - ./sealed-pools-schema.sql:/docker-entrypoint-initdb.d/02-sealed-pools-schema.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U altered_draft_e2e -d altered_draft_e2e']
+      interval: 1s
+      timeout: 1s
+      retries: 30
+    tmpfs:
+      - /var/lib/postgresql/data # throwaway data dir — no volume to clean up between runs

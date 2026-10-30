@@ -1,64 +1,31 @@
 // Regenerates a tournament sealed pool from a sealed_pools row (poolStore.js) — the
 // nonce/binding model, replacing the earlier time-window-based event lookup.
-import { hashSeed, mulberry32 } from '../../src/lib/prng.js'
-import { generateTournamentSealedPool } from '../../src/lib/packGenerator.js'
-import { pickDeterministicUniques } from '../../src/lib/uniqueFactionRanges.js'
+import { buildPool } from '../../src/lib/poolBuilder.js'
+import { configFromLegacyFormat } from '../../src/lib/tournamentConfig.js'
 import { fetchSet, fetchUniques, isUniqueRef } from '../../src/lib/cardData.js'
-import { buildPoolSeedString, updateDeckSummary } from '../../src/lib/poolStore.js'
+import { updateDeckSummary } from '../../src/lib/poolStore.js'
 import { buildRandomDeck } from '../../src/lib/randomDeck.js'
 import { endpoints } from '../../src/lib/endpoints.js'
 
 /**
- * Regenerates the deterministic pool for a sealed_pools row. Returns both the flat
- * `counts` (ref -> count, incl. the appended heroes when `heroes_in_pool` is false, and the
- * `guaranteed_uniques` handed out outside the boosters) and the `boosters` (the 7 packs, 12
- * refs each, with the `unique_count` in-booster uniques already injected into rare slots —
- * NO heroes and NO guaranteed uniques, since those aren't opened in boosters). The booster
- * structure lets the frontend show a pack-by-pack view; the flat counts drive the full-pool
- * deckbuilder + validation.
- * @param {string} sub - verified Keycloak sub (must be the row's owner)
- * @param {object} poolRow - a row from sealed_pools
- * @returns {Promise<{ counts: Record<string, number>, boosters: string[][] }>}
+ * LEGACY rows only (created before pools were stored): regenerates the pool from the
+ * row's snapshot columns + nonce. Bit-for-bit the pre-storage behaviour, via poolBuilder.
+ * Used by loadPool() below and by scripts/freeze-sealed-pools.mjs.
  */
 export async function regeneratePool(sub, poolRow) {
-  const seedStr = buildPoolSeedString(sub, poolRow)
-  const inBooster = poolRow.unique_count ?? 0       // uniques that replace a rare slot in a booster
-  const outside = poolRow.guaranteed_uniques ?? 0   // extra uniques appended OUTSIDE the boosters
-  // Draw every unique from one deterministic stream, then split: the first `inBooster` are
-  // injected into rare slots, the rest are the guaranteed uniques handed out alongside the
-  // boosters (like appended heroes). pickDeterministicUniques dedupes, so the two groups
-  // never overlap.
-  const allUniques = pickDeterministicUniques(poolRow.set_code, mulberry32(hashSeed(`${seedStr}#uniques`)), {
-    uniqueCount: inBooster + outside,
-    evenFactions: !!poolRow.even_factions,
-  })
-  const boosterUniques = allUniques.slice(0, inBooster)
-  const outsideUniques = allUniques.slice(inBooster)
-
-  const cards = await fetchSet(poolRow.set_code)
-  const boosters = generateTournamentSealedPool(cards, mulberry32(hashSeed(seedStr)), {
-    uniqueRefs: boosterUniques,
-    includeHeroes: poolRow.heroes_in_pool,
-  })
-  const counts = {}
-  for (const ref of boosters.flat()) counts[ref] = (counts[ref] ?? 0) + 1
-
-  // Guaranteed uniques belong to the pool but to no specific booster (same treatment as the
-  // appended heroes below) — they show up in the full pool, not in any pack-by-pack view.
-  for (const ref of outsideUniques) counts[ref] = (counts[ref] ?? 0) + 1
-
-  if (!poolRow.heroes_in_pool) {
-    for (const card of cards) {
-      if (card.cardType === 'HERO') counts[card.reference] = (counts[card.reference] ?? 0) + 1
-    }
-  }
-
-  return { counts, boosters }
+  const { cards, boosters } = await buildPool(sub, { config: configFromLegacyFormat(poolRow), nonce: poolRow.nonce })
+  return { counts: cards, boosters }
 }
 
-/** Backward-compatible: just the flat counts (used by the deck-validation / summary callers). */
-export async function regeneratePoolCounts(sub, poolRow) {
-  return (await regeneratePool(sub, poolRow)).counts
+/** The pool's contents: stored on the row when present, else regenerated (legacy rows). */
+export async function loadPool(sub, poolRow) {
+  if (poolRow.cards) return { counts: poolRow.cards, boosters: poolRow.boosters ?? [] }
+  return regeneratePool(sub, poolRow)
+}
+
+/** Just the flat counts (deck-validation / summary callers). */
+export async function loadPoolCounts(sub, poolRow) {
+  return (await loadPool(sub, poolRow)).counts
 }
 
 /**
@@ -224,7 +191,7 @@ export async function ensureDeck(sub, poolRow, bearerToken) {
     }
   }
 
-  const { counts } = await regeneratePool(sub, poolRow)
+  const { counts } = await loadPool(sub, poolRow)
   const cardMap = await buildCardMap(poolRow.set_code, Object.keys(counts))
   const deckCounts = buildRandomDeck(counts, cardMap)
   const refs = Object.entries(deckCounts).flatMap(([ref, qty]) => Array(qty).fill(ref))
@@ -276,12 +243,12 @@ export async function ensureDeck(sub, poolRow, bearerToken) {
 
 /**
  * Shapes a pool row + its regenerated cards into the response the frontend consumes.
- * Pass `boosters` (from regeneratePool) to expose the pack-by-pack structure; omit it for
+ * Pass `boosters` (from loadPool) to expose the pack-by-pack structure; omit it for
  * callers that only need the flat pool (deck validation / summary updates). Pass
  * `gamesPlayed` (from poolStore.js's countGamesPlayed) when the caller has already fetched
  * it; omitted callers just don't get the field, no extra query forced on every response.
  */
-export function poolResponse(poolRow, cardCounts, boosters = null, gamesPlayed = null) {
+export function poolResponse(poolRow, cardCounts, boosters = null, gamesPlayed = null, extra = {}) {
   return {
     id: poolRow.id,
     kind: poolRow.kind,
@@ -293,6 +260,8 @@ export function poolResponse(poolRow, cardCounts, boosters = null, gamesPlayed =
     cards: cardCounts,
     ...(boosters ? { boosters } : {}),
     ...(gamesPlayed !== null ? { gamesPlayed } : {}),
+    ...(poolRow.tournament_ref ? { tournamentRef: poolRow.tournament_ref } : {}),
+    ...(extra.tournament ? { tournament: extra.tournament } : {}),
     deck: poolRow.deck_id
       ? {
           id: poolRow.deck_id,
