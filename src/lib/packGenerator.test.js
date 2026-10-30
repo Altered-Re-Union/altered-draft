@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   generateAllPacks, generateChaosPacks, generateStructuredPacks,
   generateCubeDraftPacks, generateCubeRecipePacks, dealHeroSlots,
-  generateTournamentSealedPool, generatePacksFromPool,
+  generateTournamentSealedPool, generatePacksFromPool, quotas,
 } from './packGenerator.js'
 import { FACTIONS } from './cardData.js'
 import { mulberry32 } from './prng.js'
@@ -207,5 +207,32 @@ describe('generatePacksFromPool', () => {
     const packs = generatePacksFromPool(refs, 2, 4)
     expect(packs).toHaveLength(8)
     for (const pack of packs) expect(pack).toHaveLength(12)
+  })
+})
+
+describe('quotas', () => {
+  it('apportions exactly by largest remainder', () => {
+    expect(quotas({ CORE: 1, BISE: 2 }, 63, mulberry32(1))).toEqual({ CORE: 21, BISE: 42 })
+    expect(quotas({ CORE: 1, BISE: 2, CYCLONE: 1 }, 21, mulberry32(1))).toEqual({ CORE: 5, BISE: 11, CYCLONE: 5 })
+  })
+  it('always sums to n and keeps every set, zero included', () => {
+    const q = quotas({ CORE: 1, ALIZE: 1, BISE: 1, CYCLONE: 1, DUSTER: 1, EOLE: 1 }, 2, mulberry32(3))
+    expect(Object.values(q).reduce((a, b) => a + b, 0)).toBe(2)
+    expect(Object.keys(q)).toEqual(['CORE', 'ALIZE', 'BISE', 'CYCLONE', 'DUSTER', 'EOLE'])
+    expect(Object.values(q).filter(v => v === 1)).toHaveLength(2)
+  })
+  it('breaks remainder ties with the rng, not with the set order', () => {
+    const winners = new Set()
+    for (let seed = 1; seed <= 30; seed++) {
+      const q = quotas({ CORE: 1, ALIZE: 1, BISE: 1, CYCLONE: 1, DUSTER: 1, EOLE: 1 }, 1, mulberry32(seed))
+      winners.add(Object.keys(q).find(k => q[k] === 1))
+    }
+    expect(winners.size).toBeGreaterThan(2)
+    expect(quotas({ CORE: 1, BISE: 1 }, 1, mulberry32(9))).toEqual(quotas({ BISE: 1, CORE: 1 }, 1, mulberry32(9)))
+  })
+  it('handles set codes unknown to SETS, after the known ones in insertion order', () => {
+    const q = quotas({ S2: 1, S1: 1, CORE: 2 }, 4, mulberry32(1))
+    expect(Object.keys(q)).toEqual(['CORE', 'S2', 'S1'])
+    expect(q).toEqual({ CORE: 2, S2: 1, S1: 1 })
   })
 })
