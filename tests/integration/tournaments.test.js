@@ -814,12 +814,53 @@ describe('mono-faction tournaments', () => {
     try {
       const res = await call(bgaDecklist, { query: { tournamentId: tn.bga_tournament_id, tournamentName: 'x', gameId: 'g1' } })
       expect(res.statusCode).toBe(200)
-      expect(fetchSet.mock.calls.map(c => c[0])).toEqual(expect.arrayContaining(['CYCLONE', 'EOLE'])) // the mock's NONCE_ ref adds a harmless extra call
+      expect(fetchSet.mock.calls.map(c => c[0])).toEqual(expect.arrayContaining(['CYCLONE', 'EOLE'])) // the mock's NONCE_ ref is not a known set: never fetched
       for (const c of fetchSet.mock.calls) expect(c).toHaveLength(1) // never the Array.map index as the language
       const pool = (await query("SELECT cards FROM sealed_pools WHERE sub = 'frank'")).rows[0]
       expect(posted.deckCards.length).toBeGreaterThan(0)
       for (const { cardReference } of posted.deckCards) expect(Object.keys(pool.cards)).toContain(cardReference)
     } finally {
+      vi.unstubAllGlobals()
+      vi.mocked(verifySub).mockResolvedValue(null)
+    }
+  })
+
+  it('BGA path: a deck holding a stray ref (unknown set, malformed) is still reconciled, not "trusting cache"', async () => {
+    const tn = await mkTournament({ name: 'Stray cup', bgaTournamentId: '747474' })
+    const pool = await getOrCreateTournamentPool('gina', tn, { createdBy: 'bga' })
+    await query("UPDATE sealed_pools SET deck_id = 'deck-gina', deck_card_quantity = 3 WHERE id = $1", [pool.id])
+    const { fetchSet, SETS } = await import('../../src/lib/cardData.js')
+    const base = fetchSet.getMockImplementation()
+    // Like the real community DB: a set it does not serve (or no set at all) is a fetch error.
+    fetchSet.mockImplementation(async code => {
+      if (!SETS.some(s => s.code === code)) throw new Error(`HTTP 404 for ${code}`)
+      return base(code)
+    })
+    vi.mocked(verifySub).mockResolvedValue('gina')
+    const patches = []
+    vi.stubGlobal('fetch', vi.fn(async (url, init = {}) => {
+      const method = init.method ?? 'GET'
+      if (method === 'PATCH') { patches.push(JSON.parse(init.body)); return { ok: true, status: 200, json: async () => ({}) } }
+      if (method === 'GET' && new URL(url).pathname === '/api/decks/deck-gina') {
+        return { ok: true, status: 200, json: async () => ({
+          id: 'deck-gina', name: 'Stray cup', format: 'standard', isDraft: false,
+          deckCards: [
+            { cardReference: 'ALT_CYCLONE_B_AX_01_C', quantity: 1 },
+            { cardReference: 'ALT_DUSTEROP_B_AX_98_C', quantity: 1 },
+            { cardReference: 'GARBAGE', quantity: 1 },
+          ],
+        }) }
+      }
+      return { ok: false, status: 500, json: async () => ({}) }
+    }))
+    try {
+      const res = await call(bgaDecklist, { query: { tournamentId: '747474', tournamentName: 'x', gameId: 'g1' } })
+      expect(res.statusCode).toBe(200)
+      expect(patches).toEqual([{ format: 'sealed', isDraft: true, name: 'Invalid Stray cup' }])
+      const row = (await query('SELECT deck_name FROM sealed_pools WHERE id = $1', [pool.id])).rows[0]
+      expect(row.deck_name).toBe('Invalid Stray cup')
+    } finally {
+      fetchSet.mockImplementation(base)
       vi.unstubAllGlobals()
       vi.mocked(verifySub).mockResolvedValue(null)
     }

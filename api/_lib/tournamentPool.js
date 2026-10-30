@@ -2,7 +2,7 @@
 // nonce/binding model, replacing the earlier time-window-based event lookup.
 import { buildPool } from '../../src/lib/poolBuilder.js'
 import { configFromLegacyFormat } from '../../src/lib/tournamentConfig.js'
-import { fetchSet, fetchUniques, isUniqueRef } from '../../src/lib/cardData.js'
+import { fetchSet, fetchUniques, isUniqueRef, SETS } from '../../src/lib/cardData.js'
 import { updateDeckSummary } from '../../src/lib/poolStore.js'
 import { buildRandomDeck } from '../../src/lib/randomDeck.js'
 import { setCodeFromRef } from '../../src/lib/assets.js'
@@ -33,9 +33,14 @@ export async function loadPoolCounts(sub, poolRow) {
  * Card lookup (reference -> normalized card) for an arbitrary ref list drawn from a pool's
  * card counts. The sets present in the refs cover everything except uniques, which get resolved
  * individually — mirrors TournamentPoolView.jsx's own pool-load cardMap build.
+ * Only codes known to SETS are fetched: deck refs are user-editable on decks-api, and a
+ * malformed ref or a set the community DB does not serve would make fetchSet throw and skip
+ * the whole deck reconciliation (the stray card just stays out of the map). A failure on a
+ * known set still throws (transient error, handled by the callers).
  */
 async function buildCardMap(refs) {
   const setCodes = [...new Set(refs.filter(r => !isUniqueRef(r)).map(setCodeFromRef))]
+    .filter(code => SETS.some(s => s.code === code))
   const sets = await Promise.all(setCodes.map(code => fetchSet(code)))
   const map = {}
   for (const cards of sets) for (const c of cards) map[c.reference] = c
