@@ -1211,9 +1211,10 @@ Any logged-in Re:Union account can now **declare a sealed tournament** (name, de
 mandatory BGA link, start, optional end, sealed configuration) instead of a developer
 changing `current_format`. Design: [`user-tournaments-spec.md`](user-tournaments-spec.md);
 implementation plan: [`user-tournaments-lot1-plan.md`](user-tournaments-lot1-plan.md). Lot 1
-covers `source.type = 'set'` only (7 boosters of one visible set, heroes in boosters or free
+covers `source.type = 'set'` (7 boosters of one visible set, heroes in boosters or free
 choice, exact uniques inside boosters, guaranteed uniques outside, uniques restricted to one
-faction, even factions, ban list).
+faction, even factions, ban list); V2 (§14.6) adds `source.type = 'faction'`, mono-faction
+sealed over weighted sets.
 
 ### 14.1 Stored pools
 
@@ -1327,6 +1328,52 @@ organizer's declaration (or, for a released pool, straight to that pool, step 1 
 detached row stays as a read-only trace (status `detached`, any PATCH → 409
 `tournament_detached`, DELETE still allowed). The confirmation re-reads the pool count at click
 time and states it, and says which pools are kept.
+
+### 14.6 Mono-faction sealed (V2)
+
+Format: 7 boosters in which **every card of the pool belongs to one chosen faction**, drawn over
+one or several sets with a weight each. It removes the colour lottery of a classic sealed.
+Design: `docs/superpowers/specs/2026-10-30-mono-faction-sealed-design.md` (local file, not in git).
+
+**Config.** `source: { type: 'faction', faction, sets: { CODE: 1..3 }, boosters: 7 }`, validated in
+`src/lib/tournamentConfig.js` (`SOURCE_TYPES = ['set', 'faction']`, `MAX_SET_WEIGHT = 3`,
+`configSetCodes`). Zero weights are dropped; COREKS is refused; error codes `source.type`,
+`source.faction`, `source.sets`. For this source `uniques.faction` is forced to the source faction
+and `evenFactions` to `false`; `uniques.unsupportedSet` is raised only when the sets are otherwise
+valid but none of the included ones has faction-range data. `legacyColumnsFromConfig` writes
+`set_code: null`.
+
+**Generation.** `quotas(weights, n, rng)` (`src/lib/packGenerator.js`) splits the 7 boosters over
+the sets by **largest remainder**, ties broken by shuffling the tied group with the pool rng, so
+the split is exact and deterministic per pool. `generateFactionSealedPool` then builds each
+booster from one set: de-duplication happens **within a booster only**, reprints of the same
+card in different sets stay distinct, and out-of-faction `_R2` prints of the faction are included
+(faction = `card.faction`, never the ref letters). `buildPool` routes to `buildFactionPool`
+(`src/lib/poolBuilder.js`); the `set` branch and its golden digest are untouched.
+
+**Heroes.** Through the existing `heroes` option: `packs` = one hero per booster, distinct until the
+pool of faction heroes is exhausted; `free` = every hero of that faction in the included sets.
+
+**Uniques.** Drawn only from included sets that have faction-range data (**NEJ is excluded**),
+split between those sets with the same quotas, always of the source faction.
+
+**Data and server.** `sealed_pools.set_code` becomes nullable (idempotent `alter` in
+`sealed-pools-schema.sql`); faction pools store `NULL`. A pool can now span several sets, so
+`buildCardMap(refs)` (`api/_lib/tournamentPool.js`) loads every set present in the refs rather than
+one set; the pool page does the same client-side and skips the single-set booster cover for mixed
+pools.
+
+**UI.** The tournament form's Cards step has a source switch "One set" / "Mono-faction mix": faction
+pills, a weight stepper per set (x0 to x3) with its share in %, and a fixed-faction line for the
+uniques. Public summary: `7 boosters · [icon] Axiom mono-faction · all sets`, or
+`... · SKY, ROC x2, NEJ` when weights are not uniform.
+
+**Recette.** `docs/tournaments/acceptance-mono-faction-sealed.html` (step ids `mf-<group>-<slug>`,
+11 replayed by `tests/e2e/specs/faction-sealed.spec.js`). `scripts/e2e-acceptance-coverage.mjs`
+reads both acceptance pages (`ACCEPTANCE_PAGES`) and refuses an id present in two pages.
+
+**Merge.** Kept as a draft PR: not merged before the lot 1 beta is closed and #22 (unmasking) is
+merged. Rebase then; `README.md`, `index.html` and `CLAUDE.md` are shared with #22.
 
 ---
 
