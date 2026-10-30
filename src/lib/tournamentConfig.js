@@ -8,6 +8,14 @@ export const CONFIG_VERSION = 1
 export const SEALED_BOOSTERS = 7
 export const MAX_UNIQUES = 7
 export const HERO_MODES = ['packs', 'free']
+export const SOURCE_TYPES = ['set', 'faction']
+export const MAX_SET_WEIGHT = 3
+
+/** The set codes a config draws from (`SETS` order). */
+export function configSetCodes(config) {
+  const src = config.source
+  return src.type === 'faction' ? Object.keys(src.sets) : [src.setCode]
+}
 
 function toInt(value, fallback) {
   if (value === undefined || value === null || value === '') return fallback
@@ -26,9 +34,28 @@ export function validateTournamentConfig(input) {
   if (c.format !== undefined && c.format !== 'sealed') errors.push('format')
 
   const src = c.source && typeof c.source === 'object' ? c.source : {}
-  if (src.type !== 'set') errors.push('source.type')
-  const set = SETS.find(s => s.code === src.setCode && !s.hidden) ?? null
-  if (!set) errors.push('source.setCode')
+  if (!SOURCE_TYPES.includes(src.type)) errors.push('source.type')
+  const isFaction = src.type === 'faction'
+  let set = null
+  let factionSets = {}
+  if (isFaction) {
+    if (!FACTIONS.includes(src.faction)) errors.push('source.faction')
+    const raw = src.sets && typeof src.sets === 'object' && !Array.isArray(src.sets) ? src.sets : null
+    let setsOk = !!raw
+    if (raw) {
+      const visible = SETS.filter(s => !s.hidden)
+      if (Object.keys(raw).some(code => !visible.some(s => s.code === code))) setsOk = false
+      for (const { code } of visible) {
+        const w = toInt(raw[code], 0)
+        if (w === null || w < 0 || w > MAX_SET_WEIGHT) setsOk = false
+        else if (w > 0) factionSets[code] = w
+      }
+    }
+    if (!setsOk || !Object.keys(factionSets).length) errors.push('source.sets')
+  } else if (src.type === 'set') {
+    set = SETS.find(s => s.code === src.setCode && !s.hidden) ?? null
+    if (!set) errors.push('source.setCode')
+  }
   if (src.boosters !== undefined && src.boosters !== SEALED_BOOSTERS) errors.push('source.boosters')
 
   if (!HERO_MODES.includes(c.heroes)) errors.push('heroes')
@@ -40,20 +67,24 @@ export function validateTournamentConfig(input) {
   if (guaranteed === null || guaranteed < 0 || guaranteed > MAX_UNIQUES) errors.push('uniques.guaranteed')
   if (u.evenFactions !== undefined && typeof u.evenFactions !== 'boolean') errors.push('uniques.evenFactions')
   if (u.faction !== undefined && u.faction !== null && !FACTIONS.includes(u.faction)) errors.push('uniques.faction')
-  if (set && ((inBoosters ?? 0) > 0 || (guaranteed ?? 0) > 0) && !hasFactionRanges(set.code)) errors.push('uniques.unsupportedSet')
+  const wantsUniques = (inBoosters ?? 0) > 0 || (guaranteed ?? 0) > 0
+  if (set && wantsUniques && !hasFactionRanges(set.code)) errors.push('uniques.unsupportedSet')
+  if (isFaction && !errors.some(e => e.startsWith('source.')) && wantsUniques && !Object.keys(factionSets).some(hasFactionRanges)) errors.push('uniques.unsupportedSet')
 
   if (c.excludeBanlist !== undefined && typeof c.excludeBanlist !== 'boolean') errors.push('excludeBanlist')
 
   if (errors.length) return { ok: false, errors, config: null }
   const uniqueTotal = inBoosters + guaranteed
-  const faction = uniqueTotal > 0 ? u.faction ?? null : null
+  const faction = isFaction ? (uniqueTotal > 0 ? src.faction : null) : uniqueTotal > 0 ? u.faction ?? null : null
   return {
     ok: true,
     errors: [],
     config: {
       v: CONFIG_VERSION,
       format: 'sealed',
-      source: { type: 'set', setCode: set.code, boosters: SEALED_BOOSTERS },
+      source: isFaction
+        ? { type: 'faction', faction: src.faction, sets: factionSets, boosters: SEALED_BOOSTERS }
+        : { type: 'set', setCode: set.code, boosters: SEALED_BOOSTERS },
       heroes: c.heroes,
       // Even factions only means something from 2 uniques on and without a single faction;
       // a stale "true" would still change the draw (evenFactionTargets consumes the rng) and
@@ -83,7 +114,7 @@ export function configFromLegacyFormat(row) {
 /** The legacy snapshot columns of `sealed_pools` for a config (they stay NOT NULL in lot 1). */
 export function legacyColumnsFromConfig(config) {
   return {
-    set_code: config.source.setCode,
+    set_code: config.source.type === 'set' ? config.source.setCode : null,
     unique_count: config.uniques.inBoosters,
     even_factions: config.uniques.evenFactions,
     heroes_in_pool: config.heroes === 'packs',
