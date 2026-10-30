@@ -1034,9 +1034,12 @@ and (unverified, label only) altered-bga-api's request logs.
 
 **altered-draft**: `make dev` starts Postgres (applies both schemas, incl. the `current_format`
 seed and the `tournaments` table), the API on `:8080` and Vite on `:5173`. Tournament pages need Keycloak + decks-api
-from the sibling `altered-dev-environment` repo (`./run.sh`; users `alice`/`bob`,
-password `TestPassword1234`; Chrome/Firefox only). `make dev` registers the `altered-draft`
-Keycloak client in that realm (re-run `make keycloak-client` after a Keycloak restart).
+from the sibling `altered-dev-environment` repo, which `make dev` starts when it isn't
+answering (`aspire run`, detached; `make down` stops the whole stack). Users `alice`/`bob` come with
+the realm, `carol@example.test` is created by `make dev`; password `TestPassword1234`;
+Chrome/Firefox only. `make dev` also registers the `altered-draft` Keycloak client in that
+realm and ends with a summary of URLs and accounts (re-run `make keycloak-client
+keycloak-users`, or `make dev`, after a Keycloak restart).
 decks-api calls altered-draft back through `host.docker.internal:8080` (`ALTERED_DRAFT_URL`
 set by the dev-env AppHost).
 
