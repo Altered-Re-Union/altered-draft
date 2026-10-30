@@ -494,6 +494,8 @@ export default {
     poolsPreparedMany: '{{n}} pools préparés',
     timezoneNote: 'Horaires affichés dans votre fuseau ({{tz}}).',
     summaryBoosters: '{{n}} boosters · {{set}}',
+    summaryBoostersFaction: '{{n}} boosters · mono-faction {{faction}}',
+    summaryAllSets: 'toutes les extensions',
     summaryUniquesInOne: '{{n}} unique dans les boosters',
     summaryUniquesInMany: '{{n}} uniques dans les boosters',
     summaryUniquesOutOne: '{{n}} unique garantie',

@@ -498,6 +498,8 @@ export default {
     poolsPreparedMany: '{{n}} pools prepared',
     timezoneNote: 'Times are shown in your timezone ({{tz}}).',
     summaryBoosters: '{{n}} boosters · {{set}}',
+    summaryBoostersFaction: '{{n}} boosters · {{faction}} mono-faction',
+    summaryAllSets: 'all sets',
     summaryUniquesInOne: '{{n}} unique in boosters',
     summaryUniquesInMany: '{{n}} uniques in boosters',
     summaryUniquesOutOne: '{{n}} guaranteed unique',
