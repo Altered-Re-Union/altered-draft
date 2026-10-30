@@ -31,7 +31,7 @@ function preloadImages(refs, cardMap, onDone) {
  * @param {string[][]} packs - packs to reveal in order; when `hasBonus`, the LAST one is the
  *   guaranteed-unique "8th booster".
  */
-export default function PackReveal({ packs, hasBonus = false, cardMap, deck, poolCounts, onAdd, onRemove, onClose }) {
+export default function PackReveal({ packs, hasBonus = false, noCover = false, cardMap, deck, poolCounts, onAdd, onRemove, onClose }) {
   const [index, setIndex] = useState(0)
   const [ready, setReady] = useState(false)
   const packsRef = useRef(packs)
@@ -82,7 +82,7 @@ export default function PackReveal({ packs, hasBonus = false, cardMap, deck, poo
   // straight-to-cards when the set has no pack photo yet (see BOOSTER_COVERS in assets.js).
   // The pack print itself is per-language (the box literally says "ENGLISH"/"FRANÇAIS"), so
   // it follows the UI language rather than the (currently EN-only) card data language.
-  const coverImage = isBonusPack ? null : boosterCoverFor(setCodeFromRef(currentPack[0]), lang)
+  const coverImage = (isBonusPack || noCover) ? null : boosterCoverFor(setCodeFromRef(currentPack[0]), lang)
   // label/sublabel surface the same "Booster N/total" heading shown below — the always-open
   // full-screen zoom otherwise covers it, per PackReveal's own "Pack heading" block.
   const zoomCover = coverImage ? {
