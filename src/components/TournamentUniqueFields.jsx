@@ -7,9 +7,11 @@ import FactionPills from './FactionPills.jsx'
 // The tournament-only unique knobs (spec §5.1 `uniques`): exact uniques inside boosters,
 // guaranteed uniques outside, one faction for all of them, even factions. `uniqueSupport` is false for sets without
 // faction-range data (FUGUE): both counts are forced to 0 and the controls disabled.
-// `fixedFaction` (a mono-faction source): every unique is of that faction, so the faction
-// choice and "even factions" give way to one line naming it.
-export default function TournamentUniqueFields({ uniques, onChange, uniqueSupport = true, disabled = false, fixedFaction = null }) {
+// `factionSource` (a mono-faction source): every unique is of the source's faction
+// (`fixedFaction`, null until picked), so the faction choice and "even factions" give way
+// to one line naming it. Nothing is written into `uniques` for it: the form applies the
+// source faction when it builds the config, so the "One set" source keeps its own choice.
+export default function TournamentUniqueFields({ uniques, onChange, uniqueSupport = true, disabled = false, factionSource = false, fixedFaction = null }) {
   const { t } = useLang()
   const off = disabled || !uniqueSupport
   const total = (uniques.inBoosters ?? 0) + (uniques.guaranteed ?? 0)
@@ -20,7 +22,6 @@ export default function TournamentUniqueFields({ uniques, onChange, uniqueSuppor
     // a faction only with at least one unique (the server drops them too).
     if (nextTotal < 2 || next.faction) next.evenFactions = false
     if (nextTotal === 0) next.faction = null
-    else if (fixedFaction) { next.faction = fixedFaction; next.evenFactions = false }
     onChange(next)
   }
   const faction = uniqueSupport && total > 0 ? uniques.faction ?? null : null
@@ -29,7 +30,7 @@ export default function TournamentUniqueFields({ uniques, onChange, uniqueSuppor
   return (
     <div className="space-y-3">
       <p className="text-sm text-ink2">{t('tournaments.tournamentUniquesTitle')}</p>
-      {!uniqueSupport && <p className="text-xs text-accent-ink">{t('tournaments.uniquesUnsupported')}</p>}
+      {!uniqueSupport && <p className="text-xs text-accent-ink">{t(factionSource ? 'tournaments.uniquesUnsupportedSets' : 'tournaments.uniquesUnsupported')}</p>}
       <div className="flex items-center justify-between gap-3">
         <span className="text-sm text-ink2">{t('tournaments.uniquesInBoosters')}</span>
         <Stepper value={uniqueSupport ? uniques.inBoosters : 0} onChange={v => set({ inBoosters: v })} disabled={off} testId="uniques-in-boosters" />
@@ -38,13 +39,15 @@ export default function TournamentUniqueFields({ uniques, onChange, uniqueSuppor
         <span className="text-sm text-ink2">{t('tournaments.uniquesGuaranteed')}</span>
         <Stepper value={uniqueSupport ? uniques.guaranteed : 0} onChange={v => set({ guaranteed: v })} disabled={off} testId="uniques-guaranteed" />
       </div>
-      {fixedFaction ? (
+      {factionSource ? (
         <p data-testid="uniques-fixed-faction" className="flex flex-wrap items-center gap-1.5 text-sm text-ink2">
           {t('tournaments.uniquesFixedFaction')}
-          <span className="inline-flex items-center gap-1 text-ink">
-            {FACTION_ICONS[fixedFaction] && <img src={FACTION_ICONS[fixedFaction]} alt="" className="w-3.5 h-3.5 object-contain" />}
-            {FACTION_NAMES[fixedFaction]}
-          </span>
+          {fixedFaction ? (
+            <span className="inline-flex items-center gap-1 text-ink">
+              {FACTION_ICONS[fixedFaction] && <img src={FACTION_ICONS[fixedFaction]} alt="" className="w-3.5 h-3.5 object-contain" />}
+              {FACTION_NAMES[fixedFaction]}
+            </span>
+          ) : <span className="text-faint">{t('tournaments.uniquesFactionPending')}</span>}
         </p>
       ) : (
         <>

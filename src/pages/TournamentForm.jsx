@@ -52,7 +52,7 @@ const FIELD_LABEL_KEY = {
   faction: 'tournaments.sectionCards', sets: 'tournaments.sectionCards', uniques: 'tournaments.tournamentUniquesTitle',
 }
 
-function issueMessage({ field, code }, t) {
+function issueMessage({ field, code }, t, factionSource = false) {
   switch (field) {
     case 'name': return t('tournaments.errName')
     case 'description': return t('tournaments.errDescription')
@@ -63,7 +63,7 @@ function issueMessage({ field, code }, t) {
     case 'faction': return t('tournaments.errSelectFaction')
     case 'sets': return t('tournaments.errSelectSets')
     case 'uniques':
-      if (code === 'uniques.unsupportedSet') return t('tournaments.uniquesUnsupported')
+      if (code === 'uniques.unsupportedSet') return t(factionSource ? 'tournaments.uniquesUnsupportedSets' : 'tournaments.uniquesUnsupported')
       if (code === 'uniques.faction') return t('tournaments.errUniquesFaction')
       return t('tournaments.errGeneric', { msg: code })
     default: return t('tournaments.errGeneric', { msg: code })
@@ -279,7 +279,7 @@ export default function TournamentForm() {
         focusField('bgaUrl')
       } else if (err.status === 400 && err.data?.fields && Object.keys(err.data.fields).length) {
         const first = Object.keys(err.data.fields)[0]
-        setServerError(issueMessage({ field: first, code: err.data.fields[first] }, t))
+        setServerError(issueMessage({ field: first, code: err.data.fields[first] }, t, isFaction))
         focusField(first)
       } else if (err.status === 409 && err.data?.error === 'tournament_locked') setServerError(t('tournaments.errLocked'))
       else if (err.status === 429) setServerError(t('tournaments.errTooMany'))
@@ -293,10 +293,10 @@ export default function TournamentForm() {
   const inputCls = invalid => `w-full bg-surface2 border rounded-lg px-3 py-2 text-sm focus:outline-none ${invalid ? 'border-danger focus:border-danger' : 'border-line focus:border-accent'}`
   const ErrorLine = ({ field }) => {
     const issue = fieldIssue(field)
-    return issue ? <p className="text-xs text-danger mt-1" role="alert">{issueMessage(issue, t)}</p> : null
+    return issue ? <p className="text-xs text-danger mt-1" role="alert">{issueMessage(issue, t, isFaction)}</p> : null
   }
   const submitLabel = saving ? t('tournaments.saving') : isEdit ? t('tournaments.submitSave') : t('tournaments.submitCreate')
-  const issuesText = issues.map(i => `${t(FIELD_LABEL_KEY[i.field])} — ${issueMessage(i, t)}`)
+  const issuesText = issues.map(i => `${t(FIELD_LABEL_KEY[i.field])} — ${issueMessage(i, t, isFaction)}`)
 
   if (!authLoading && !user) {
     return (
@@ -410,7 +410,7 @@ export default function TournamentForm() {
               showBanlist
             />
             <TournamentUniqueFields uniques={uniques} onChange={setUniques} uniqueSupport={uniqueSupport} disabled={configFrozen || saving}
-              fixedFaction={isFaction ? faction : null} />
+              factionSource={isFaction} fixedFaction={isFaction ? faction : null} />
           </fieldset>
         </section>
 
