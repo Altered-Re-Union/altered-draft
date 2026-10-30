@@ -36,7 +36,7 @@ export async function loadPoolCounts(sub, poolRow) {
  */
 async function buildCardMap(refs) {
   const setCodes = [...new Set(refs.filter(r => !isUniqueRef(r)).map(setCodeFromRef))]
-  const sets = await Promise.all(setCodes.map(fetchSet))
+  const sets = await Promise.all(setCodes.map(code => fetchSet(code)))
   const map = {}
   for (const cards of sets) for (const c of cards) map[c.reference] = c
   const uniqueRefs = refs.filter(r => isUniqueRef(r) && !map[r])

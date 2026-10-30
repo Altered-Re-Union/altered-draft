@@ -127,6 +127,14 @@ describe('buildPool faction source', () => {
     expect(a).toEqual(b); expect(calls.slice(0, 2)).toEqual(['CORE', 'EOLE'])
     expect((await buildPool('sub', { config: factionConfig(), nonce: 'n2' }, { fetchCards })).boosters).not.toEqual(a.boosters)
   })
+  it('calls fetchCards with the set code only (no Array.map index leaking in as the language)', async () => {
+    const argLists = []
+    const fetchCards = async (...args) => { argLists.push(args); return fakeFactionSet(args[0]) }
+    await buildPool('sub', { config: factionConfig(), nonce: 'n1' }, { fetchCards })
+    expect(argLists.length).toBeGreaterThan(0)
+    for (const args of argLists) expect(args).toHaveLength(1)
+  })
+
   it('deals 7 boosters of 13 with exact per-set quotas and only faction cards', async () => {
     const { boosters, cards } = await buildPool('sub', { config: factionConfig(), nonce: 'n' }, { fetchCards })
     expect(boosters).toHaveLength(7); for (const p of boosters) expect(p).toHaveLength(13)

@@ -88,7 +88,7 @@ async function buildFactionPool(sub, { config, nonce }, fetchCards) {
   const seedStr = buildPoolSeedString(sub, { ...legacyColumnsFromConfig(config), nonce })
 
   const cardsBySet = {}
-  const loaded = await Promise.all(setCodes.map(fetchCards))
+  const loaded = await Promise.all(setCodes.map(code => fetchCards(code)))
   setCodes.forEach((code, i) => {
     if (!loaded[i]?.length) throw new Error(`no cards loaded for ${code}`)
     cardsBySet[code] = config.excludeBanlist ? filterBanned(loaded[i]) : loaded[i]

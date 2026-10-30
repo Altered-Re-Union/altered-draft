@@ -815,6 +815,7 @@ describe('mono-faction tournaments', () => {
       const res = await call(bgaDecklist, { query: { tournamentId: tn.bga_tournament_id, tournamentName: 'x', gameId: 'g1' } })
       expect(res.statusCode).toBe(200)
       expect(fetchSet.mock.calls.map(c => c[0])).toEqual(expect.arrayContaining(['CYCLONE', 'EOLE'])) // the mock's NONCE_ ref adds a harmless extra call
+      for (const c of fetchSet.mock.calls) expect(c).toHaveLength(1) // never the Array.map index as the language
       const pool = (await query("SELECT cards FROM sealed_pools WHERE sub = 'frank'")).rows[0]
       expect(posted.deckCards.length).toBeGreaterThan(0)
       for (const { cardReference } of posted.deckCards) expect(Object.keys(pool.cards)).toContain(cardReference)
