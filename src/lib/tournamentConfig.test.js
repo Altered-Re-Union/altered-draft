@@ -162,4 +162,14 @@ describe('validateTournamentConfig faction source', () => {
     expect(configSetCodes(config)).toEqual(['CORE', 'BISE', 'FUGUE'])
     expect(configSetCodes({ source: { type: 'set', setCode: 'EOLE' } })).toEqual(['EOLE'])
   })
+  it('configSetCodes returns SETS order for a config read back from jsonb (keys by length then bytes)', () => {
+    const fromJsonb = { source: { type: 'faction', faction: 'AX', sets: { BISE: 1, CORE: 2, EOLE: 1, ALIZE: 1, FUGUE: 3 } } }
+    expect(configSetCodes(fromJsonb)).toEqual(['CORE', 'ALIZE', 'BISE', 'EOLE', 'FUGUE'])
+    expect(configSetCodes({ source: { type: 'faction', faction: 'AX', sets: { S2: 1, EOLE: 1, S1: 1 } } })).toEqual(['EOLE', 'S2', 'S1'])
+  })
+  it('ignores the client uniques faction / evenFactions for a faction source, even malformed', () => {
+    const r = validateTournamentConfig(factionCfg({ uniques: { inBoosters: 1, guaranteed: 0, faction: 'XX', evenFactions: 'yes' } }))
+    expect(r.ok).toBe(true)
+    expect(r.config.uniques).toEqual({ inBoosters: 1, guaranteed: 0, evenFactions: false, faction: 'AX' })
+  })
 })

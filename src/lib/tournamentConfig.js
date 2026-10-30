@@ -11,10 +11,19 @@ export const HERO_MODES = ['packs', 'free']
 export const SOURCE_TYPES = ['set', 'faction']
 export const MAX_SET_WEIGHT = 3
 
-/** The set codes a config draws from (`SETS` order). */
+/**
+ * The set codes a config draws from, in `SETS` order (codes unknown to SETS after, in their
+ * key order). Sorted here rather than trusted: a config read back from jsonb has its keys in
+ * jsonb order (length, then bytes), not in the order validateTournamentConfig wrote them.
+ */
 export function configSetCodes(config) {
   const src = config.source
-  return src.type === 'faction' ? Object.keys(src.sets) : [src.setCode]
+  if (src.type !== 'faction') return [src.setCode]
+  const rank = code => {
+    const i = SETS.findIndex(s => s.code === code)
+    return i === -1 ? SETS.length : i
+  }
+  return Object.keys(src.sets).sort((a, b) => rank(a) - rank(b))
 }
 
 function toInt(value, fallback) {
@@ -65,8 +74,11 @@ export function validateTournamentConfig(input) {
   const guaranteed = toInt(u.guaranteed, 0)
   if (inBoosters === null || inBoosters < 0 || inBoosters > MAX_UNIQUES) errors.push('uniques.inBoosters')
   if (guaranteed === null || guaranteed < 0 || guaranteed > MAX_UNIQUES) errors.push('uniques.guaranteed')
-  if (u.evenFactions !== undefined && typeof u.evenFactions !== 'boolean') errors.push('uniques.evenFactions')
-  if (u.faction !== undefined && u.faction !== null && !FACTIONS.includes(u.faction)) errors.push('uniques.faction')
+  // A faction source forces both (spec §5): the client's values are ignored, never an error.
+  if (!isFaction) {
+    if (u.evenFactions !== undefined && typeof u.evenFactions !== 'boolean') errors.push('uniques.evenFactions')
+    if (u.faction !== undefined && u.faction !== null && !FACTIONS.includes(u.faction)) errors.push('uniques.faction')
+  }
   const wantsUniques = (inBoosters ?? 0) > 0 || (guaranteed ?? 0) > 0
   if (set && wantsUniques && !hasFactionRanges(set.code)) errors.push('uniques.unsupportedSet')
   if (isFaction && !errors.some(e => e.startsWith('source.')) && wantsUniques && !Object.keys(factionSets).some(hasFactionRanges)) errors.push('uniques.unsupportedSet')
