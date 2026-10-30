@@ -37,7 +37,8 @@ export function configSummaryParts(config, t, tc) {
     const setsText = SETS.filter(s => weights[s.code] > 0)
       .map(s => `${SET_ABBREV[s.code] ?? s.code}${weights[s.code] > 1 ? ` ×${weights[s.code]}` : ''}`).join(', ')
     parts = [
-      { text: t('tournaments.summaryBoostersFaction', { n: config.source.boosters ?? 7, faction: FACTION_NAMES[f] ?? f }), icon: FACTION_ICONS[f] },
+      { text: t('tournaments.summaryBoostersCount', { n: config.source.boosters ?? 7 }) },
+      { text: t('tournaments.summaryFactionMix', { faction: FACTION_NAMES[f] ?? f }), icon: FACTION_ICONS[f] },
       { text: allSets ? t('tournaments.summaryAllSets') : setsText },
     ]
   } else {
@@ -55,7 +56,7 @@ export function configSummaryParts(config, t, tc) {
   return parts
 }
 
-/** One line: "7 boosters · Skybound Odyssey · 1 unique in boosters · 1 guaranteed unique · [icon] Axiom uniques · free hero choice". */
+/** One line: "7 boosters · [icon] Axiom mono-faction · all sets" for a faction source, else "7 boosters · Skybound Odyssey · 1 unique in boosters · 1 guaranteed unique · [icon] Axiom uniques · free hero choice". */
 export function ConfigSummary({ config, t, tc, className = '' }) {
   if (!config) return null
   return (
