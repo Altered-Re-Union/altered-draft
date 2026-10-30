@@ -246,7 +246,6 @@ details.callout summary { cursor: pointer; font-weight: 600; }
     <p>Design: <code>docs/superpowers/specs/2026-10-30-mono-faction-sealed-design.md</code> · doc: <code>docs/tournaments/README.md</code> §14. Do the groups in order: C, F and G reuse “Axiom mix” created in B.</p>
     <p>Tick ✓ or ✗ on each step. The ✗ button opens a text field where you can paste screenshots (Ctrl+V). Copy the recap from the tab at the top. The state is kept in this browser (IndexedDB), apart from the lot 1 page’s.</p>
     <p>Steps marked <span class="new-tag auto">auto</span> are replayed by the Playwright suite (<code>make e2e</code>, <code>tests/e2e</code>) on its own card fixtures: no need to run them by hand. An “auto (partial)” badge keeps a manual part: hover it to see which. The “Manual only” filter shows the steps without a badge and the partial ones.</p>
-    <p><strong>Beta masking:</strong> until lot 1’s unmasking PR ships, the tournaments hub answers on <code>/tournament/beta</code>; this page’s menu links already point there.</p>
   </div>
 
   <div class="cast" id="cast"></div>
@@ -385,7 +384,7 @@ ${pre(`curl -s "${API}/api/tournaments?bgaId=123480" | node -pe 'JSON.parse(requ
 packs</pre><p class="note">No <code>ALIZE</code> key: a set at ×0 is dropped from the stored config. The command prints the keys in a fixed order (Postgres jsonb does not keep the insertion order).</p>` },
       { id: 'mf-b-summary', who: 'alice', title: 'Summary line on the tournament page and the menu card',
         html: `<ul><li>Tournament page: “7 boosters · <em>[Axiom icon]</em> Axiom mono-faction · BTG, WTM ×2, SKY, SDU, ROC, NEJ · 1 guaranteed unique”. No separate “Axiom uniques” part (implied).</li>
-<li>${url(WEB + '/tournament/beta?tab=upcoming')} (the hub stays on <code>/tournament/beta</code> until lot 1’s unmasking PR): the “Axiom mix” card shows the same line, icon included.</li>
+<li>${url(WEB + '/tournament?tab=upcoming')}: the “Axiom mix” card shows the same line, icon included.</li>
 <li>Same two places in the light theme and at 375 px (DevTools): the icon stays aligned with the text, the line wraps without horizontal scroll.</li></ul>` },
     ],
   },
@@ -480,7 +479,7 @@ ${PSQL(`SELECT left(sub, 4) AS player, created_by, set_code IS NULL AS no_set_co
         html: `${pre(`T=$TOKEN_CAROL node -e '(async () => { const h = { Authorization: "Bearer " + process.env.T }; const c = await fetch("${API}/api/tournament-pool-counts?tournamentId=123480", { headers: h }); const cj = await c.json(); console.log("pool-counts", c.status, Object.keys(cj).join(","), Object.keys(cj.cards ?? {}).length + " refs"); const b = await (await fetch("${API}/api/tournament-bga-decklist?tournamentId=123480&tournamentName=BGA%20name&gameId=g-123480b", { headers: h })).json(); const id = b["hydra:member"]?.[0]?.id; const p = await fetch("${API}/api/tournament-pool-by-deck?deckId=" + id, { headers: h }); const pj = await p.json(); console.log("pool-by-deck", p.status, Object.keys(pj).join(","), "setCode=" + pj.setCode, "deck=" + (pj.deck?.id === id)) })()'`)}
 <p>Expected: <code>pool-counts 200 id,cards N refs</code> (N &gt; 0) and <code>pool-by-deck 200 id,kind,setCode,tournamentId,tournamentName,boundAt,resetAt,cards,gamesPlayed,tournamentRef,deck setCode=null deck=true</code> (the keys of a lot 1 pool; <code>setCode</code> is null for this format).</p>` },
       { id: 'mf-f-menu', who: 'carol', title: 'carol’s “My pools”',
-        html: `<p>${url(WEB + '/tournament/beta?tab=pools')}: the “Axiom mix” card with the summary line of b-summary and the deck “Random Axiom mix · 30 cards” (or more); “Change my deck” opens the pool page, without error (console and Network clean).</p>` },
+        html: `<p>${url(WEB + '/tournament?tab=pools')}: the “Axiom mix” card with the summary line of b-summary and the deck “Random Axiom mix · 30 cards” (or more); “Change my deck” opens the pool page, without error (console and Network clean).</p>` },
     ],
   },
   {
