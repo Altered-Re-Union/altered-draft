@@ -213,3 +213,7 @@ create index if not exists sealed_pools_by_tournament_ref
   on sealed_pools (tournament_ref) where tournament_ref is not null;
 create index if not exists sealed_pools_legacy_by_bga_id
   on sealed_pools (tournament_id) where tournament_ref is null and tournament_id is not null;
+
+-- V2 (mono-faction sealed): a pool drawn from several sets has no single set; the legacy
+-- snapshot column is null for those rows (their contents are always stored, never regenerated).
+alter table sealed_pools alter column set_code drop not null;

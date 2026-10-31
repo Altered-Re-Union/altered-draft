@@ -1,16 +1,55 @@
-import { FACTIONS } from './cardData.js'
+import { FACTIONS, SETS } from './cardData.js'
 
 // Every draw in this module takes an injectable `rng` (`() => float in [0,1)`),
 // defaulting to Math.random for normal/casual use. Tournament mode passes a seeded
 // PRNG (see prng.js) instead, so the exact same draws — in the exact same order —
 // reproduce identically for both pool generation and later deck validation.
-function shuffle(arr, rng = Math.random) {
+export function shuffle(arr, rng = Math.random) {
   const a = [...arr]
   for (let i = a.length - 1; i > 0; i--) {
     const j = Math.floor(rng() * (i + 1))
     ;[a[i], a[j]] = [a[j], a[i]]
   }
   return a
+}
+
+/**
+ * Split `n` cards between sets in proportion to `weights` ({ SET: weight }), exactly:
+ * floor of each share, then the leftover cards go to the largest remainders. Remainder
+ * ties are broken by shuffling the tied sets with `rng`. Keys are iterated in SETS order
+ * (codes unknown to SETS after them, in insertion order) so the result does not depend
+ * on the key order of `weights`. Every key is present in the result, zero included.
+ * @returns {{[set: string]: number}}
+ */
+export function quotas(weights, n, rng = Math.random) {
+  const rank = code => { const i = SETS.findIndex(s => s.code === code); return i === -1 ? SETS.length : i }
+  const keys = Object.keys(weights)
+    .map((code, order) => ({ code, order }))
+    .sort((a, b) => rank(a.code) - rank(b.code) || a.order - b.order)
+    .map(k => k.code)
+  const total = keys.reduce((sum, k) => sum + weights[k], 0)
+  const rows = keys.map(code => {
+    const exact = total > 0 ? (n * weights[code]) / total : 0
+    const base = Math.floor(exact)
+    return { code, base, rem: exact - base }
+  })
+  let remaining = n - rows.reduce((sum, r) => sum + r.base, 0)
+  // Group by remainder (desc), shuffle each tie group, then hand out the +1s in that order.
+  const groups = new Map()
+  for (const r of rows) {
+    const key = r.rem.toFixed(9)
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key).push(r)
+  }
+  const ordered = [...groups.entries()]
+    .sort((a, b) => Number(b[0]) - Number(a[0]))
+    .flatMap(([, group]) => shuffle(group, rng))
+  for (const r of ordered) {
+    if (remaining <= 0) break
+    r.base += 1
+    remaining -= 1
+  }
+  return Object.fromEntries(rows.map(r => [r.code, r.base]))
 }
 
 function pickRandom(pool, rng = Math.random) {
@@ -25,7 +64,7 @@ function pickRandom(pool, rng = Math.random) {
  * @param {number} packsPerPlayer - typically 4
  * @returns {string[][]} array of packs, each pack is an array of card references
  */
-function deduplicateByNameFaction(cards) {
+export function deduplicateByNameFaction(cards) {
   const seen = new Set()
   return cards.filter(c => {
     const key = `${c.name}__${c.faction}`
@@ -358,6 +397,23 @@ function generateOnePack(heroes, commons, rares, uniques, packIndex, randomUniqu
 }
 
 /**
+ * Swap pre-picked unique refs into rare slots of `packs`, in place. Every booster ends
+ * with 3 rare slots from index `rareStart`; shuffle all (booster, rareSlot) positions
+ * with the SAME rng and take as many as there are uniques, so which packs/slots get one
+ * is itself deterministic.
+ */
+function swapUniquesIntoRareSlots(packs, uniqueRefs, rng, rareStart) {
+  const slotPositions = []
+  for (let p = 0; p < packs.length; p++) {
+    for (let s = 0; s < 3; s++) slotPositions.push([p, rareStart + s])
+  }
+  const chosen = shuffle(slotPositions, rng).slice(0, uniqueRefs.length)
+  chosen.forEach(([packIdx, slotIdx], i) => {
+    packs[packIdx][slotIdx] = uniqueRefs[i]
+  })
+}
+
+/**
  * Tournament-safe SEALED pool: `boosters` single-set packs (normal composition — 1
  * hero + 9 commons + 3 rares, no unique slot of their own) generated with a SEEDED
  * `rng`, then exactly `uniqueRefs.length` pre-picked unique refs (see
@@ -379,18 +435,79 @@ export function generateTournamentSealedPool(cards, rng, options = {}) {
   }
   if (!uniqueRefs.length) return packs
 
-  // Every booster is 1 hero (if any) + 9 commons + 3 rares — rare slots are the last
-  // 3 indices. Shuffle all (booster, rareSlot) positions with the SAME rng and take
-  // as many as we have uniques, so which packs/slots get one is itself deterministic.
-  const rareStart = (heroes.length ? 1 : 0) + 9
-  const slotPositions = []
-  for (let p = 0; p < boosters; p++) {
-    for (let s = 0; s < 3; s++) slotPositions.push([p, rareStart + s])
+  swapUniquesIntoRareSlots(packs, uniqueRefs, rng, (heroes.length ? 1 : 0) + 9)
+  return packs
+}
+
+/**
+ * Mono-faction SEALED pool over several weighted sets: `boosters` boosters (hero? + 9
+ * commons + 3 rares) holding only cards whose `faction` is `faction`, set shares fixed
+ * EXACTLY by `quotas` (per rarity), then `uniqueRefs` swapped into rare slots. Pure and
+ * seeded: rng order is hero labels, common labels, rare labels, boosters in order, unique
+ * swap. Pools are deduplicated by name within a set, never across sets (reprints stay
+ * distinct). A slot whose set is exhausted falls back to the other sets, then stays empty.
+ * @param {{[set: string]: object[]}} cardsBySet - fetchSet output per set
+ * @param {() => number} rng
+ * @param {{faction: string, weights: {[set: string]: number}, boosters?: number, uniqueRefs?: string[], includeHeroes?: boolean}} options
+ * @returns {string[][]}
+ */
+export function generateFactionSealedPool(cardsBySet, rng, options) {
+  const { faction, weights, boosters = 7, uniqueRefs = [], includeHeroes = true } = options
+  const rank = code => { const i = SETS.findIndex(s => s.code === code); return i === -1 ? SETS.length : i }
+  const codes = Object.keys(weights)
+    .filter(c => weights[c] > 0 && cardsBySet[c])
+    .map((code, order) => ({ code, order }))
+    .sort((a, b) => rank(a.code) - rank(b.code) || a.order - b.order)
+    .map(k => k.code)
+  const pools = {}
+  for (const code of codes) {
+    pools[code] = splitPools(cardsBySet[code].filter(c => c.faction === faction), true)
   }
-  const chosen = shuffle(slotPositions, rng).slice(0, uniqueRefs.length)
-  chosen.forEach(([packIdx, slotIdx], i) => {
-    packs[packIdx][slotIdx] = uniqueRefs[i]
-  })
+
+  // Shuffled list of `slots` set labels, only over sets that have a card of that rarity.
+  const labelsFor = (kind, slots) => {
+    const w = {}
+    for (const code of codes) if (pools[code][kind].length) w[code] = weights[code]
+    if (!Object.keys(w).length) return []
+    const q = quotas(w, slots, rng)
+    return shuffle(Object.keys(q).flatMap(code => Array(q[code]).fill(code)), rng)
+  }
+  const heroLabels = includeHeroes ? labelsFor('heroes', boosters) : []
+  const commonLabels = labelsFor('commons', 9 * boosters)
+  const rareLabels = labelsFor('rares', 3 * boosters)
+
+  // One draw: slot's set first, else the other sets, never padding with another rarity.
+  const draw = (kind, label, taken) => {
+    const free = code => pools[code][kind].filter(c => !taken.has(c.reference))
+    const own = label ? pickRandom(free(label), rng) : null
+    if (own) return own
+    return pickRandom(codes.filter(c => c !== label).flatMap(free), rng)
+  }
+
+  const usedHeroes = new Set()
+  const packs = []
+  for (let b = 0; b < boosters; b++) {
+    const pack = []
+    const taken = new Set()
+    if (includeHeroes) {
+      let hero = draw('heroes', heroLabels[b], usedHeroes)
+      if (!hero) {
+        usedHeroes.clear() // every hero of the faction was dealt: repeat
+        hero = draw('heroes', heroLabels[b], usedHeroes)
+      }
+      if (hero) { usedHeroes.add(hero.reference); pack.push(hero.reference) }
+    }
+    for (let i = 0; i < 9; i++) {
+      const c = draw('commons', commonLabels[b * 9 + i], taken)
+      if (c) { taken.add(c.reference); pack.push(c.reference) }
+    }
+    for (let i = 0; i < 3; i++) {
+      const r = draw('rares', rareLabels[b * 3 + i], taken)
+      if (r) { taken.add(r.reference); pack.push(r.reference) }
+    }
+    packs.push(pack)
+  }
+  if (uniqueRefs.length) swapUniquesIntoRareSlots(packs, uniqueRefs, rng, (includeHeroes ? 1 : 0) + 9)
   return packs
 }
 
