@@ -3,6 +3,7 @@ import {
   generateAllPacks, generateChaosPacks, generateStructuredPacks,
   generateCubeDraftPacks, generateCubeRecipePacks, dealHeroSlots,
   generateTournamentSealedPool, generatePacksFromPool, quotas, generateFactionSealedPool,
+  generateMultisetSealedPool, pickRareSlots, rollBoosterHits, pickWeightedSet,
 } from './packGenerator.js'
 import { FACTIONS } from './cardData.js'
 import { mulberry32 } from './prng.js'
@@ -308,5 +309,57 @@ describe('generateFactionSealedPool', () => {
     const positions = a.flatMap((p, i) => p.map((r, j) => [r, i, j])).filter(([r]) => r.includes('_U_'))
     expect(positions).toHaveLength(2)
     for (const [, i, j] of positions) expect(j).toBeGreaterThanOrEqual(rareStart(a[i]))
+  })
+})
+
+describe('generateMultisetSealedPool', () => {
+  const bySet = code => makeCardPool().map(c => ({ ...c, reference: `ALT_${code}_B_${c.reference}` }))
+  const sets = { CYCLONE: bySet('CYCLONE'), EOLE: bySet('EOLE'), FUGUE: bySet('FUGUE') }
+  const byRef = new Map(Object.values(sets).flat().map(c => [c.reference, c]))
+  const setOf = ref => ref.split('_')[1]
+  it('deals the requested boosters per set, each set-pure, hero first, shuffled together', () => {
+    const packs = generateMultisetSealedPool(sets, mulberry32(1), { counts: { CYCLONE: 4, EOLE: 3 } })
+    expect(packs).toHaveLength(7)
+    const tally = {}
+    for (const p of packs) {
+      expect(p).toHaveLength(13)
+      expect(new Set(p).size).toBe(13)
+      expect(new Set(p.map(setOf)).size).toBe(1)
+      expect(byRef.get(p[0]).cardType).toBe('HERO')
+      expect(p.slice(1, 10).every(r => byRef.get(r).rarity === 'C')).toBe(true)
+      expect(p.slice(10).every(r => ['R1', 'R2'].includes(byRef.get(r).rarity))).toBe(true)
+      tally[setOf(p[0])] = (tally[setOf(p[0])] ?? 0) + 1
+    }
+    expect(tally).toEqual({ CYCLONE: 4, EOLE: 3 })
+    const orders = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(s => generateMultisetSealedPool(sets, mulberry32(s), { counts: { CYCLONE: 4, EOLE: 3 } }).map(p => setOf(p[0])).join())
+    expect(orders.some(o => o !== 'CYCLONE,CYCLONE,CYCLONE,CYCLONE,EOLE,EOLE,EOLE')).toBe(true)
+  })
+  it('is deterministic for a seed, skips zero counts and sets without cards, deals 12 cards without heroes', () => {
+    const a = generateMultisetSealedPool(sets, mulberry32(2), { counts: { CYCLONE: 3, EOLE: 0, FUGUE: 4 } })
+    expect(a).toEqual(generateMultisetSealedPool(sets, mulberry32(2), { counts: { CYCLONE: 3, EOLE: 0, FUGUE: 4 } }))
+    expect(a.map(p => setOf(p[0])).filter(s => s === 'EOLE')).toHaveLength(0)
+    expect(generateMultisetSealedPool(sets, mulberry32(2), { counts: { CYCLONE: 3, NOPE: 4 } })).toHaveLength(3)
+    expect(generateMultisetSealedPool(sets, mulberry32(2), { counts: { CYCLONE: 7 }, includeHeroes: false })[0]).toHaveLength(12)
+  })
+})
+
+describe('pickRareSlots, rollBoosterHits, pickWeightedSet', () => {
+  it('pickRareSlots only takes rare slots of the eligible packs, n distinct positions', () => {
+    const packs = Array.from({ length: 4 }, () => Array(13).fill('x'))
+    const chosen = pickRareSlots(packs, [0, 2], 4, mulberry32(1), 10)
+    expect(chosen).toHaveLength(4)
+    expect(new Set(chosen.map(([p, s]) => `${p}:${s}`)).size).toBe(4)
+    for (const [p, s] of chosen) { expect([0, 2]).toContain(p); expect([10, 11, 12]).toContain(s) }
+    expect(pickRareSlots(packs, [1], 5, mulberry32(1), 10)).toHaveLength(3)
+  })
+  it('rollBoosterHits: every booster at 1 in 1, none when the rng stays above 1/N', () => {
+    expect(rollBoosterHits(7, 1, () => 0.999)).toEqual(Array(7).fill(true))
+    expect(rollBoosterHits(7, 10, () => 0.5)).toEqual(Array(7).fill(false))
+    expect(rollBoosterHits(3, 2, () => 0.49)).toEqual([true, true, true])
+  })
+  it('pickWeightedSet draws by weight in SETS order', () => {
+    expect(pickWeightedSet({ EOLE: 1, CYCLONE: 6 }, () => 0.1)).toBe('CYCLONE')
+    expect(pickWeightedSet({ EOLE: 1, CYCLONE: 6 }, () => 0.9)).toBe('EOLE')
+    expect(pickWeightedSet({ EOLE: 1, CYCLONE: 0 }, () => 0.0)).toBe('EOLE')
   })
 })
