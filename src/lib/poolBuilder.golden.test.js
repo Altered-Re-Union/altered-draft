@@ -87,3 +87,11 @@ describe('mono-faction pool (golden)', () => {
     expect(crypto.createHash('sha256').update(JSON.stringify({ boosters, counts })).digest('hex')).toMatchSnapshot()
   })
 })
+
+describe('multi-set pool (golden)', () => {
+  it('the draw for a multi-set config is frozen', async () => {
+    const config = { v: 1, format: 'sealed', source: { type: 'multiset', sets: { CORE: 4, EOLE: 3 }, boosters: 7 }, heroes: 'packs', uniques: { inBoosters: 2, guaranteed: 1, evenFactions: false, faction: null, randomOneIn: null }, excludeBanlist: false }
+    const { boosters, cards: counts } = await buildPool('11111111-1111-1111-1111-111111111111', { config, nonce: 'n-multiset' }, { fetchCards: async code => fakeSet(code) })
+    expect(crypto.createHash('sha256').update(JSON.stringify({ boosters, counts })).digest('hex')).toMatchSnapshot()
+  })
+})

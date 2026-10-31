@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { buildPool, buildPoolSeedString } from './poolBuilder.js'
 import { FACTIONS } from './cardData.js'
 import EOLE from './data/factionRanges/EOLE.json' with { type: 'json' }
@@ -163,5 +163,93 @@ describe('buildPool faction source', () => {
   it('throws when uniques are wanted and no included set has range data', async () => {
     const config = factionConfig({ source: { type: 'faction', faction: 'AX', sets: { FUGUE: 1 }, boosters: 7 }, uniques: { inBoosters: 1, guaranteed: 0, evenFactions: false, faction: 'AX' } })
     await expect(buildPool('sub', { config, nonce: 'n' }, { fetchCards })).rejects.toThrow(/unique/)
+  })
+})
+
+// A multiset fixture: one hero in AX and BR, 3 commons per faction, 6 rares; the refs carry the set code.
+function fakeMultiSet(code) {
+  const cards = []
+  cards.push({ reference: `ALT_${code}_B_AX_01_C`, name: `Hero AX ${code}`, faction: 'AX', rarity: 'C', cardType: 'HERO' })
+  cards.push({ reference: `ALT_${code}_B_BR_02_C`, name: `Hero BR ${code}`, faction: 'BR', rarity: 'C', cardType: 'HERO' })
+  let n = 10
+  for (const f of FACTIONS) {
+    for (let i = 0; i < 3; i++, n++) cards.push({ reference: `ALT_${code}_B_${f}_${n}_C`, name: `Common ${f} ${i}`, faction: f, rarity: 'C', cardType: 'CHARACTER' })
+    cards.push({ reference: `ALT_${code}_B_${f}_${n++}_R1`, name: `Rare ${f}`, faction: f, rarity: 'R1', cardType: 'SPELL' })
+  }
+  // Banned family (banlist.js): ALT_CYCLONE_B_AX_81.
+  if (code === 'CYCLONE') cards.push({ reference: 'ALT_CYCLONE_B_AX_81_C', name: 'Banned SKY', faction: 'AX', rarity: 'C', cardType: 'CHARACTER' })
+  return cards
+}
+
+describe('buildPool multiset source', () => {
+  const SUB = 'sub'
+  const fetchCards = vi.fn(async code => fakeMultiSet(code))
+  const multiConfig = (over = {}) => ({ v: 1, format: 'sealed', source: { type: 'multiset', sets: { CYCLONE: 4, EOLE: 3 }, boosters: 7 }, heroes: 'packs', uniques: { inBoosters: 0, guaranteed: 0, evenFactions: false, faction: null, randomOneIn: null }, excludeBanlist: false, ...over })
+  const setOf = ref => ref.split('_')[1]
+
+  it('is deterministic, fetches each set once with the code only', async () => {
+    const argLists = []
+    const fetch = async (...args) => { argLists.push(args); return fakeMultiSet(args[0]) }
+    const a = await buildPool(SUB, { config: multiConfig(), nonce: 'n1' }, { fetchCards: fetch })
+    expect(argLists).toEqual([['CYCLONE'], ['EOLE']])
+    const b = await buildPool(SUB, { config: multiConfig(), nonce: 'n1' }, { fetchCards: fetch })
+    expect(a).toEqual(b)
+    expect((await buildPool(SUB, { config: multiConfig(), nonce: 'n2' }, { fetchCards: fetch })).boosters).not.toEqual(a.boosters)
+  })
+
+  it('deals the per-set boosters, set-pure, hero of their own set', async () => {
+    const { boosters, cards } = await buildPool(SUB, { config: multiConfig(), nonce: 'n' }, { fetchCards })
+    expect(boosters.map(b => setOf(b[0])).sort()).toEqual(['CYCLONE', 'CYCLONE', 'CYCLONE', 'CYCLONE', 'EOLE', 'EOLE', 'EOLE'])
+    for (const b of boosters) { expect(b).toHaveLength(13); expect(new Set(b.map(setOf)).size).toBe(1) }
+    expect(Object.values(cards).reduce((a, b) => a + b, 0)).toBe(91)
+  })
+
+  it('puts exact in-booster uniques in boosters of their own set, never in a set without data', async () => {
+    const config = multiConfig({ source: { type: 'multiset', sets: { CYCLONE: 4, FUGUE: 3 }, boosters: 7 }, uniques: { inBoosters: 2, guaranteed: 1, evenFactions: false, faction: null, randomOneIn: null } })
+    for (const nonce of ['n', 'n2', 'n3']) {
+      const { boosters, cards } = await buildPool(SUB, { config, nonce }, { fetchCards })
+      const inBoosters = boosters.flatMap((b, i) => b.map((r, j) => ({ r, i, j }))).filter(x => x.r.includes('_U_'))
+      expect(inBoosters).toHaveLength(2)
+      for (const { r, i, j } of inBoosters) { expect(setOf(boosters[i][0])).toBe('CYCLONE'); expect(setOf(r)).toBe('CYCLONE'); expect(j).toBeGreaterThanOrEqual(10) }
+      const outside = Object.keys(cards).filter(r => r.includes('_U_') && !boosters.flat().includes(r))
+      expect(outside).toHaveLength(1)
+      expect(setOf(outside[0])).toBe('CYCLONE')
+      expect(new Set(Object.keys(cards).filter(r => r.includes('_U_'))).size).toBe(3)
+    }
+  })
+
+  it('spreads uniques over two sets with data, each in a booster of its own set, no serial twice', async () => {
+    const config = multiConfig({ uniques: { inBoosters: 6, guaranteed: 4, evenFactions: false, faction: 'LY', randomOneIn: null } })
+    const { boosters, cards } = await buildPool(SUB, { config, nonce: 'n' }, { fetchCards })
+    boosters.forEach(b => b.filter(r => r.includes('_U_')).forEach(r => expect(setOf(r)).toBe(setOf(b[0]))))
+    expect(boosters.flat().filter(r => r.includes('_U_'))).toHaveLength(6)
+    const uniques = Object.keys(cards).filter(r => r.includes('_U_'))
+    expect(uniques).toHaveLength(10)
+    for (const r of uniques) expect(cards[r]).toBe(1)
+  })
+
+  it('appends every hero of every included set with heroes "free"', async () => {
+    const { boosters, cards } = await buildPool(SUB, { config: multiConfig({ heroes: 'free' }), nonce: 'n' }, { fetchCards })
+    for (const b of boosters) expect(b).toHaveLength(12)
+    const heroes = Object.keys(cards).filter(r => /_0[12]_C$/.test(r))
+    expect(heroes.sort()).toEqual(['ALT_CYCLONE_B_AX_01_C', 'ALT_CYCLONE_B_BR_02_C', 'ALT_EOLE_B_AX_01_C', 'ALT_EOLE_B_BR_02_C'])
+    for (const h of heroes) expect(cards[h]).toBe(1)
+  })
+
+  it('applies the ban list set by set', async () => {
+    for (let i = 0; i < 10; i++) {
+      const { cards } = await buildPool(SUB, { config: multiConfig({ excludeBanlist: true }), nonce: `n${i}` }, { fetchCards })
+      expect(Object.keys(cards).some(r => r.startsWith('ALT_CYCLONE_B_AX_81'))).toBe(false)
+    }
+  })
+
+  it('throws when a set has no cards', async () => {
+    const fetch = async code => (code === 'EOLE' ? [] : fakeMultiSet(code))
+    await expect(buildPool(SUB, { config: multiConfig(), nonce: 'n' }, { fetchCards: fetch })).rejects.toThrow(/no cards loaded for EOLE/)
+  })
+
+  it('throws when uniques are wanted and no included set has range data', async () => {
+    const config = multiConfig({ source: { type: 'multiset', sets: { FUGUE: 7 }, boosters: 7 }, uniques: { inBoosters: 0, guaranteed: 1, evenFactions: false, faction: null, randomOneIn: null } })
+    await expect(buildPool(SUB, { config, nonce: 'n' }, { fetchCards })).rejects.toThrow(/unique/)
   })
 })
