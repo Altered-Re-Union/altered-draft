@@ -8,7 +8,7 @@ export const CONFIG_VERSION = 1
 export const SEALED_BOOSTERS = 7
 export const MAX_UNIQUES = 7
 export const HERO_MODES = ['packs', 'free']
-export const SOURCE_TYPES = ['set', 'faction']
+export const SOURCE_TYPES = ['set', 'faction', 'multiset']
 export const MAX_SET_WEIGHT = 3
 
 /**
@@ -18,7 +18,7 @@ export const MAX_SET_WEIGHT = 3
  */
 export function configSetCodes(config) {
   const src = config.source
-  if (src.type !== 'faction') return [src.setCode]
+  if (src.type === 'set') return [src.setCode]
   const rank = code => {
     const i = SETS.findIndex(s => s.code === code)
     return i === -1 ? SETS.length : i
@@ -47,6 +47,7 @@ export function validateTournamentConfig(input) {
   const isFaction = src.type === 'faction'
   let set = null
   let factionSets = {}
+  let multiSets = null
   if (isFaction) {
     if (!FACTIONS.includes(src.faction)) errors.push('source.faction')
     const raw = src.sets && typeof src.sets === 'object' && !Array.isArray(src.sets) ? src.sets : null
@@ -61,6 +62,23 @@ export function validateTournamentConfig(input) {
       }
     }
     if (!setsOk || !Object.keys(factionSets).length) errors.push('source.sets')
+  } else if (src.type === 'multiset') {
+    const raw = src.sets && typeof src.sets === 'object' && !Array.isArray(src.sets) ? src.sets : null
+    let setsOk = !!raw
+    const counts = {}
+    if (raw) {
+      const visible = SETS.filter(s => !s.hidden)
+      if (Object.keys(raw).some(code => !visible.some(s => s.code === code))) setsOk = false
+      for (const { code } of visible) {
+        const n = toInt(raw[code], 0)
+        if (n === null || n < 0 || n > SEALED_BOOSTERS) setsOk = false
+        else if (n > 0) counts[code] = n
+      }
+    }
+    const codes = Object.keys(counts)
+    if (!setsOk || !codes.length || codes.reduce((t, k) => t + counts[k], 0) !== SEALED_BOOSTERS) errors.push('source.sets')
+    else if (codes.length === 1) set = SETS.find(s => s.code === codes[0]) // one set left: stored as `set`
+    else multiSets = counts
   } else if (src.type === 'set') {
     set = SETS.find(s => s.code === src.setCode && !s.hidden) ?? null
     if (!set) errors.push('source.setCode')
@@ -96,7 +114,9 @@ export function validateTournamentConfig(input) {
       format: 'sealed',
       source: isFaction
         ? { type: 'faction', faction: src.faction, sets: factionSets, boosters: SEALED_BOOSTERS }
-        : { type: 'set', setCode: set.code, boosters: SEALED_BOOSTERS },
+        : multiSets
+          ? { type: 'multiset', sets: multiSets, boosters: SEALED_BOOSTERS }
+          : { type: 'set', setCode: set.code, boosters: SEALED_BOOSTERS },
       heroes: c.heroes,
       // Even factions only means something from 2 uniques on and without a single faction;
       // a stale "true" would still change the draw (evenFactionTargets consumes the rng) and

@@ -146,7 +146,7 @@ describe('validateTournamentConfig faction source', () => {
     ['non-integer weight', { type: 'faction', faction: 'AX', sets: { CORE: 1.5 } }, 'source.sets'],
     ['all zero', { type: 'faction', faction: 'AX', sets: { CORE: 0, BISE: 0 } }, 'source.sets'],
     ['sets not an object', { type: 'faction', faction: 'AX', sets: ['CORE'] }, 'source.sets'],
-    ['unknown type', { type: 'multiset', faction: 'AX', sets: { CORE: 1 } }, 'source.type'],
+    ['unknown type', { type: 'cube', faction: 'AX', sets: { CORE: 1 } }, 'source.type'],
   ])('rejects %s', (_, source, code) => {
     const r = validateTournamentConfig(factionCfg({ source }))
     expect(r.ok).toBe(false); expect(r.errors).toContain(code)
@@ -171,5 +171,33 @@ describe('validateTournamentConfig faction source', () => {
     const r = validateTournamentConfig(factionCfg({ uniques: { inBoosters: 1, guaranteed: 0, faction: 'XX', evenFactions: 'yes' } }))
     expect(r.ok).toBe(true)
     expect(r.config.uniques).toEqual({ inBoosters: 1, guaranteed: 0, evenFactions: false, faction: 'AX' })
+  })
+})
+
+describe('validateTournamentConfig multiset source', () => {
+  const multi = sets => ({ format: 'sealed', source: { type: 'multiset', sets }, heroes: 'packs', uniques: { inBoosters: 0, guaranteed: 0 } })
+
+  it('accepts a split, drops zeros, coerces strings, keeps SETS order', () => {
+    const r = validateTournamentConfig(multi({ EOLE: '3', CYCLONE: 4, FUGUE: 0 }))
+    expect(r.ok).toBe(true)
+    expect(r.config.source).toEqual({ type: 'multiset', sets: { CYCLONE: 4, EOLE: 3 }, boosters: 7 })
+    expect(Object.keys(r.config.source.sets)).toEqual(['CYCLONE', 'EOLE'])
+  })
+  it('normalizes a multiset left with one set to a set source', () => {
+    for (const sets of [{ CYCLONE: 7 }, { CYCLONE: 7, EOLE: 0 }, { CYCLONE: '7' }]) {
+      expect(validateTournamentConfig(multi(sets)).config.source).toEqual({ type: 'set', setCode: 'CYCLONE', boosters: 7 })
+    }
+  })
+  it('refuses a total other than 7, a count out of range, a hidden or unknown set, an empty split', () => {
+    for (const sets of [{ CYCLONE: 4, EOLE: 2 }, { CYCLONE: 4, EOLE: 4 }, { CYCLONE: 8 }, { CYCLONE: -1, EOLE: 8 }, { CYCLONE: 2.5, EOLE: 4.5 }, { COREKS: 7 }, { NOPE: 7 }, {}, { CYCLONE: 0 }, 'CYCLONE', null]) {
+      expect(validateTournamentConfig(multi(sets)).errors, JSON.stringify(sets)).toEqual(['source.sets'])
+    }
+    expect(validateTournamentConfig({ ...multi({ CYCLONE: 4, EOLE: 3 }), source: { type: 'multiset', sets: { CYCLONE: 4, EOLE: 3 }, boosters: 6 } }).errors).toEqual(['source.boosters'])
+  })
+  it('configSetCodes and legacyColumnsFromConfig on a multiset', () => {
+    const { config } = validateTournamentConfig(multi({ EOLE: 3, CYCLONE: 4 }))
+    expect(configSetCodes(config)).toEqual(['CYCLONE', 'EOLE'])
+    expect(configSetCodes({ source: { type: 'multiset', sets: { FUGUE: 1, CORE: 6 } } })).toEqual(['CORE', 'FUGUE'])
+    expect(legacyColumnsFromConfig(config).set_code).toBeNull()
   })
 })
