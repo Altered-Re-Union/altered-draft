@@ -36,7 +36,7 @@ vi.mock('../../src/lib/poolBuilder.js', async importOriginal => {
   return {
     ...mod,
     buildPool: vi.fn(async (sub, { config, nonce }) => {
-      const sets = config.source.type === 'faction' ? Object.keys(config.source.sets) : [config.source.setCode]
+      const sets = config.source.type === 'set' ? [config.source.setCode] : Object.keys(config.source.sets)
       const refs = sets.map(s => `ALT_${s}_B_AX_01_C`)
       return {
         cards: { ...Object.fromEntries(refs.map(r => [r, 2])), [`ALT_${sets[0]}_B_BR_02_R1`]: 1, [`NONCE_${nonce}`]: 1 },
@@ -861,6 +861,100 @@ describe('mono-faction tournaments', () => {
       expect(row.deck_name).toBe('Invalid Stray cup')
     } finally {
       fetchSet.mockImplementation(base)
+      vi.unstubAllGlobals()
+      vi.mocked(verifySub).mockResolvedValue(null)
+    }
+  })
+})
+
+const MULTISET_CONFIG = { ...CONFIG, source: { type: 'multiset', sets: { CYCLONE: 4, EOLE: 3 }, boosters: 7 }, uniques: { inBoosters: 0, guaranteed: 0, evenFactions: false, faction: null, randomOneIn: null } }
+
+describe('V3: multi-set sealed and random uniques', () => {
+  const body = {
+    name: 'Mixed Cup', description: 'Be there', bgaUrl: 'https://fr.boardgamearena.com/tournament/?id=9301',
+    startsAt: inDays(3).toISOString(), endsAt: null, config: MULTISET_CONFIG,
+  }
+
+  it('POST stores a multiset split, normalizes a single set to a set source', async () => {
+    asUser(ALICE)
+    const created = await call(tournamentsIndex, { method: 'POST', body })
+    expect(created.statusCode).toBe(201)
+    expect(created.body.config.source).toEqual(MULTISET_CONFIG.source)
+
+    const single = await call(tournamentsIndex, {
+      method: 'POST',
+      body: { ...body, bgaUrl: 'https://boardgamearena.com/tournament?id=9302', config: { ...MULTISET_CONFIG, source: { type: 'multiset', sets: { CYCLONE: 7 }, boosters: 7 } } },
+    })
+    expect(single.statusCode).toBe(201)
+    expect(single.body.config.source).toEqual({ type: 'set', setCode: 'CYCLONE', boosters: 7 })
+    const { rows: [row] } = await query("SELECT config->'source'->>'type' AS type FROM tournaments WHERE id = $1", [single.body.id])
+    expect(row.type).toBe('set')
+  })
+
+  it('POST refuses each V3 problem with its code', async () => {
+    asUser(ALICE)
+    const post = async (config, n) => call(tournamentsIndex, { method: 'POST', body: { ...body, bgaUrl: `https://boardgamearena.com/tournament?id=${9310 + n}`, config } })
+    const sum6 = await post({ ...MULTISET_CONFIG, source: { type: 'multiset', sets: { CYCLONE: 3, EOLE: 3 }, boosters: 7 } }, 1)
+    expect(sum6.statusCode).toBe(400)
+    expect(sum6.body.config).toEqual(['source.sets'])
+    expect((await post({ ...MULTISET_CONFIG, uniques: { ...MULTISET_CONFIG.uniques, randomOneIn: 11 } }, 2)).body.config).toEqual(['uniques.randomOneIn'])
+    expect((await post({ ...MULTISET_CONFIG, source: { type: 'multiset', sets: { CYCLONE: 1, FUGUE: 6 }, boosters: 7 }, uniques: { ...MULTISET_CONFIG.uniques, inBoosters: 4 } }, 3)).body.config).toEqual(['uniques.inBoosters'])
+    expect((await post({ ...CONFIG, source: { type: 'set', setCode: 'FUGUE', boosters: 7 }, uniques: { inBoosters: 0, guaranteed: 1, evenFactions: false, randomOneIn: 8 } }, 4)).body.config).toEqual(['uniques.unsupportedSet'])
+  })
+
+  it('POST in random mode forces inBoosters to 0 and even factions off', async () => {
+    asUser(ALICE)
+    const res = await call(tournamentsIndex, {
+      method: 'POST',
+      body: { ...body, bgaUrl: 'https://boardgamearena.com/tournament?id=9320', config: { ...MULTISET_CONFIG, uniques: { inBoosters: 3, guaranteed: 1, evenFactions: true, randomOneIn: 8 } } },
+    })
+    expect(res.statusCode).toBe(201)
+    expect(res.body.config.uniques).toEqual({ inBoosters: 0, guaranteed: 1, evenFactions: false, faction: null, randomOneIn: 8 })
+  })
+
+  it('PATCH normalizes a multiset config too', async () => {
+    const t = await mkTournament({ organizerSub: 'alice', organizerName: 'Alice' })
+    asUser(ALICE)
+    const patched = await call(tournamentsItem, { method: 'PATCH', query: { id: t.id }, body: { config: { ...MULTISET_CONFIG, source: { type: 'multiset', sets: { EOLE: 7, CYCLONE: 0 }, boosters: 7 } } } })
+    expect(patched.statusCode).toBe(200)
+    expect(patched.body.config.source).toEqual({ type: 'set', setCode: 'EOLE', boosters: 7 })
+    const multi = await call(tournamentsItem, { method: 'PATCH', query: { id: t.id }, body: { config: MULTISET_CONFIG } })
+    expect(multi.body.config.source).toEqual(MULTISET_CONFIG.source)
+  })
+
+  it('a multiset pool is stored with set_code NULL and reports sourceType multiset; a set pool reports set', async () => {
+    const multi = await mkTournament({ config: MULTISET_CONFIG })
+    const plain = await mkTournament()
+    asUser(ALICE)
+    const m = await call(tournamentPoolFor, { query: { id: multi.id } })
+    expect(m.statusCode).toBe(200)
+    expect(m.body.sourceType).toBe('multiset')
+    expect((await query('SELECT set_code IS NULL AS n FROM sealed_pools WHERE id = $1', [m.body.id])).rows[0].n).toBe(true)
+    const s = await call(tournamentPoolFor, { query: { id: plain.id } })
+    expect(s.body.sourceType).toBe('set')
+    expect((await query('SELECT set_code IS NULL AS n FROM sealed_pools WHERE id = $1', [s.body.id])).rows[0].n).toBe(false)
+  })
+
+  it('BGA path on a multiset tournament creates the pool from its config', async () => {
+    const tn = await mkTournament({ config: MULTISET_CONFIG, bgaTournamentId: '939393' })
+    const { fetchSet } = await import('../../src/lib/cardData.js')
+    fetchSet.mockClear()
+    vi.mocked(verifySub).mockResolvedValue('hugo')
+    let posted = null
+    vi.stubGlobal('fetch', vi.fn(async (url, init = {}) => {
+      if ((init.method ?? 'GET') === 'POST') { posted = JSON.parse(init.body); return { ok: true, status: 201, json: async () => ({ id: 'deck-hugo', ...posted }) } }
+      return { ok: true, status: 200, json: async () => ({}) }
+    }))
+    try {
+      const res = await call(bgaDecklist, { query: { tournamentId: tn.bga_tournament_id, tournamentName: 'x', gameId: 'g1' } })
+      expect(res.statusCode).toBe(200)
+      expect(fetchSet.mock.calls.map(c => c[0])).toEqual(expect.arrayContaining(['CYCLONE', 'EOLE']))
+      const pool = (await query("SELECT set_code, cards, config FROM sealed_pools WHERE sub = 'hugo'")).rows[0]
+      expect(pool.set_code).toBeNull()
+      expect(pool.config.source).toEqual(MULTISET_CONFIG.source)
+      expect(posted.deckCards.length).toBeGreaterThan(0)
+      for (const { cardReference } of posted.deckCards) expect(Object.keys(pool.cards)).toContain(cardReference)
+    } finally {
       vi.unstubAllGlobals()
       vi.mocked(verifySub).mockResolvedValue(null)
     }
