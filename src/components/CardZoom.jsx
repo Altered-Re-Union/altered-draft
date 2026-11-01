@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { useLang } from '../lib/i18n/i18n.jsx'
+import CardImage from './CardImage.jsx'
 
 // Holographic tilt/shine effect on the zoomed card image, ported from simeydotme's
 // pokemon-cards-css (https://codepen.io/simeydotme/pen/abYWJdX). Pointer position sets
@@ -278,10 +279,9 @@ export function CardZoomProvider({ children }) {
                   Until that (larger, un-preloaded) pack image finishes loading, a spinner
                   covers the same area instead of leaving the card underneath visible. */}
               <div className="relative inline-block leading-none">
-                {card.imagePath && (
-                  <img src={card.imagePath} alt="" aria-hidden
-                    className="block max-h-[82vh] max-w-[94vw] w-auto h-auto rounded-2xl shadow-2xl select-none" />
-                )}
+                <CardImage card={card} alt=""
+                  className="block max-h-[82vh] max-w-[94vw] w-auto h-auto rounded-2xl shadow-2xl select-none"
+                  backClassName="block w-[min(94vw,59vh)] aspect-[744/1039] rounded-2xl shadow-2xl" />
                 <div onClick={e => { e.stopPropagation(); openPack() }}
                   className={`absolute inset-0 cursor-pointer transition-transform duration-500 ease-in ${
                     opening ? 'translate-y-[130%]' : 'translate-y-0'}`}>
@@ -335,7 +335,7 @@ export function CardZoomProvider({ children }) {
                 </div>
               )}
             </div>
-          ) : card.imagePath ? (
+          ) : (card.imagePath || card.faceLang) ? (
             <div className="flex flex-col items-center gap-3">
               <div ref={zoneRef} className="holo-card-zone" onPointerMove={onPointerMove} onPointerLeave={onPointerLeave}>
                 {/* relative: prev/next arrows anchor to the CARD's own box, not the screen
@@ -348,8 +348,9 @@ export function CardZoomProvider({ children }) {
                 <div onClick={e => { e.stopPropagation(); advance(1) }}
                   className={`holo-card relative cursor-pointer max-h-[82vh] ${(hasPrev || hasNext) ? 'max-w-[76vw]' : 'max-w-[94vw]'} ${holoClassForRarity(card.rarity)}`}>
                   <div ref={rotatorRef} className="holo-card__rotator">
-                    <img src={card.imagePath} alt={card.name ?? ''}
-                      className={`max-h-[82vh] w-auto h-auto rounded-2xl shadow-2xl select-none ${(hasPrev || hasNext) ? 'max-w-[76vw]' : 'max-w-[94vw]'}`} />
+                    <CardImage card={card} alt={card.name ?? ''}
+                      className={`max-h-[82vh] w-auto h-auto rounded-2xl shadow-2xl select-none ${(hasPrev || hasNext) ? 'max-w-[76vw]' : 'max-w-[94vw]'}`}
+                      backClassName={`rounded-2xl shadow-2xl aspect-[744/1039] ${(hasPrev || hasNext) ? 'w-[min(76vw,59vh)]' : 'w-[min(94vw,59vh)]'}`} />
                     <div className="holo-card__shine" />
                     <div className="holo-card__glare" />
                   </div>

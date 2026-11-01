@@ -121,9 +121,16 @@ All tournament pages require a Re:Union login, except the public list of declare
 - **First-open pack reveal** (`PackReveal.jsx`): a full-screen overlay that walks through the
   7 boosters, then an **8th "booster" holding the guaranteed unique**. Shown once per pool
   (localStorage key `pool_reveal_seen:<poolId>:<resetAt>`), skippable (button or Escape).
-  Images are preloaded per pack so cards appear only when ready.
+  Images are preloaded per pack so cards appear only when ready; a pack with a unique also
+  waits (up to 25 s) for the unique's face to be drawn (`src/lib/uniqueFaces.js`), the current
+  pack's uniques first. Past that, or in the full pool, a unique still drawing shows the card
+  back with a gold sweep (`CardImage.jsx`) — never the base rare's art — and a failed draw
+  offers Retry. Drawn faces are kept in IndexedDB for 30 days.
 - **Full-pool deckbuilder** (`PoolGrid`): every card of the pool with +/- controls, filters,
-  grouping. Heroes appear in the full pool, not in any booster.
+  grouping. Heroes appear in the full pool, not in any booster. Grouped by faction or by cost,
+  each group header (except the Hero cost group) has **+ All / − All** (`src/lib/deckBulk.js`):
+  every non-hero card the group shows in or out of the deck at its pool quantity — heroes stay a
+  deliberate pick, and the 3-faction limit is left to the validity badge.
 - **Validity badge**: `≥ 30 cards`, `≤ 3 factions`, `≤ 1 hero` → "Valid" / "Not valid".
 - **"Random deck"** (only when the deck is empty): builds a 30-card, ≤3-faction, 1-hero deck
   from the pool (`randomDeck.js`).

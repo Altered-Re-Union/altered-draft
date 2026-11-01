@@ -342,6 +342,7 @@ export default function TournamentPoolView({ title, load, reset, backTo = null }
             poolCounts={pool?.cards}
             onAdd={addCard}
             onRemove={removeCard}
+            onDeckChange={setDeck}
             loading={loading}
           />
         </div>

@@ -3,6 +3,7 @@ import { SimpleCardGrid } from './PoolGrid.jsx'
 import { useCardZoom } from './CardZoom.jsx'
 import { boosterCoverFor, setCodeFromRef } from '../lib/assets.js'
 import { useLang } from '../lib/i18n/i18n.jsx'
+import { requestUniqueFace, prioritizeUniqueFaces } from '../lib/uniqueFaces.js'
 
 // Preload one pack's card images; resolves when they've all settled (or a per-image error).
 // Returns a cancel fn. Cards in this pool load from a CDN (rares/uniques a touch slower), so
@@ -15,6 +16,17 @@ function preloadImages(refs, cardMap, onDone) {
   const imgs = urls.map(u => { const img = new Image(); img.onload = tick; img.onerror = tick; img.src = u; return img })
   return () => { cancelled = true; imgs.forEach(img => { img.onload = img.onerror = null }) }
 }
+
+// Uniques whose face is drawn in the browser (uniqueFaces.js) rather than loaded from a URL.
+function drawnUniques(refs, cardMap) {
+  return refs.filter(r => cardMap[r]?.faceLang)
+}
+
+// How long a pack may wait before showing anyway: its images, or the faces of its uniques
+// (a face takes a few seconds to draw). A unique still drawing then shows its card back with
+// the gold sweep, and flips to its face the moment it's ready — never the base rare's art.
+const IMAGES_WAIT_MS = 8000
+const UNIQUES_WAIT_MS = 25000
 
 // The one set every ref of a booster belongs to, or null when it mixes sets (no single pack photo fits).
 function singleSetOf(refs) {
@@ -60,14 +72,21 @@ export default function PackReveal({ packs, hasBonus = false, sourceType = 'set'
   // so the effect re-runs (and stops waiting) the moment the pack's data is fully available.
   const resolvedCount = currentPack.reduce((n, r) => n + (cardMap[r] ? 1 : 0), 0)
 
-  // Gate the current pack: wait for its card DATA, then preload its IMAGES, then reveal.
+  // Gate the current pack: wait for its card DATA, then preload its IMAGES and draw the faces
+  // of its uniques, then reveal — a unique is never revealed as a card back if it can help it.
   useEffect(() => {
     setReady(false)
     const refs = packsRef.current[index] ?? []
     if (refs.some(r => !cardMap[r])) return // data not in yet — re-runs when resolvedCount changes
-    const cancelPreload = preloadImages(refs, cardMap, () => setReady(true))
-    const timer = setTimeout(() => setReady(true), 8000) // never hang on a stuck image
-    return () => { cancelPreload(); clearTimeout(timer) }
+    // This pack's uniques first, then the following packs' in reveal order.
+    const upcoming = new Set(packsRef.current.slice(index).flatMap(p => drawnUniques(p, cardMap)))
+    prioritizeUniqueFaces([...upcoming].map(r => cardMap[r]))
+    const uniques = drawnUniques(refs, cardMap)
+    let cancelled = false
+    const faces = Promise.all(uniques.map(r => requestUniqueFace(r, cardMap[r].faceLang)))
+    const cancelPreload = preloadImages(refs, cardMap, () => faces.then(() => { if (!cancelled) setReady(true) }))
+    const timer = setTimeout(() => setReady(true), uniques.length ? UNIQUES_WAIT_MS : IMAGES_WAIT_MS)
+    return () => { cancelled = true; cancelPreload(); clearTimeout(timer) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [index, refsKey, resolvedCount])
 

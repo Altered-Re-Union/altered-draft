@@ -149,6 +149,20 @@ describe('fetchUnique', () => {
     expect(card.name).toBe('Live Unique')
     expect(card.faction).toBe('YZ')
     expect(card.rarity).toBe('U')
+    expect(card.imagePath).toBeNull()
+    expect(card.faceLang).toBe('EN')
+  })
+
+  it('aborts a stalled request instead of hanging', async () => {
+    global.fetch.mockResolvedValueOnce({ ok: true, json: async () => ({ member: [{ reference: 'ALT_EOLE_B_YZ_99_U_7777', rarity: { reference: 'UNIQUE' } }] }) })
+    await fetchUnique('ALT_EOLE_B_YZ_99_U_7777', 'EN')
+    expect(global.fetch.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal)
+  })
+
+  it('keeps the bundled EN uniques on their local image', async () => {
+    const card = await fetchUnique('ALT_CORE_B_AX_04_U_1437', 'EN')
+    expect(card.imagePath).toMatch(/^\/uniques\//)
+    expect(card.faceLang).toBeUndefined()
   })
 
   it('falls back to the bundled EN snapshot when the live fetch fails, for a bundled ref', async () => {
@@ -172,8 +186,9 @@ describe('fetchUnique', () => {
         name: 'ALT_EOLE_B_YZ_99_U_9999',
         faction: 'XX',
         rarity: 'U',
-        // uniques aren't on the CDN — the image falls back to the base rare's art
-        imagePath: 'https://cdn.alteredcore.org/cards/fr/EOLE/ALT_EOLE_B_YZ_99_R1.webp',
+        // a unique's face is on no host: it gets drawn (uniqueFaces.js), never the base rare's art
+        imagePath: null,
+        faceLang: 'FR',
       })
     } finally {
       vi.useRealTimers()

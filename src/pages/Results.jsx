@@ -159,7 +159,7 @@ export default function Results() {
       {/* ALL PICKS — shared PoolGrid with filter/sort/hover/+- */}
       {tab === 'picks' && (
         <PoolGrid refs={myPicks} cardMap={cardMap} deck={deck} poolCounts={poolCounts}
-          onAdd={addToDeck} onRemove={removeFromDeck} />
+          onAdd={addToDeck} onRemove={removeFromDeck} onDeckChange={saveDeck} />
       )}
 
       {/* DECK TAB */}
@@ -176,7 +176,7 @@ export default function Results() {
           </div>
           {deckTotal === 0
             ? <div className="flex-1 flex items-center justify-center text-faint text-sm">{t('results.noDeckCardsYet')}</div>
-            : <div className="flex-1 overflow-hidden"><PoolGrid refs={deckRefs} cardMap={cardMap} deck={deck} poolCounts={poolCounts} onAdd={addToDeck} onRemove={removeFromDeck} /></div>}
+            : <div className="flex-1 overflow-hidden"><PoolGrid refs={deckRefs} cardMap={cardMap} deck={deck} poolCounts={poolCounts} onAdd={addToDeck} onRemove={removeFromDeck} onDeckChange={saveDeck} /></div>}
         </div>
       )}
 
