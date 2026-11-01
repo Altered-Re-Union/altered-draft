@@ -20,6 +20,8 @@ Table of contents
 10. [Migration and deployment](#10-migration-and-deployment)
 11. [Lots](#11-lots)
 12. [Risks, open verifications, non-goals](#12-risks-open-verifications-non-goals)
+13. [V3 — Multi-set sealed and random uniques](#13-v3--multi-set-sealed-and-random-uniques-design-2026-11-01)
+14. [V4 — Private tournaments and the share box](#14-v4--private-tournaments-and-the-share-box-design-2026-11-01)
 
 ---
 
@@ -446,6 +448,7 @@ Theming: semantic tokens only (`surface`, `ink`, `accent`, …), as in `CLAUDE.m
 | **3. Polish** | Home "Sealed set 6" block → generic "Tournaments"; "pools created by BGA" indicator; purge policy for boosters of long-ended tournaments (optional); docs. | After lot 1 | 2–3 days |
 | **V2. Mono-faction sealed** | source.type = 'faction', weighted sets, exact quotas, nullable set_code, recette page + Playwright steps | After lot 1 | 3–4 days |
 | **V3. Multi-set sealed + random uniques** | source.type = 'multiset' (7 single-set boosters split over sets, normalized to `set` for one set), `uniques.randomOneIn` (one unique in N boosters, every source), the "Sets" tab with its disclosure, recette page + Playwright steps. Design in §13. Takes the "multi-set" and "random uniques" items out of lot 2. | After V2 (stacked on its branch) | 3–4 days |
+| **V4. Private tournaments + share box** | `tournaments.visibility` (public / private, listing only), the §14.3 listing rule, the redacted `?bgaId=` answer, the private badge, the share box (copy, native share, local QR code), the Lobby's QR code moved to the same local component, recette page + Playwright steps. Design in §14. | After V3 (stacked on its branch) | 2.5–3 days |
 
 Estimates are effective dev days with Claude Code, tests and review included, excluding time
 waiting on Re:Union.
@@ -650,3 +653,160 @@ booster (set-pure and `sourceType !== 'faction'`) instead of the `noCover` flag;
   as long as §13.3's rng order holds and the two existing goldens do not move. **As built:**
   `placeRandomUniques` serves `set` and `faction`; `buildMultisetPool` rolls inline (its hits
   share the per-set call with the guaranteed uniques); `uniqueGate` is shared by all three.
+
+## 14. V4 — Private tournaments and the share box (design, 2026-11-01)
+
+Approved 2026-11-01 after the V3 review. Two additions to declared tournaments, shipped in one
+PR stacked on V3's branch (`feat/private-tournaments` from `feat/multiset-sealed`, retargeted to
+`main` as the stack merges): a **visibility** on every declared tournament (`public`, the default,
+or `private`: listed only to the people it concerns) and a **share box** on every tournament page
+(link, copy, native share sheet, QR code). The QR code is generated locally, and the Lobby's QR
+code moves to the same component. Scope is declared tournaments only (`/tournament/new`, the hub,
+the tournament page): no change to the pools, to `current_format`, to the legacy pools nor to the
+BGA-facing contracts. Everything downstream of a tournament (pool creation, deck builder, Re:Union
+deck sync, BGA deck-list validation) is unchanged.
+
+**"Private" hides, it does not protect.** A private tournament is simply absent from the public
+lists for the people it does not concern. Its page, its pool creation and the BGA path work exactly
+as for a public one: anyone with the link can prepare a pool, and a player registered on BGA gets a
+pool at their first game whatever the visibility (§6). An access control would only make sense with
+invitations, which are out of scope (§14.7).
+
+### 14.1 Why
+
+Playgroups and clubs run invitation-only events and do not want them next to the community
+tournaments in Upcoming and Ongoing; today every declaration is public the moment it is created.
+And the only way to hand a tournament's link to the players is the address bar, while the Lobby
+has had a share box with a QR code from the start.
+
+### 14.2 Decisions
+
+| Topic | Decision |
+| --- | --- |
+| Meaning of private | **Listing only.** Not listed in Upcoming / Ongoing for anonymous visitors and for logged-in players who have nothing to do with it. The page by URL, "Open your pool", the pool page, "My pools", the checklist, the organizer panel, the moderator actions and the BGA path are identical for both visibilities. |
+| Who sees a private tournament in the public lists | Its **organizer**, every player who **has a pool** on it (`sealed_pools.sub` with that `tournament_ref`, whether the pool was created by the page or by a BGA call), and the **moderators**. Nobody else, anonymous included. One rule, applied in SQL for the lists (§14.3) and by a pure helper for the single-item lookup. |
+| Data | `tournaments.visibility text not null default 'public' check (visibility in ('public', 'private'))`, added idempotently (`alter table … add column if not exists`); existing rows become `public` through the default. No index: the filter rides the status scan. |
+| API field | `visibility: 'public' \| 'private'` on every tournament JSON. Optional on create (default `public`); editable by PATCH like `name`, in every status but detached, **never locked** by the pools (making a tournament public after players prepared pools is a supported case). Anything else → 400 `fields.visibility = 'invalid_visibility'`. |
+| Hub | No new UI besides the badge: the public tabs show the filtered list, so "My ongoing tournaments" (derived from it) and the tab counters follow. No "private" filter, no separate tab. "My pools" and "My created tournaments" are personal by construction and unchanged. |
+| Badge | A `PrivateBadge` pill in `TournamentBits.jsx`: an inline SVG padlock (`currentColor`, `aria-hidden`) + the word "Private", `title` "Private tournament: not listed publicly", `data-testid="tournament-private"`, muted style (`text-muted border-line bg-surface2`). Shown **after** the status pill on every tournament card of the hub (public tabs, "My ongoing tournaments", "My pools", "My created tournaments") and in the tournament page header. Not on the pool page. (After the status pill: the e2e `tournamentLink()` helper matches a card by "name Status …".) |
+| `?bgaId=` lookup | When the live declaration of that BGA id is private and the viewer may not see it, the item is **redacted to `{ visibility: 'private' }`**: no id, name, organizer, config, dates, pool count nor viewer block. The form keeps refusing the link ("A tournament already exists for this BGA link.", wording unchanged): `takenBgaIds` stores `holder.id ?? 'private'`, a sentinel that never equals `ownId`. `legacy` is unchanged (legacy pools are not a declaration). The organizer editing their own private tournament still gets the full item, so their own link is not "taken". |
+| Form | Section 1, under the description: a radio group "Visibility" with "Public — Listed in Upcoming and Ongoing for everyone." and "Private — Listed only for you, the players who have a pool and the moderators. Share its link." Default `public`; prefilled in edit mode; always enabled; kept in the `sessionStorage` draft across the Keycloak round trip. Sent on create and on every PATCH, like `name`. |
+| Share box | `ShareBox.jsx` on the tournament page, for every tournament but a detached one, between the checklist and the organizer panel, visible logged out too. Title "Share this tournament", a hint (a private tournament: "This tournament is private: its link is the only way to find it.", in every status; a public one: "Anyone with the link can open this page and prepare a pool.", only while it is upcoming or ongoing, no hint once cancelled or ended), the absolute URL `${location.origin}/tournament/t/<id>` in a read-only input, a **Copy** button (the Lobby's behaviour: "✓ Copied" for 2 s; `navigator.clipboard` first, then the `execCommand` textarea fallback of `ExportMenu`'s `copyText`, and when both fail the input text is selected so the user copies by hand; never a thrown error), a **Share…** button rendered only when `navigator.share` exists (`navigator.share({ title: name, url })`, an `AbortError` is ignored), and the **QR code** of the URL (hidden below `sm`, like the Lobby's). |
+| QR code | Generated **locally** with `qrcode-generator` (2.0.4, MIT, no transitive dependency, ESM entry): a pure `src/lib/qr.js` (`qrSvgPath(text, { level: 'M' }) → { size, d }`, the dark modules as one SVG path, unit-tested) rendered by `QrCode.jsx` (`<svg viewBox>` with a 4-module quiet zone, `role="img"` + `aria-label`). **Always dark modules on a white tile, in both themes** (literal `#000` / `#fff` on purpose: inverted QR codes are not read by every scanner, so the QR is content with a scanning contract, not chrome). Nothing leaves the browser: no request to `api.qrserver.com` any more. |
+| Lobby | `Lobby.jsx` replaces its `api.qrserver.com` `<img>` with `<QrCode value={joinUrl} />` (same place, same 120 px, same `lobby.qrCodeAlt` label); `tests/e2e/support/network.js` drops the `api.qrserver.com` exception, so a request there is a leak again and fails the test. |
+| Bound pools | `/api/tournament-bound-pools` adds `visibility` to each pool's `tournament` block (the "My pools" cards show the badge); the list itself is unchanged (own pools). |
+| i18n | `tournaments.*` (EN + FR): `visibilityLabel`, `visibilityPublic`, `visibilityPublicHint`, `visibilityPrivate`, `visibilityPrivateHint`, `errVisibility`, `privateBadge`, `privateBadgeTitle`, `shareTitle`, `shareHint`, `sharePrivateHint`, `shareCopy`, `shareCopied`, `shareNative`, `shareQrAlt`. `lobby.qrCodeAlt` stays. |
+| Recette | A new page `docs/tournaments/acceptance-private-tournaments.html` ("Private tournaments and the share box — V4", ids `pv-<group>-<slug>`, BGA ids 123500–123509), fourth entry of `scripts/e2e-acceptance-coverage.mjs`'s `ACCEPTANCE_PAGES`. Playwright `tests/e2e/specs/private-tournaments.spec.js`. |
+| Branch | `feat/private-tournaments` from `feat/multiset-sealed` (PR #26), in its own git worktree (another session works in the main checkout); draft PR based on `feat/multiset-sealed`, retargeted as the stack merges, updated with merge commits, never rebased. |
+
+### 14.3 Listing rule
+
+`listTournaments(status, viewer)` (`src/lib/tournamentStore.js`), `viewer = { sub, isModerator } | null`:
+
+```sql
+SELECT t.* FROM tournaments t
+WHERE <status filter, unchanged>
+  AND (t.visibility = 'public'
+       OR $2                                   -- the viewer is a moderator
+       OR t.organizer_sub = $1
+       OR EXISTS (SELECT 1 FROM sealed_pools p WHERE p.tournament_ref = t.id AND p.sub = $1))
+ORDER BY t.starts_at ASC, t.created_at ASC
+```
+
+with `$1 = viewer?.sub ?? null` and `$2 = viewer?.isModerator ?? false` (a null `$1` makes the
+last two branches false, so anonymous callers get the public rows only). `listTournamentsByOrganizer`
+(`?mine=1`) and `listBoundTournamentPools` need no filter. The same rule as a pure function,
+`canSeeTournament(row, viewer, { hasPool })` in `src/lib/tournamentRules.js` (DB rows, snake_case),
+decides the redaction of the `?bgaId=` item in `api/tournaments/index.js` (`hasPool` from the
+`poolSummariesForTournaments` call the handler already makes). The detail endpoint never filters:
+the page is reachable by URL by design.
+
+### 14.4 API
+
+| Endpoint | Change |
+| --- | --- |
+| `GET /api/tournaments?status=` | Rows filtered by §14.3 with the caller's verified identity (a bad or expired bearer is still the anonymous view, never a 401). Each item carries `visibility`. |
+| `GET /api/tournaments?bgaId=` | The live declaration as today when visible to the caller; `{ visibility: 'private' }` alone otherwise. `legacy` unchanged. |
+| `GET /api/tournaments?mine=1` | Unchanged (the organizer's own); items carry `visibility`. |
+| `POST /api/tournaments` | Accepts `visibility` (optional, default `public`); 400 `fields.visibility = 'invalid_visibility'` otherwise. |
+| `GET /api/tournaments/:id` | Unchanged behaviour, `visibility` in the JSON. |
+| `PATCH /api/tournaments/:id` | Accepts `visibility` like `name` (any status but detached, never 409 `tournament_locked` for it). |
+| `GET /api/tournament-bound-pools` | `tournament.visibility` added per pool. |
+| `/api/tournaments/:id/pool`, the BGA-facing endpoints | **Unchanged.** |
+
+### 14.5 Form, hub, tournament page
+
+**Form.** State `visibility` (`'public'` by default), the radio group under the description
+(`data-testid="visibility-public"` / `"visibility-private"`, labels from `visibilityPublic` /
+`visibilityPrivate`, each option with its hint as description), part of the draft
+(`tournament_form_draft:*`) and of the edit prefill. `tournamentFormIssues` maps `fields.visibility`
+to the `visibility` field (after `description` in `FIELD_ORDER`); unreachable from the UI (radios),
+kept for the API path. The `body` sent on create and on PATCH includes `visibility`.
+
+**Hub.** `TournamentCard`, the "My ongoing tournaments" card, the "My pools" card
+(`p.tournament.visibility`) and the created groups render `<PrivateBadge />` after the status pill
+when `visibility === 'private'`.
+
+**Tournament page.** The header shows the badge after the status pill. The share box sits between
+the checklist and the organizer panel, for every status but detached (`data-testid="share-box"`,
+`share-url` on the input, `share-copy`, `share-native`, `share-qr`).
+
+**Lobby.** Only the QR `<img>` changes (§14.2).
+
+### 14.6 Tests and recette
+
+- Unit: `tournamentRules` (`validateTournamentFields`: default `public` on create, both values
+  accepted, anything else `invalid_visibility`, a patch validates only when the key is present;
+  `canSeeTournament` matrix: public / organizer / pool holder / moderator / anonymous / stranger);
+  `tournamentForm` (issue mapping and order); `qr.js` (deterministic output for a fixed string, the
+  size grows with the text, the path stays on the module grid, throws on empty input);
+  `TournamentBits` (the badge only when private).
+- Integration: the column with its default on a schema replay; the `listTournaments` matrix
+  (anonymous, logged-in stranger, organizer, pool holder whose pool came from the page, pool holder
+  whose pool came from a BGA call, moderator) over a private and a public tournament; POST default
+  and 400; PATCH `visibility` on an upcoming, a cancelled and a locked (with pools) tournament, 409
+  on a detached one; `?bgaId=` redaction for a stranger and for anonymous, the full item for the
+  organizer, a pool holder and a moderator; `tournament-bound-pools` carrying `visibility`.
+- E2E (`private-tournaments.spec.js`; personas: alice organizer, bob moderator, carol stranger
+  until she prepares a pool, plus anonymous): the radio (default, hints, create private → stored,
+  badge on the page and in "My created tournaments"); the lists (alice sees it in Upcoming with the
+  badge; bob too; carol does not; anonymous does not; the counters match); the link (carol opens the
+  page by URL, prepares a pool, then sees it in Upcoming and "My pools" with the badge; once started,
+  in "My ongoing tournaments"); the duplicate-link check as carol (redacted answer, form blocked, no
+  name shown) and as alice editing it (not blocked); edit (private → public with a pool: anonymous
+  now sees it; back to private: anonymous does not); the share box (URL, Copy with clipboard
+  permissions granted → the clipboard holds the URL and the label flips; Share… absent in Chromium,
+  present and called with the URL when `navigator.share` is injected with `addInitScript`; the QR
+  `<svg>` with a non-empty path, black on white in both themes); the Lobby QR (an `<svg>`, no
+  `api.qrserver.com` request); 375 px (form radios, share box, no horizontal scroll); FR (no raw
+  key on the new strings).
+- Recette groups: 0 setup (lot 1 stack, branch, `make dev` with the `visibility` column check,
+  suites, coverage with four pages, clean ids), A form, B create, C lists per persona, D link access
+  and pools, E duplicate-link check, F edit both ways with pools, G share box (copy, native share on
+  a phone, QR scanned with a phone), H Lobby QR, I FR / theme / mobile / console, K before
+  production (a private tournament on preprod, the lists as a moderator and as a stranger, the QR
+  scanned).
+
+### 14.7 Non-goals and what was weighed
+
+- **Invitations by pseudo** (asked, weighed, kept out). No service can resolve a pseudo: Keycloak's
+  userinfo reveals the caller only, the user search is an admin API that would need Re:Union to
+  grant the `altered-draft` client a service account with `view-users`, and decks-api exposes
+  `/api/decks` only (its OpenAPI, checked 2026-11-01). Options studied: (a) the shared link is the
+  invitation, chosen; (b) pseudos stored as typed (`tournament_invites`) and matched to the `pseudo`
+  claim at login, no validation possible at entry and pseudos not guaranteed unique, about one day,
+  possible later as its own PR; (c) a real Keycloak lookup once Re:Union grants the role. The
+  listing rule of §14.3 is written so that (b) is one more `OR EXISTS` branch.
+- **Access control** on private tournaments (refusing "Open your pool" to strangers): meaningless
+  while the BGA path creates pools for every BGA player, and only useful with (b) or (c).
+- Secret links or tokens: the UUID in the URL already is one (unguessable, never listed).
+- Notifications, a "private" filter or tab, a visibility on the Lobby rooms.
+
+### 14.8 Left to the builder
+
+- The exact Tailwind layout of the radio group and of the share box (semantic tokens only; the QR
+  tile is the one place with literal colours, see §14.2).
+- Whether the Copy / native-share helpers are extracted to a small `src/lib/share.js` shared with
+  `ExportMenu`'s `copyText`, or kept local to `ShareBox`.
+- The `QrCode` component's props (`value`, `size`, `label`, `className`, `testId`), as long as the
+  Lobby and the share box both render through it.
