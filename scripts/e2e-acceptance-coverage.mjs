@@ -19,6 +19,7 @@ const ACCEPTANCE_PAGES = [
   'docs/tournaments/acceptance-user-tournaments.html',
   'docs/tournaments/acceptance-mono-faction-sealed.html',
   'docs/tournaments/acceptance-multiset-sealed.html',
+  'docs/tournaments/acceptance-private-tournaments.html',
 ]
 const NOT_STEPS = new Set(['mobile'])
 const AUTO_LINE = /^const AUTO_STEPS = \[.*\];$/m

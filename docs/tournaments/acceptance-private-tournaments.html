@@ -1,0 +1,911 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Private Tournaments Acceptance</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #f6f5f2;
+  --surface: #ffffff;
+  --surface-2: #f0eee9;
+  --border: #e3e0d8;
+  --text: #1d1b16;
+  --muted: #6b675d;
+  --accent: #4f46e5;
+  --accent-soft: #eceafe;
+  --ok: #15803d;
+  --ok-soft: #e3f4e8;
+  --ko: #c2410c;
+  --ko-soft: #fdebe1;
+  --skip: #7c7768;
+  --skip-soft: #ecebe6;
+  --shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 16px rgba(0,0,0,.04);
+  --radius: 14px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141310;
+    --surface: #1c1b17;
+    --surface-2: #25231e;
+    --border: #34312a;
+    --text: #ece9e1;
+    --muted: #9c978a;
+    --accent: #8b85ff;
+    --accent-soft: #26244a;
+    --ok: #4ade80;
+    --ok-soft: #173322;
+    --ko: #fb923c;
+    --ko-soft: #3a2316;
+    --skip: #a8a394;
+    --skip-soft: #2a2823;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 4px 16px rgba(0,0,0,.25);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #141310;
+  --surface: #1c1b17;
+  --surface-2: #25231e;
+  --border: #34312a;
+  --text: #ece9e1;
+  --muted: #9c978a;
+  --accent: #8b85ff;
+  --accent-soft: #26244a;
+  --ok: #4ade80;
+  --ok-soft: #173322;
+  --ko: #fb923c;
+  --ko-soft: #3a2316;
+  --skip: #a8a394;
+  --skip-soft: #2a2823;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 4px 16px rgba(0,0,0,.25);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.55 Inter, system-ui, sans-serif;
+}
+code, .mono { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: .86em; }
+a { color: var(--accent); }
+.wrap { max-width: 920px; margin: 0 auto; padding: 0 16px 120px; }
+
+header.top {
+  position: sticky; top: 0; z-index: 10;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border);
+}
+header.top .inner { max-width: 920px; margin: 0 auto; padding: 12px 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+header.top h1 { font-size: 17px; margin: 0; font-weight: 700; letter-spacing: -.01em; flex: 1 1 auto; }
+.progress { flex: 1 1 220px; display: flex; align-items: center; gap: 10px; }
+.bar { flex: 1; height: 8px; border-radius: 99px; background: var(--surface-2); overflow: hidden; display: flex; }
+.bar span { height: 100%; transition: width .3s ease; }
+.bar .b-ok { background: var(--ok); }
+.bar .b-ko { background: var(--ko); }
+.bar .b-skip { background: var(--skip); }
+.count { font-size: 13px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.filters { display: flex; gap: 4px; background: var(--surface-2); padding: 3px; border-radius: 10px; }
+.filters button { border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 13px; padding: 4px 10px; border-radius: 8px; cursor: pointer; }
+.filters button.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+.tabs button { font-weight: 600; }
+.badge { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; margin-left: 4px; border-radius: 99px; background: var(--ko); color: #fff; font-size: 11px; font-weight: 700; }
+.new-tag { display: inline-block; font-size: 11px; font-weight: 700; padding: 0 6px; border-radius: 99px; background: var(--accent); color: #fff; vertical-align: 2px; }
+.new-tag.v11 { background: #6d5bd0; }
+.new-tag.auto { background: #2f7d4f; }
+.icon-btn { border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 10px; padding: 5px 9px; cursor: pointer; font: inherit; font-size: 13px; }
+
+.hero { padding: 36px 0 8px; }
+.hero h2 { font-size: 28px; line-height: 1.2; margin: 0 0 8px; letter-spacing: -.02em; }
+.hero p { color: var(--muted); margin: 0; max-width: 680px; }
+
+.cast { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; margin: 24px 0 8px; }
+.persona { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; box-shadow: var(--shadow); min-width: 0; }
+.persona .tag { display: inline-block; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; padding: 2px 8px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); margin-bottom: 6px; }
+.persona .org { font-weight: 600; }
+.persona .meta { color: var(--muted); font-size: 13px; }
+
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; max-width: 100%;
+  border: 1px dashed var(--border); background: var(--surface-2); color: var(--text);
+  border-radius: 8px; padding: 1px 8px; font-family: "JetBrains Mono", monospace; font-size: 12.5px;
+  cursor: pointer; word-break: break-all; text-align: left;
+}
+.chip:hover { border-color: var(--accent); }
+.chip.copied { border-color: var(--ok); color: var(--ok); }
+
+section.group { margin-top: 36px; }
+section.group > h3 { display: flex; align-items: baseline; gap: 10px; font-size: 19px; margin: 0 0 4px; letter-spacing: -.01em; }
+section.group > h3 .letter { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 8px; background: var(--text); color: var(--bg); font-size: 14px; flex: none; }
+section.group > h3 .gcount { margin-left: auto; font-size: 13px; color: var(--muted); font-weight: 500; }
+section.group > .intro { color: var(--muted); margin: 0 0 14px 38px; font-size: 14px; }
+section.group > h3 { cursor: pointer; user-select: none; border-radius: 8px; }
+section.group > h3:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+section.group > h3 .chev { flex: none; align-self: center; color: var(--muted); font-size: 12px; transition: transform .2s; }
+section.group.collapsed > h3 .chev { transform: rotate(-90deg); }
+section.group.collapsed > :not(h3) { display: none; }
+.fold { display: flex; gap: 6px; justify-content: flex-end; margin: 24px 0 -16px; }
+.fold button { border: 1px solid var(--border); background: var(--surface); color: var(--muted); font: inherit; font-size: 13px; padding: 4px 10px; border-radius: 8px; cursor: pointer; }
+.fold button:hover { color: var(--text); }
+
+.step {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  margin-bottom: 10px; box-shadow: var(--shadow); overflow: hidden;
+  transition: border-color .2s, opacity .2s;
+}
+.step[data-status="ok"] { border-color: color-mix(in srgb, var(--ok) 40%, var(--border)); }
+.step[data-status="ok"] .s-title { color: var(--muted); }
+.step[data-status="ko"] { border-color: var(--ko); }
+.step[data-status="skip"] { opacity: .65; }
+.s-head { display: flex; gap: 12px; padding: 14px 16px; align-items: flex-start; }
+.s-num { flex: none; font-size: 12px; font-weight: 600; color: var(--muted); padding-top: 3px; width: 30px; font-variant-numeric: tabular-nums; }
+.s-body { flex: 1; min-width: 0; }
+.s-title { font-weight: 600; margin: 0 0 4px; }
+.s-who { font-size: 13px; color: var(--muted); margin-bottom: 6px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.s-body ul { margin: 6px 0 0; padding-left: 18px; }
+.s-body li { margin: 2px 0; }
+.s-body li::marker { color: var(--muted); }
+.s-body .note { font-size: 13px; color: var(--muted); margin-top: 6px; }
+.s-body pre { background: var(--surface-2); border-radius: 10px; padding: 10px 12px; overflow-x: auto; font-size: 12.5px; margin: 8px 0 0; white-space: pre-wrap; word-break: break-word; position: relative; }
+.s-body pre .copy-pre { position: absolute; top: 6px; right: 6px; }
+
+.status { display: flex; gap: 4px; flex: none; }
+.status button {
+  width: 34px; height: 34px; border-radius: 10px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--muted); cursor: pointer; display: grid; place-items: center;
+  transition: background .15s, color .15s, border-color .15s, transform .1s;
+}
+.status button:active { transform: scale(.94); }
+.status button svg { width: 17px; height: 17px; }
+.status button.on[data-v="ok"] { background: var(--ok-soft); color: var(--ok); border-color: var(--ok); }
+.status button.on[data-v="ko"] { background: var(--ko-soft); color: var(--ko); border-color: var(--ko); }
+.status button.on[data-v="skip"] { background: var(--skip-soft); color: var(--skip); border-color: var(--skip); }
+
+.issue { display: none; border-top: 1px dashed var(--ko); background: color-mix(in srgb, var(--ko-soft) 55%, var(--surface)); padding: 12px 16px 14px 58px; }
+.step[data-status="ko"] .issue, .step.has-note .issue { display: block; }
+.issue label { font-size: 12px; font-weight: 600; color: var(--ko); text-transform: uppercase; letter-spacing: .04em; }
+.issue textarea {
+  width: 100%; min-height: 84px; margin-top: 6px; resize: vertical;
+  border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px;
+  background: var(--surface); color: var(--text); font: inherit; font-size: 14px;
+}
+.issue textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.drop { margin-top: 8px; border: 1.5px dashed var(--border); border-radius: 10px; padding: 10px; font-size: 13px; color: var(--muted); text-align: center; cursor: pointer; }
+.drop.over { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.thumbs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.thumb { position: relative; width: 112px; height: 76px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); background: var(--surface-2); }
+.thumb img { width: 100%; height: 100%; object-fit: cover; cursor: zoom-in; }
+.thumb button { position: absolute; top: 3px; right: 3px; width: 22px; height: 22px; border-radius: 6px; border: 0; background: rgba(0,0,0,.6); color: #fff; cursor: pointer; font-size: 13px; line-height: 1; }
+.thumb .fname { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,.55); color: #fff; font-size: 9.5px; padding: 1px 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: "JetBrains Mono", monospace; }
+
+.callout { background: var(--accent-soft); border-radius: var(--radius); padding: 14px 16px; margin: 14px 0; font-size: 14px; }
+.callout strong { color: var(--accent); }
+details.callout summary { cursor: pointer; font-weight: 600; }
+
+.recap { margin-top: 48px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+.recap-head { display: flex; gap: 10px; align-items: center; padding: 14px 16px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.recap-head h3 { margin: 0; font-size: 17px; flex: 1; }
+.btn { border: 0; background: var(--accent); color: #fff; font: inherit; font-weight: 600; font-size: 14px; padding: 8px 14px; border-radius: 10px; cursor: pointer; }
+.btn.secondary { background: var(--surface-2); color: var(--text); }
+.btn:disabled { opacity: .5; cursor: default; }
+.recap pre { margin: 0; padding: 16px; font-size: 12.5px; white-space: pre-wrap; word-break: break-word; max-height: 460px; overflow: auto; }
+.empty { padding: 20px 16px; color: var(--muted); font-size: 14px; }
+
+.toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(20px); opacity: 0; background: var(--text); color: var(--bg); padding: 8px 14px; border-radius: 10px; font-size: 13px; transition: .2s; pointer-events: none; z-index: 50; }
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.lightbox { position: fixed; inset: 0; background: rgba(0,0,0,.8); display: none; place-items: center; z-index: 40; padding: 16px; cursor: zoom-out; }
+.lightbox.show { display: grid; }
+.lightbox img { max-width: 100%; max-height: 100%; border-radius: 8px; }
+.hidden { display: none !important; }
+
+@media (max-width: 600px) {
+  .s-head { flex-wrap: wrap; }
+  .s-num { width: auto; }
+  .status { width: 100%; justify-content: flex-end; order: 3; }
+  .issue { padding-left: 16px; }
+  section.group > .intro { margin-left: 0; }
+  .hero h2 { font-size: 23px; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="inner">
+    <h1>Acceptance — private tournaments and the share box · V4</h1>
+    <div class="progress">
+      <div class="bar"><span class="b-ok"></span><span class="b-ko"></span><span class="b-skip"></span></div>
+      <span class="count" id="count">0 / 0</span>
+    </div>
+    <div class="filters tabs" id="tabs">
+      <button data-tab="steps" class="active">Steps</button>
+      <button data-tab="recap">Recap to paste <span class="badge hidden" id="tabBadge"></span></button>
+    </div>
+    <div class="filters" id="filters">
+      <button data-f="all" class="active">All</button>
+      <button data-f="todo">To do</button>
+      <button data-f="ko">Problems</button>
+      <button data-f="manual">Manual only</button>
+    </div>
+    <button class="icon-btn" id="themeBtn" title="Theme">◐</button>
+  </div>
+</header>
+
+<main class="wrap">
+ <div id="viewSteps">
+  <div class="hero">
+    <h2>Private tournaments and the share box — V4</h2>
+    <p>A declared tournament can be <strong>private</strong>: it is then listed in Upcoming / Ongoing only to its organizer, the players who have a pool on it and the moderators. Its page, its pool creation and the BGA path work exactly as for a public one (“private” hides, it does not protect). Every tournament page also gets a <strong>share box</strong>: the link, Copy, “Share…” (native share sheet) and a QR code generated in the browser; the Lobby’s QR code is generated locally too. Runs on <code>make dev</code> (API :8080, Vite :5173) + altered-dev-environment, with the lot 1 setup: accounts, bob moderator, carol (see group 0 of <code>docs/tournaments/acceptance-user-tournaments.html</code>).</p>
+    <p>Spec: <code>docs/tournaments/user-tournaments-spec.md</code> §14 · doc: <code>docs/tournaments/README.md</code> §14. Do the groups <strong>in the order shown</strong>: <strong>E comes before D</strong>, because carol must still be a stranger to “Private cup” (no pool on it) when she tries its link; she prepares her pool in D. C to G reuse “Private cup” (BGA id 123500) created in B.</p>
+    <p>A phone cannot reach <code>localhost</code>: locally, scanning a QR code only shows the link it holds. Opening it from a phone (and the phone share sheet) is checked on preprod, in K.</p>
+    <p>Tick ✓ or ✗ on each step. The ✗ button opens a text field where you can paste screenshots (Ctrl+V). Copy the recap from the tab at the top. The state is kept in this browser (IndexedDB), apart from the lot 1, V2 and V3 pages’.</p>
+    <p>Steps marked <span class="new-tag auto">auto</span> are replayed by the Playwright suite (<code>make e2e</code>, <code>tests/e2e</code>) on its own card fixtures: no need to run them by hand. An “auto (partial)” badge keeps a manual part: hover it to see which. The “Manual only” filter shows the steps without a badge and the partial ones.</p>
+  </div>
+
+  <div class="cast" id="cast"></div>
+
+  <div class="fold"><button type="button" id="foldAll">Collapse all</button><button type="button" id="unfoldAll">Expand all</button></div>
+  <div id="groups"></div>
+
+  <p style="margin-top:32px;text-align:center">
+    <button class="btn" data-goto="recap">See the recap to paste →</button>
+  </p>
+ </div>
+
+ <div id="viewRecap" class="hidden">
+  <div class="hero">
+    <h2>Recap to paste</h2>
+    <p>Paste it as is in the chat. If you attached screenshots, download them first: the recap gives their path in <code>~/Downloads</code>.</p>
+  </div>
+  <div class="recap" style="margin-top:20px">
+    <div class="recap-head">
+      <h3>Recap to paste</h3>
+      <button class="btn secondary" id="dlImages">Download the screenshots</button>
+      <button class="btn" id="copyRecap">Copy</button>
+    </div>
+    <pre id="recapText"></pre>
+  </div>
+
+  <p style="margin-top:24px;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap">
+    <button class="icon-btn" data-goto="steps">← Back to the steps</button>
+    <button class="icon-btn" id="resetAll">Reset everything</button>
+  </p>
+ </div>
+</main>
+
+<div class="toast" id="toast"></div>
+<div class="lightbox" id="lightbox"><img alt=""></div>
+
+<script>
+const WEB = 'http://localhost:5173';
+const API = 'http://localhost:8080';
+const KC = 'http://auth.altered.local.gd:18080';
+const PWD = 'TestPassword1234';
+const BGA_ID = '123500';
+const BGA_URL = 'https://boardgamearena.com/tournament?id=123500';
+const ALICE_SUB = '11111111-1111-1111-1111-111111111111';
+
+const PERSONAS = {
+  alice: { tag: 'Organizer', org: 'alice (sub 1111…)', email: 'alice', meta: 'Creates “Private cup”, “Public control” and “Toggle cup”. Not a moderator.' },
+  bob:   { tag: 'Moderator', org: 'bob (TOURNAMENT_MODERATORS)', email: 'bob', meta: 'Sees every private tournament; detaches “Squat cup” (G).' },
+  carol: { tag: 'Stranger, then player', org: 'carol (created by make dev)', email: 'carol@example.test', meta: 'No link with “Private cup” until she prepares a pool on it (D). Declares “Squat cup”.' },
+  anon:  { tag: 'Logged out', org: 'private window', email: '—', meta: 'No Re:Union session.' },
+};
+
+const chip = (txt) => `<button class="chip" data-copy="${txt.replace(/"/g,'&quot;')}">${txt}</button>`;
+const who = (k) => k === 'anon' ? '<span>Logged out (private window)</span>' : (k ? `${chip(PERSONAS[k].email)} ${chip(PWD)} <span>${PERSONAS[k].meta}</span>` : '');
+const url = (u) => chip(u);
+const block = (txt) => `<pre><button class="chip copy-pre" data-copy-pre>copy</button>${txt.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</pre>`;
+// A shell command, preceded by the token export of every $TOKEN_X it uses.
+const pre = (cmd) => {
+  const users = [...new Set([...cmd.matchAll(/\$TOKEN_([A-Z]+)/g)].map(m => m[1]))].filter(u => !cmd.includes('export TOKEN_' + u))
+  return block([...users.map(u => TOKEN(u.toLowerCase())), cmd].join('\n'))
+}
+// A snippet for the DevTools console (JavaScript, not a shell command).
+const jsPre = (code) => block(code);
+const LOGIN = { carol: 'carol@example.test' }
+const TOKEN = (u) => `export TOKEN_${u.toUpperCase()}=$(curl -s -X POST "${KC}/realms/players/protocol/openid-connect/token" -d grant_type=password -d client_id=altered-draft -d client_secret=dev-altered-draft-secret -d username=${LOGIN[u] ?? u} -d password=${PWD} -d 'scope=openid profile' | node -pe 'JSON.parse(require("fs").readFileSync(0)).access_token'); [ -n "$TOKEN_${u.toUpperCase()}" ] && [ "$TOKEN_${u.toUpperCase()}" != undefined ] && echo "TOKEN_${u.toUpperCase()} ok" || echo "TOKEN_${u.toUpperCase()} EMPTY: credentials refused by Keycloak"`;
+// Every command runs from any directory: the compose file and make/npm are reached through REPO.
+const REPO = '~/Perso/altered-reunion/altered-draft';
+const DB = `docker compose -f ${REPO}/docker-compose.yml exec -T postgres psql -U altered-draft -d altered-draft`;
+// Unaligned, tuples only, ' | ' between columns: the output is exactly the Expected lines.
+const PSQL = (sql) => pre(`${DB} -At -F ' | ' -c "${sql}"`);
+
+// Helpers that only shorten this file: every step still prints its whole command.
+const IDS = `'^12350[0-9]$'`;
+// The open tournaments (upcoming + ongoing) of this page as the API lists them to a persona (no persona: anonymous).
+const LIST = (tok) => pre(`curl -s ${tok ? `-H "Authorization: Bearer $TOKEN_${tok}" ` : ''}"${API}/api/tournaments?status=open" | node -pe 'JSON.parse(require("fs").readFileSync(0)).tournaments.filter(t => /^12350[0-9]$/.test(t.bgaTournamentId)).map(t => [t.bgaTournamentId, t.name, t.status, t.visibility].join(" | ")).join("\\n") || "none of this page"'`);
+// The raw ?bgaId= answer to a persona (no persona: anonymous).
+const BYBGA = (tok, bga) => pre(`curl -s ${tok ? `-H "Authorization: Bearer $TOKEN_${tok}" ` : ''}"${API}/api/tournaments?bgaId=${bga}"; echo`);
+// Declares a Skybound Odyssey tournament (7 boosters, no unique) through the API, starting tomorrow.
+const CREATE = (tok, name, bga, visibility) => pre(`T=$TOKEN_${tok} node -e '(async () => { const h = { Authorization: "Bearer " + process.env.T, "Content-Type": "application/json" }; const r = await fetch("${API}/api/tournaments", { method: "POST", headers: h, body: JSON.stringify({ name: "${name}", bgaUrl: "https://boardgamearena.com/tournament?id=${bga}", startsAt: new Date(Date.now() + 864e5).toISOString(),${visibility ? ` visibility: "${visibility}",` : ''} config: { source: { type: "multiset", sets: { CYCLONE: 7 } }, heroes: "packs", uniques: { inBoosters: 0, guaranteed: 0 } } }) }); const tn = await r.json(); console.log(r.status, tn.visibility ?? JSON.stringify(tn), tn.id ? "${WEB}/tournament/t/" + tn.id : "") })()'`);
+// The page link of a tournament of this page.
+const TURL = (bga) => PSQL(`SELECT '${WEB}/tournament/t/' || id FROM tournaments WHERE bga_tournament_id = '${bga}'`);
+const LOGOUT_ALICE = `ADMIN=$(curl -s -X POST "${KC}/realms/master/protocol/openid-connect/token" -d grant_type=password -d client_id=admin-cli -d username=admin -d password=admin | node -pe 'JSON.parse(require("fs").readFileSync(0)).access_token')
+curl -s -o /dev/null -w 'logout %{http_code}\\n' -X POST -H "Authorization: Bearer $ADMIN" "${KC}/admin/realms/players/users/${ALICE_SUB}/logout"`;
+
+// Steps replayed by the Playwright suite. Rewritten by `npm run test:e2e:coverage -- --write`
+// (scripts/e2e-acceptance-coverage.mjs) from the tests' tags: do not edit this line by hand.
+const AUTO_STEPS = [];
+// Steps the suite covers with a narrower assertion than the acceptance steps (hand-maintained).
+const AUTO_PARTIAL = {};
+
+const GROUPS = [
+  {
+    letter: '0', title: 'Setup',
+    intro: 'Same local stack as lot 1, V2 and V3. Browser: Chrome or Firefox (Safari rejects Secure cookies on http://localhost).',
+    steps: [
+      { id: 'pv-0-lot1', title: 'Lot 1 setup done once',
+        html: `<p>This page reuses the lot 1 stack and accounts. If this machine never ran it, do group 0 of <code>docs/tournaments/acceptance-user-tournaments.html</code> first: altered-dev-environment (setup-dev-env-r2), bob moderator through <code>TOURNAMENT_MODERATORS</code> (setup-moderator), carol (setup-carol-r2). Nothing to run here.</p>` },
+      { id: 'pv-0-branch', title: 'The branch and its dependencies',
+        html: `${pre(`cd ${REPO} && git fetch && git switch feat/private-tournaments && git pull && make install`)}<p>V4 adds one dependency, <code>qrcode-generator</code>: <code>make install</code> (<code>npm ci</code>) installs it. Once the PR is merged, use <code>main</code> instead of the branch.</p>` },
+      { id: 'pv-0-dev', title: 'Start the stack: the visibility column',
+        html: `<p>V4 adds <code>tournaments.visibility</code> (<code>'public'</code> or <code>'private'</code>, default <code>'public'</code>); <code>make dev</code> replays the idempotent schema, so existing tournaments become public.</p>${pre(`cd ${REPO} && make dev`)}<p>Check, in another terminal:</p>${pre(`${DB} -At -c "SELECT column_default FROM information_schema.columns WHERE table_name = 'tournaments' AND column_name = 'visibility'" -c "SELECT visibility, count(*) FROM tournaments GROUP BY 1"`)}<p>Expected: <code>'public'::text</code>, then one line <code>public|&lt;n&gt;</code> (every tournament of the earlier runs is public; no <code>private</code> line yet).</p>` },
+      { id: 'pv-0-tests', title: 'Automated suites green',
+        html: `${pre(`cd ${REPO} && npm test && npm run test:integration`)}<p>Expected: everything green (Docker needed for the second). The listing matrix (anonymous, stranger, organizer, pool holder from the page and from a BGA call, moderator), the <code>?bgaId=</code> redaction, the 400 on an unknown visibility and the 409 on a detached tournament are only covered there.</p>` },
+      { id: 'pv-0-e2e', title: 'Playwright suite green, the four acceptance pages read',
+        html: `${pre(`cd ${REPO} && make e2e && npm run test:e2e:coverage`)}<p>Expected: the suite passes (a request to <code>api.qrserver.com</code> would now fail it as a leak); the coverage report lists the four acceptance pages (<code>acceptance-user-tournaments.html</code>, <code>acceptance-mono-faction-sealed.html</code>, <code>acceptance-multiset-sealed.html</code>, <code>acceptance-private-tournaments.html</code>) and exits without error. The steps of this page it replays carry the <span class="new-tag auto">auto</span> badge.</p>` },
+      { id: 'pv-0-clean', title: 'Start without the tournaments of this page, alice under the cap',
+        html: `<p>This page uses the BGA ids 123500 to 123504: 123500 “Private cup”, 123501 “Public control”, 123502 carol’s attempt in E (never created), 123503 “Toggle cup”, 123504 “Squat cup”, 123505 the form draft of pv-a-draft (never created). 123506 to 123509 are kept free.</p>${PSQL(`SELECT count(*) FROM tournaments WHERE bga_tournament_id ~ ${IDS}`)}<p>Expected: <code>0</code>. To start over on them only:</p>${PSQL(`DELETE FROM sealed_pools WHERE tournament_id ~ ${IDS} OR tournament_ref IN (SELECT id FROM tournaments WHERE bga_tournament_id ~ ${IDS}); DELETE FROM tournaments WHERE bga_tournament_id ~ ${IDS}`)}
+<p>alice creates 3 open tournaments on this page, and an organizer has 10 at most. Her open tournaments now:</p>${pre(`${DB} -At -c "SELECT count(*) FROM tournaments WHERE organizer_sub = '${ALICE_SUB}' AND detached_at IS NULL AND cancelled_at IS NULL AND ended_at IS NULL AND (ends_at IS NULL OR ends_at > now())"`)}<p>Expected: <code>7</code> or less. Otherwise cancel her older ones (earlier runs; a cancelled tournament keeps its pools):</p>${PSQL(`UPDATE tournaments SET cancelled_at = now() WHERE organizer_sub = '${ALICE_SUB}' AND NOT bga_tournament_id ~ ${IDS} AND detached_at IS NULL AND cancelled_at IS NULL AND ended_at IS NULL`)}` },
+    ],
+  },
+  {
+    letter: 'A', title: 'Form: the Visibility choice (/tournament/new)',
+    intro: 'As alice, on a blank form. Nothing is created in this group.',
+    steps: [
+      { id: 'pv-a-radio', who: 'alice', title: 'The “Visibility” radios: Public by default, both hints',
+        html: `<ul><li>${url(WEB + '/tournament/new')}, first section: right under the description, a group <strong>“Visibility”</strong> with two radios, each with its hint:
+<ul><li><strong>“Public”</strong> — “Listed in Upcoming and Ongoing for everyone.”, <strong>checked</strong>;</li>
+<li><strong>“Private”</strong> — “Listed only for you, the players who have a pool and the moderators. Share its link.”</li></ul></li>
+<li>Click “Private”: it is checked, “Public” no longer is. Back to “Public”, then “Private” again with the keyboard (Tab to the group, arrow keys).</li>
+<li>Nothing else on the form changes (no issue in the bottom bar because of the choice). Do not create.</li></ul>
+<p class="note">The edit form of a <em>locked</em> tournament (pools exist, Cards and Settings greyed out) keeps both radios enabled: checked in pv-f-public, where “Toggle cup” already has carol’s pool.</p>` },
+      { id: 'pv-a-draft', who: 'alice', title: 'The form draft keeps “Private” across a reconnect',
+        html: `<p>The draft is only parked when the session expires and “Reconnect” is clicked (the lot 1 b-session-expired flow); a plain reload does not keep it.</p>
+<ul><li>As alice, ${url(WEB + '/tournament/new')}: name ${chip('Draft private')}, link ${chip('https://boardgamearena.com/tournament?id=123505')}, start tomorrow, set Skybound Odyssey, Visibility <strong>“Private”</strong>. <strong>Do not submit.</strong></li>
+<li>End alice's session on the Keycloak side, either: ${url(KC + '/admin')} (admin / admin) › realm <strong>players</strong> › Users › alice › Sessions › “Sign out”; or the command below.</li></ul>
+${pre(LOGOUT_ALICE)}
+<p>Expected: <code>logout 204</code>.</p>
+<ul><li>Click “Create the tournament”. Expected: in the bottom bar, the “Your Re:Union session has expired…” message and a “Reconnect” button.</li>
+<li>Click “Reconnect”, log in again as alice.</li>
+<li>Expected: back on the form, <strong>“Private” checked</strong>; name, link and set as before.</li>
+<li>Do not create: leave the form (or close the tab).</li></ul>` },
+    ],
+  },
+  {
+    letter: 'B', title: 'Creating “Private cup”',
+    intro: 'As alice. BGA id 123500, Skybound Odyssey, Private. Groups C to G reuse it.',
+    steps: [
+      { id: 'pv-b-create', who: 'alice', title: 'Create “Private cup”: the Private pill, the stored visibility',
+        html: `<ul><li>${url(WEB + '/tournament/new')}: name ${chip('Private cup')}, link ${chip(BGA_URL)}, start tomorrow, no end. Visibility <strong>“Private”</strong>. Cards: Skybound Odyssey; settings left as they are. Create. Expected: redirect to <code>/tournament/t/&lt;id&gt;</code>.</li>
+<li>The header shows the status pill “Upcoming”, then right after it a muted pill with a padlock and <strong>“Private”</strong>; hovering it shows “Private tournament: not listed publicly”.</li></ul>
+${pre(`curl -s -H "Authorization: Bearer $TOKEN_ALICE" "${API}/api/tournaments?bgaId=123500" | node -pe 'JSON.parse(require("fs").readFileSync(0)).tournaments.map(t => [t.name, t.status, t.visibility, typeof t.id, t.organizer?.name, t.config?.source?.type].join(" | ")).join("\\n")'`)}
+<p>Expected: <code>Private cup | upcoming | private | string | &lt;alice’s pseudo&gt; | set</code> (the full item: alice is its organizer).</p>
+${PSQL(`SELECT name, visibility FROM tournaments WHERE bga_tournament_id = '123500'`)}
+<p>Expected: <code>Private cup | private</code>.</p>` },
+      { id: 'pv-b-created-tab', who: 'alice', title: '“My created tournaments”: the pill after the status pill',
+        html: `<ul><li>${url(WEB + '/tournament?tab=created')}: the “Private cup” card shows “Upcoming” then the “Private” pill. alice’s tournaments of the earlier runs show no pill (they are public).</li></ul>` },
+    ],
+  },
+  {
+    letter: 'C', title: 'Who sees “Private cup” in the lists',
+    intro: 'Upcoming and Ongoing show a private tournament only to its organizer, the players who have a pool on it and the moderators. The counter next to each tab follows the list.',
+    steps: [
+      { id: 'pv-c-organizer', who: 'alice', title: 'alice (organizer): listed, with the pill',
+        html: `<ul><li>${url(WEB + '/tournament?tab=upcoming')}: the “Private cup” card, “Upcoming” then “Private”. Note the number next to “Upcoming”: it counts “Private cup”.</li></ul>
+${LIST('ALICE')}
+<p>Expected: <code>123500 | Private cup | upcoming | private</code>.</p>` },
+      { id: 'pv-c-moderator', who: 'bob', title: 'bob (moderator): listed, with the pill',
+        html: `<ul><li>As bob, ${url(WEB + '/tournament?tab=upcoming')}: “Private cup” is listed with the “Private” pill; the “Upcoming” counter is the same as alice’s (as long as no other private tournament exists).</li></ul>
+${LIST('BOB')}
+<p>Expected: <code>123500 | Private cup | upcoming | private</code>.</p>` },
+      { id: 'pv-c-stranger', who: 'carol', title: 'carol (no pool on it): not listed',
+        html: `<ul><li>As carol, ${url(WEB + '/tournament?tab=upcoming')}: no “Private cup” card; the “Upcoming” counter is alice’s <strong>minus one</strong>. Neither “My pools” nor “My ongoing tournaments” mention it.</li></ul>
+${LIST('CAROL')}
+<p>Expected: <code>none of this page</code>.</p>` },
+      { id: 'pv-c-anon', who: 'anon', title: 'Anonymous: not listed',
+        html: `<ul><li>In a private window, ${url(WEB + '/tournament?tab=upcoming')}: no “Private cup” card; the counter is the same as carol’s.</li></ul>
+${LIST(null)}
+<p>Expected: <code>none of this page</code>.</p>` },
+      { id: 'pv-c-public-control', who: 'alice', title: '“Public control” (public by default): listed for everyone, no pill',
+        html: `<p>Created through the API <strong>without</strong> a visibility: the default applies.</p>
+${CREATE('ALICE', 'Public control', '123501', null)}
+<p>Expected: <code>201 public ${WEB}/tournament/t/&lt;id&gt;</code>.</p>
+<ul><li>As carol and in the private window, ${url(WEB + '/tournament?tab=upcoming')}: “Public control” is listed, <strong>without</strong> the “Private” pill; “Private cup” still is not. Their counters went up by one.</li></ul>
+${LIST('CAROL')}
+${LIST(null)}
+<p>Expected, both: <code>123501 | Public control | upcoming | public</code> only.</p>` },
+    ],
+  },
+  {
+    letter: 'E', title: 'The duplicate-link check (before D)',
+    intro: 'Done before D on purpose: carol is still a stranger to “Private cup”. A stranger typing its BGA link is refused like for any declared tournament, without learning its name; the organizer editing it is not blocked by their own link.',
+    steps: [
+      { id: 'pv-e-stranger', who: 'carol', title: 'carol types the link of “Private cup”: refused, no name leaked',
+        html: `<ul><li>As carol, ${url(WEB + '/tournament/new')}: name ${chip('Stranger attempt')}, start tomorrow, set Skybound Odyssey, link ${chip('https://boardgamearena.com/tournament?id=123502')} (free): nothing about the link in the bottom bar.</li>
+<li>Replace the link with ${chip(BGA_URL)}. Expected after a short delay: the bottom bar lists <strong>“A tournament already exists for this BGA link.”</strong>, the create button is greyed out. Search the page (Ctrl+F / ⌘F) for “Private cup”: not found, nor alice’s name.</li>
+<li>Do not create (123502 is never created).</li></ul>
+${BYBGA('CAROL', '123500')}
+<p>Expected, exactly: <code>{"tournaments":[{"visibility":"private"}],"legacy":null}</code> (no id, name, organizer, config nor dates). The same without a session:</p>
+${BYBGA(null, '123500')}
+<p>Expected: the same line.</p>` },
+      { id: 'pv-e-owner', who: 'alice', title: 'alice edits “Private cup”: her own link is not taken',
+        html: `<ul><li>“Private cup” › Edit: the link field holds ${chip(BGA_URL)}, the bottom bar lists <strong>no</strong> problem, “Private” is checked and the save button is active.</li>
+<li>Change the description (e.g. ${chip('Invitation only')}), save. Expected: back on the tournament page, the description shown, still the “Private” pill.</li></ul>` },
+    ],
+  },
+  {
+    letter: 'D', title: 'The link: page, pool and BGA ignore the visibility',
+    intro: 'carol gets the link from alice (in real life: the share box of G). Everything downstream of the link works as for a public tournament.',
+    steps: [
+      { id: 'pv-d-url', who: 'carol', title: 'carol opens “Private cup” by its URL',
+        html: `<p>The link of “Private cup”:</p>${TURL('123500')}
+<ul><li>As carol, open that link. Expected: the tournament page, the “Upcoming” and “Private” pills, the description, and checklist step 2 “Open your pool” with the <strong>“Open my pool”</strong> button active.</li></ul>` },
+      { id: 'pv-d-pool', who: 'carol', title: 'carol prepares her pool: the tournament is now listed for her',
+        html: `<ul><li>Click “Open my pool”: the pool page opens (reveal, then the pool).</li>
+<li>${url(WEB + '/tournament?tab=upcoming')}: “Private cup” is now listed for carol, with the “Private” pill; the “Upcoming” counter went up by one.</li>
+<li>${url(WEB + '/tournament?tab=pools')}: the “Private cup” card, with the “Private” pill after its status pill.</li></ul>
+${LIST('CAROL')}
+<p>Expected: <code>123500 | Private cup | upcoming | private</code> and <code>123501 | Public control | upcoming | public</code>.</p>
+${PSQL(`SELECT left(sub, 4) AS player, created_by FROM sealed_pools WHERE tournament_id = '123500'`)}
+<p>Expected: a single row, <code>&lt;carol&gt; | page</code>.</p>` },
+      { id: 'pv-d-bga', title: 'The BGA call answers whatever the visibility',
+        html: `<p>The lot 1 group G call (<code>tournament-bga-decklist</code>), as carol, on the private tournament:</p>
+${pre(`curl -s -w '\\nHTTP %{http_code}\\n' "${API}/api/tournament-bga-decklist?tournamentId=123500&tournamentName=BGA%20name&gameId=g-123500" -H "Authorization: Bearer $TOKEN_CAROL"`)}
+<p>Expected: a JSON with a <code>hydra:member</code> holding one deck, then <code>HTTP 200</code> (her pool of D, no new one):</p>
+${PSQL(`SELECT left(sub, 4) AS player, created_by FROM sealed_pools WHERE tournament_id = '123500'`)}
+<p>Expected: still the single row <code>&lt;carol&gt; | page</code>.</p>` },
+      { id: 'pv-d-ongoing', who: 'carol', title: 'Once started: in carol’s “My ongoing tournaments”',
+        html: `<p>Start “Private cup” one hour ago:</p>
+${PSQL(`UPDATE tournaments SET starts_at = now() - interval '1 hour' WHERE bga_tournament_id = '123500'`)}
+<p>Expected: <code>UPDATE 1</code>.</p>
+<ul><li>As carol, reload ${url(WEB + '/tournament?tab=ongoing')}: the “My ongoing tournaments” block above the tabs lists “Private cup” with the “Private” pill after its name; the Ongoing tab lists it too (“Ongoing” then “Private”); Upcoming no longer does.</li>
+<li>As alice and as bob: Ongoing lists it with the pill. In the private window: Ongoing does not.</li></ul>
+${LIST('CAROL')}
+<p>Expected: <code>123500 | Private cup | ongoing | private</code> and <code>123501 | Public control | upcoming | public</code>.</p>` },
+    ],
+  },
+  {
+    letter: 'F', title: 'Edit the visibility of a tournament with pools',
+    intro: 'The visibility is editable in every status but detached, and never locked by the pools.',
+    steps: [
+      { id: 'pv-f-public', who: 'alice', title: '“Toggle cup”: private with carol’s pool, made public',
+        html: `<p>alice declares “Toggle cup” (BGA id 123503), private:</p>
+${CREATE('ALICE', 'Toggle cup', '123503', 'private')}
+<p>Expected: <code>201 private ${WEB}/tournament/t/&lt;id&gt;</code>.</p>
+<ul><li>As carol, open that link, “Open my pool”.</li></ul>
+${PSQL(`SELECT count(*) FROM sealed_pools p JOIN tournaments t ON t.id = p.tournament_ref WHERE t.bga_tournament_id = '123503'`)}
+<p>Expected: <code>1</code>.</p>
+${LIST(null)}
+<p>Expected (anonymous): <code>123501 | Public control | upcoming | public</code> only.</p>
+<ul><li>As alice, “Toggle cup” › Edit: the locked notice (“Cards, settings and the BGA link are locked: pools already exist.”), Cards and Settings greyed out, but the <strong>Visibility radios are enabled</strong>. Check “Public”, save. Expected: the save goes through (no “locked” error), the tournament page has no “Private” pill any more.</li></ul>
+${LIST(null)}
+<p>Expected (anonymous): <code>123501 | Public control | upcoming | public</code> and <code>123503 | Toggle cup | upcoming | public</code>. In the private window, Upcoming lists “Toggle cup” without the pill.</p>` },
+      { id: 'pv-f-private', who: 'alice', title: '“Toggle cup” back to private: gone for anonymous, kept for carol',
+        html: `<ul><li>As alice, “Toggle cup” › Edit, check “Private”, save: the “Private” pill is back.</li></ul>
+${LIST(null)}
+<p>Expected (anonymous): <code>123501 | Public control | upcoming | public</code> only. In the private window, Upcoming no longer lists “Toggle cup”.</p>
+${LIST('CAROL')}
+<p>Expected (carol, who has a pool on both private ones): <code>123500 | Private cup | ongoing | private</code>, <code>123501 | Public control | upcoming | public</code>, <code>123503 | Toggle cup | upcoming | private</code>. In carol’s browser, Upcoming lists “Toggle cup” with the pill.</p>
+${PSQL(`SELECT name, visibility FROM tournaments WHERE bga_tournament_id ~ ${IDS} ORDER BY bga_tournament_id`)}
+<p>Expected: <code>Private cup | private</code>, <code>Public control | public</code>, <code>Toggle cup | private</code>.</p>` },
+    ],
+  },
+  {
+    letter: 'G', title: 'The share box (tournament page)',
+    intro: 'On every tournament page but a detached one, logged in or not, between the checklist and the organizer panel.',
+    steps: [
+      { id: 'pv-g-box', title: 'Title, hint per visibility, the link',
+        html: `<ul><li>As carol, “Private cup” (${TURL('123500')}): a box <strong>“Share this tournament”</strong> with the hint “This tournament is private: its link is the only way to find it.”, a read-only field holding <code>${WEB}/tournament/t/&lt;id&gt;</code> (the address bar’s URL), a <strong>“Copy”</strong> button and, on the right, a QR code. Clicking in the field selects the whole link.</li>
+<li>In the private window, the same page: the same box (logged out too).</li>
+<li>“Public control” (${TURL('123501')}): the hint reads “Anyone with the link can open this page and prepare a pool.”.</li>
+<li>As alice, cancel “Public control” (organizer panel › Cancel, confirm): the box stays, <strong>without</strong> a hint (a cancelled public tournament). “Private cup” keeps its private hint in every status.</li></ul>` },
+      { id: 'pv-g-copy', title: 'Copy: “✓ Copied” for 2 seconds, the clipboard holds the link',
+        html: `<ul><li>On “Private cup”, click “Copy”. Expected: the button turns green and reads <strong>“✓ Copied”</strong>, then “Copy” again about 2 seconds later.</li>
+<li>Paste (⌘V) in a new tab’s address bar: exactly the link of the field. Enter: the “Private cup” page.</li>
+<li>Same in Firefox.</li></ul>` },
+      { id: 'pv-g-copy-fallback', title: 'Copy refused: the link is selected instead, no error',
+        html: `<p>When the browser refuses the clipboard (Firefox or Safari with the clipboard permission denied, an insecure context), the link text is selected so it can be copied by hand. To simulate it in Chrome: on “Private cup”, DevTools › Console, paste:</p>
+${jsPre(`navigator.clipboard.writeText = () => Promise.reject(new DOMException('denied', 'NotAllowedError')); document.execCommand = () => false;`)}
+<ul><li>Clear the console, click “Copy”. Expected: the label <strong>stays “Copy”</strong> (no “✓ Copied”), the link in the field is <strong>selected</strong> (highlighted, focus in the field), and the console shows <strong>no</strong> error; ⌘C then copies it.</li>
+<li>Reload the page to restore the clipboard.</li></ul>` },
+      { id: 'pv-g-native', title: '“Share…” only where the browser has a share sheet',
+        html: `<ul><li>Chrome on macOS (or Safari, logged out): next to “Copy”, a <strong>“Share…”</strong> button; clicking it opens the macOS share sheet with the tournament link. Closing the sheet without sharing shows no error.</li>
+<li>Firefox on macOS: <strong>no</strong> “Share…” button, only “Copy”.</li>
+<li>Phone: checked on preprod (K), where “Share…” opens the phone’s share sheet.</li></ul>` },
+      { id: 'pv-g-qr', title: 'The QR code: holds the link, black on white in dark theme',
+        html: `<ul><li>Scan the QR code of “Private cup” with a phone camera: the preview shows <code>${WEB}/tournament/t/&lt;id&gt;</code>, the same link as the field (the phone cannot open <code>localhost</code>: opening it is checked in K).</li>
+<li>Toggle the theme to dark (☾): the QR stays <strong>black modules on a white tile</strong> (not inverted), and still scans.</li>
+<li>Right-click the QR › Inspect: an <code>&lt;svg&gt;</code>, no <code>&lt;img&gt;</code>; DevTools › Network shows no request to an external QR service.</li></ul>` },
+      { id: 'pv-g-detached', who: 'bob', title: 'A detached tournament has no share box',
+        html: `<p>carol declares “Squat cup” (BGA id 123504):</p>
+${CREATE('CAROL', 'Squat cup', '123504', null)}
+<p>Expected: <code>201 public ${WEB}/tournament/t/&lt;id&gt;</code>. Open that link as carol: the share box is there.</p>
+<ul><li>As bob, the same link › organizer panel › “Detach (moderator)”, confirm. Expected: the “Detached” pill, the detached notice, and <strong>no</strong> “Share this tournament” box (as bob, as carol and logged out).</li></ul>
+${PSQL(`SELECT name, detached_at IS NOT NULL AS detached FROM tournaments WHERE bga_tournament_id = '123504'`)}
+<p>Expected: <code>Squat cup | t</code>.</p>` },
+    ],
+  },
+  {
+    letter: 'H', title: 'The Lobby’s QR code',
+    steps: [
+      { id: 'pv-h-lobby-qr', title: 'The room QR code is generated locally',
+        html: `<ul><li>DevTools › Network open, filter ${chip('qrserver')}. ${url(WEB + '/')} › create a room. Expected: the Lobby, the room’s share box with its QR code (120 px, white tile) as before; the Network filter stays <strong>empty</strong>.</li>
+<li>Right-click the QR › Inspect: an <code>&lt;svg&gt;</code> labelled “QR code”, no <code>&lt;img&gt;</code>.</li>
+<li>Scan it with a phone camera: the preview shows <code>${WEB}/?join=&lt;CODE&gt;</code>, the room’s join link. Open that link in another browser (or a private window): the Home page prefilled with the code, and joining lands in the same room. Joining by a phone scan is checked on preprod (K).</li></ul>` },
+    ],
+  },
+  {
+    letter: 'I', title: 'Cross-cutting: FR, theme, mobile, console',
+    steps: [
+      { id: 'pv-i-fr', title: 'French interface',
+        html: `<p>UI language FR, then the form, “Private cup”’s page, the hub cards. Expected: no English text left, no raw key (<code>tournaments.…</code>): “Visibilité”, “Public” — “Visible par tous dans À venir et En cours.”, “Privé” — “Visible seulement par vous, les joueurs qui ont un pool et les modérateurs. Partagez son lien.”; the pill “Privé” (title “Tournoi privé : absent des listes publiques”); the share box “Partager ce tournoi”, “Ce tournoi est privé : son lien est le seul moyen de le trouver.” (and on a public upcoming one “Toute personne qui a le lien peut ouvrir cette page et préparer un pool.”), “Copier” → “✓ Copié”, “Partager…”.</p>` },
+      { id: 'pv-i-theme', title: 'Light and dark theme',
+        html: `<p>Toggle ☀/☾ on the form (the Visibility radios), the hub cards and “Private cup”’s page. Expected: the “Private” pill and its padlock readable in both themes, the share box (field, “Copy”, “✓ Copied” in green, “Share…”) readable; the QR code black on white in both.</p>` },
+      { id: 'pv-i-mobile', title: 'Mobile width: radios, share box without the QR, no horizontal scroll',
+        html: `<p>DevTools at 375 px: the form (the two Visibility options stacked, each hint under its label), the hub cards with both pills, “Private cup”’s page: the share box without the QR code (hidden below 640 px), the link field within the width, “Copy” and “Share…” wrapping if needed. The Lobby: no QR code below 640 px either. No horizontal scroll anywhere.</p>` },
+      { id: 'pv-i-console', title: 'Console without errors',
+        html: `<p>Over the whole journey, no JS error and no 500 request in Network (form, hub, tournament page, share box, Lobby).</p>` },
+    ],
+  },
+  {
+    letter: 'K', title: 'Before going to production',
+    intro: 'Preprod deploys from main, so this runs after the merge (V2’s PR #25 and V3’s #26 first, then this one). Needs a moderator account and a second, ordinary account on preprod, and a phone.',
+    steps: [
+      { id: 'pv-k-preprod', title: 'Preprod: a private tournament, the lists, the QR codes',
+        html: `<ul><li>${url('https://altered-draft-preprod.altered.re/tournament/new')}: a private tournament on a throwaway link ${chip('https://boardgamearena.com/tournament?id=999500')}.</li>
+<li>Hub as the moderator account: listed in Upcoming with the “Private” pill. As the ordinary account (no pool on it): not listed. Logged out: not listed.</li>
+<li>Scan its share-box QR code with a phone: the tournament page opens on the phone. On the phone, “Share…” opens the share sheet with the link.</li>
+<li>Create a Lobby room, scan its QR code with the phone: the phone joins the room.</li>
+<li>Clean-up: the moderator detaches the tournament, then Delete.</li></ul>` },
+    ],
+  },
+];
+
+
+/* ---------- state (IndexedDB, in-memory fallback) ---------- */
+// Same IndexedDB database as the lot 1 page, its own key: the two runs never mix.
+const DB_NAME = 'tournois-recette', STORE = 'kv', KEY = 'state-v4-private';
+let state = { steps: {} };
+let dbp = null;
+function openDb() {
+  if (dbp) return dbp;
+  dbp = new Promise((res) => {
+    try {
+      const r = indexedDB.open(DB_NAME, 1);
+      r.onupgradeneeded = () => r.result.createObjectStore(STORE);
+      r.onsuccess = () => res(r.result);
+      r.onerror = () => res(null);
+    } catch (e) { res(null); }
+  });
+  return dbp;
+}
+async function load() {
+  const db = await openDb();
+  if (!db) return;
+  await new Promise((res) => {
+    try {
+      const t = db.transaction(STORE).objectStore(STORE).get(KEY);
+      t.onsuccess = () => { if (t.result) state = t.result; res(); };
+      t.onerror = () => res();
+    } catch (e) { res(); }
+  });
+}
+let saveTimer = null;
+function save() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(async () => {
+    const db = await openDb();
+    if (!db) return;
+    try { db.transaction(STORE, 'readwrite').objectStore(STORE).put(state, KEY); } catch (e) {}
+  }, 250);
+}
+const st = (id) => (state.steps[id] ||= { status: null, note: '', images: [] });
+
+/* ---------- render ---------- */
+const ICONS = {
+  ok: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+  ko: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+  skip: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 6l7 6-7 6M13 6l7 6-7 6"/></svg>',
+};
+const allSteps = GROUPS.flatMap((g) => g.steps.map((s, i) => ({ ...s, group: g, num: `${g.letter}${i + 1}` })));
+
+function renderCast() {
+  document.getElementById('cast').innerHTML = Object.values(PERSONAS).map((p) => `
+    <div class="persona"><span class="tag">${p.tag}</span>
+      <div class="org">${p.org}</div>
+      <div style="margin:4px 0">${chip(p.email)}</div>
+      <div class="meta">${p.meta}</div></div>`).join('');
+}
+
+const FOLD_KEY = 'tournois-recette-v4-private-collapsed';
+let collapsed = new Set();
+try { collapsed = new Set(JSON.parse(localStorage.getItem(FOLD_KEY) || '[]')); } catch (e) {}
+function saveFold() { try { localStorage.setItem(FOLD_KEY, JSON.stringify([...collapsed])); } catch (e) {} }
+function setFold(letter, isCollapsed) {
+  isCollapsed ? collapsed.add(letter) : collapsed.delete(letter);
+  const sec = document.querySelector(`section.group[data-g="${letter}"]`);
+  if (sec) {
+    sec.classList.toggle('collapsed', isCollapsed);
+    sec.querySelector('h3').setAttribute('aria-expanded', String(!isCollapsed));
+  }
+}
+document.addEventListener('click', (e) => {
+  const h = e.target.closest('section.group > h3');
+  if (h) { const l = h.parentElement.dataset.g; setFold(l, !collapsed.has(l)); saveFold(); return; }
+  if (e.target.id === 'foldAll' || e.target.id === 'unfoldAll') {
+    GROUPS.forEach((g) => setFold(g.letter, e.target.id === 'foldAll')); saveFold();
+  }
+});
+document.addEventListener('keydown', (e) => {
+  const h = e.target.closest && e.target.closest('section.group > h3');
+  if (h && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); h.click(); }
+});
+
+function renderGroups() {
+  document.getElementById('groups').innerHTML = GROUPS.map((g) => `
+    <section class="group${collapsed.has(g.letter) ? ' collapsed' : ''}" data-g="${g.letter}">
+      <h3 tabindex="0" role="button" aria-expanded="${!collapsed.has(g.letter)}"><span class="letter">${g.letter}</span>${g.title}<span class="gcount" data-gcount="${g.letter}"></span><span class="chev" aria-hidden="true">▼</span></h3>
+      ${g.intro ? `<p class="intro">${g.intro}</p>` : ''}
+      ${g.steps.map((s, i) => stepHtml(s, `${g.letter}${i + 1}`)).join('')}
+    </section>`).join('');
+  allSteps.forEach((s) => paintStep(s.id));
+}
+
+function stepHtml(s, num) {
+  return `<article class="step" data-id="${s.id}">
+    <div class="s-head">
+      <div class="s-num">${num}</div>
+      <div class="s-body">
+        <p class="s-title">${s.v11 ? '<span class="new-tag v11">v1.1</span> ' : s.v2 ? '<span class="new-tag">new</span> ' : ''}${s.title}${AUTO_STEPS.includes(s.id) ? ` <span class="new-tag auto" title="${AUTO_PARTIAL[s.id] ? 'Partial: ' + AUTO_PARTIAL[s.id] : 'Replayed by the Playwright suite'}">auto${AUTO_PARTIAL[s.id] ? ' (partial)' : ''}</span>` : ''}</p>
+        ${s.who ? `<div class="s-who">${who(s.who)}</div>` : ''}
+        ${s.html || ''}
+      </div>
+      <div class="status">
+        <button data-v="ok" title="OK">${ICONS.ok}</button>
+        <button data-v="ko" title="Problem">${ICONS.ko}</button>
+        <button data-v="skip" title="Skip">${ICONS.skip}</button>
+      </div>
+    </div>
+    <div class="issue">
+      <label>What is wrong</label>
+      <textarea placeholder="What you saw, what you expected… (Ctrl+V to paste a screenshot)"></textarea>
+      <div class="drop">Drop or paste a screenshot here, or <u>click to choose one</u></div>
+      <input type="file" accept="image/*" multiple hidden>
+      <div class="thumbs"></div>
+    </div>
+  </article>`;
+}
+
+function imgName(id, i) { return `private-acceptance-${id}-${i + 1}.png`; }
+
+function paintStep(id) {
+  const el = document.querySelector(`.step[data-id="${id}"]`);
+  if (!el) return;
+  const s = st(id);
+  el.dataset.status = s.status || '';
+  el.classList.toggle('has-note', !!(s.note || s.images.length));
+  el.querySelectorAll('.status button').forEach((b) => b.classList.toggle('on', b.dataset.v === s.status));
+  const ta = el.querySelector('textarea');
+  if (document.activeElement !== ta) ta.value = s.note;
+  el.querySelector('.thumbs').innerHTML = s.images.map((src, i) => `
+    <div class="thumb"><img src="${src}" data-i="${i}" alt=""><button data-del="${i}" title="Remove">×</button><span class="fname">${imgName(id, i)}</span></div>`).join('');
+}
+
+function refreshMeta() {
+  const total = allSteps.length;
+  const c = { ok: 0, ko: 0, skip: 0 };
+  allSteps.forEach((s) => { const v = st(s.id).status; if (v) c[v]++; });
+  const done = c.ok + c.ko + c.skip;
+  document.getElementById('count').textContent = `${done} / ${total}` + (c.ko ? ` · ${c.ko} ✗` : '');
+  document.querySelector('.b-ok').style.width = (c.ok / total * 100) + '%';
+  document.querySelector('.b-ko').style.width = (c.ko / total * 100) + '%';
+  document.querySelector('.b-skip').style.width = (c.skip / total * 100) + '%';
+  GROUPS.forEach((g) => {
+    const d = g.steps.filter((s) => st(s.id).status).length;
+    document.querySelector(`[data-gcount="${g.letter}"]`).textContent = `${d}/${g.steps.length}`;
+  });
+  applyFilter();
+  renderRecap();
+}
+
+let filter = 'all';
+function applyFilter() {
+  document.querySelectorAll('.step').forEach((el) => {
+    const v = st(el.dataset.id).status;
+    const show = filter === 'all' || (filter === 'todo' && !v) || (filter === 'ko' && v === 'ko')
+      || (filter === 'manual' && (!AUTO_STEPS.includes(el.dataset.id) || el.dataset.id in AUTO_PARTIAL));
+    el.classList.toggle('hidden', !show);
+  });
+  document.querySelectorAll('section.group').forEach((g) => {
+    g.classList.toggle('hidden', !g.querySelector('.step:not(.hidden)'));
+  });
+}
+
+function stripHtml(h) {
+  const d = document.createElement('div');
+  d.innerHTML = h;
+  d.querySelectorAll('.copy-pre').forEach((b) => b.remove());
+  return d.textContent.replace(/\s+/g, ' ').trim();
+}
+
+function renderRecap() {
+  const ko = allSteps.filter((s) => st(s.id).status === 'ko' || (st(s.id).status !== 'ok' && (st(s.id).note || st(s.id).images.length)));
+  const c = { ok: 0, ko: 0, skip: 0, todo: 0 };
+  allSteps.forEach((s) => { c[st(s.id).status || 'todo']++; });
+  let out = `Private tournaments and share box acceptance, V4\n`;
+  out += `Result: ${c.ok} OK · ${c.ko} problem(s) · ${c.skip} skipped · ${c.todo} not done\n`;
+  const skipped = allSteps.filter((s) => st(s.id).status === 'skip').map((s) => s.num);
+  if (skipped.length) out += `Skipped: ${skipped.join(', ')}\n`;
+  if (!ko.length) {
+    out += `\nNo problem reported.`;
+  } else {
+    ko.forEach((s) => {
+      const x = st(s.id);
+      out += `\n— ${s.num} · ${s.group.title} · ${s.title}\n`;
+      if (s.who) out += `  Account: ${PERSONAS[s.who].email} (${PERSONAS[s.who].tag})\n`;
+      out += `  Expected: ${stripHtml(s.html || '').slice(0, 400)}\n`;
+      out += `  Seen: ${x.note ? x.note.replace(/\n/g, '\n    ') : '(no note)'}\n`;
+      if (x.images.length) out += `  Screenshots: ${x.images.map((_, i) => '~/Downloads/' + imgName(s.id, i)).join(', ')}\n`;
+    });
+  }
+  document.getElementById('recapText').textContent = out;
+  const badge = document.getElementById('tabBadge');
+  badge.textContent = ko.length;
+  badge.classList.toggle('hidden', ko.length === 0);
+  const n = allSteps.reduce((a, s) => a + st(s.id).images.length, 0);
+  const b = document.getElementById('dlImages');
+  b.disabled = n === 0;
+  b.textContent = n ? `Download the screenshots (${n})` : 'Download the screenshots';
+}
+
+/* ---------- interactions ---------- */
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), 1400);
+}
+async function copy(text) {
+  try { await navigator.clipboard.writeText(text); }
+  catch (e) {
+    const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); } catch (_) {} ta.remove();
+  }
+}
+
+function addImages(id, files) {
+  [...files].filter((f) => f.type.startsWith('image/')).forEach((f) => {
+    const r = new FileReader();
+    r.onload = () => { st(id).images.push(r.result); paintStep(id); save(); refreshMeta(); };
+    r.readAsDataURL(f);
+  });
+}
+
+document.addEventListener('click', async (e) => {
+  const c = e.target.closest('.chip');
+  if (c) {
+    let text = c.dataset.copy;
+    if (c.hasAttribute('data-copy-pre')) {
+      const pre = c.closest('pre').cloneNode(true); pre.querySelector('.copy-pre').remove(); text = pre.textContent.trim();
+    }
+    await copy(text);
+    c.classList.add('copied'); setTimeout(() => c.classList.remove('copied'), 900);
+    toast('Copied');
+    return;
+  }
+  const sb = e.target.closest('.status button');
+  if (sb) {
+    const id = sb.closest('.step').dataset.id;
+    const s = st(id);
+    s.status = s.status === sb.dataset.v ? null : sb.dataset.v;
+    paintStep(id); save(); refreshMeta();
+    if (s.status === 'ko') sb.closest('.step').querySelector('textarea').focus();
+    return;
+  }
+  const del = e.target.closest('[data-del]');
+  if (del) {
+    const id = del.closest('.step').dataset.id;
+    st(id).images.splice(+del.dataset.del, 1); paintStep(id); save(); refreshMeta();
+    return;
+  }
+  const img = e.target.closest('.thumb img');
+  if (img) {
+    const lb = document.getElementById('lightbox'); lb.querySelector('img').src = img.src; lb.classList.add('show');
+    return;
+  }
+  if (e.target.closest('#lightbox')) { document.getElementById('lightbox').classList.remove('show'); return; }
+  const drop = e.target.closest('.drop');
+  if (drop) { drop.parentElement.querySelector('input[type=file]').click(); return; }
+  const tab = e.target.closest('#tabs button, [data-goto]');
+  if (tab) { showTab(tab.dataset.tab || tab.dataset.goto); return; }
+  const f = e.target.closest('#filters button');
+  if (f) {
+    filter = f.dataset.f;
+    document.querySelectorAll('#filters button').forEach((b) => b.classList.toggle('active', b === f));
+    applyFilter();
+  }
+});
+
+document.addEventListener('input', (e) => {
+  if (e.target.matches('.issue textarea')) {
+    const id = e.target.closest('.step').dataset.id;
+    st(id).note = e.target.value; save(); renderRecap();
+  }
+});
+document.addEventListener('change', (e) => {
+  if (e.target.matches('.issue input[type=file]')) {
+    addImages(e.target.closest('.step').dataset.id, e.target.files); e.target.value = '';
+  }
+});
+document.addEventListener('paste', (e) => {
+  const stepEl = e.target.closest && e.target.closest('.step');
+  if (!stepEl) return;
+  const files = [...(e.clipboardData?.items || [])].filter((i) => i.type.startsWith('image/')).map((i) => i.getAsFile());
+  if (files.length) { e.preventDefault(); addImages(stepEl.dataset.id, files); toast('Screenshot added'); }
+});
+['dragover', 'dragleave', 'drop'].forEach((ev) => document.addEventListener(ev, (e) => {
+  const d = e.target.closest && e.target.closest('.drop');
+  if (!d) return;
+  e.preventDefault();
+  d.classList.toggle('over', ev === 'dragover');
+  if (ev === 'drop') addImages(d.closest('.step').dataset.id, e.dataTransfer.files);
+}));
+
+document.getElementById('copyRecap').addEventListener('click', async () => {
+  await copy(document.getElementById('recapText').textContent); toast('Recap copied');
+});
+document.getElementById('dlImages').addEventListener('click', () => {
+  let delay = 0;
+  allSteps.forEach((s) => st(s.id).images.forEach((src, i) => {
+    setTimeout(() => {
+      const a = document.createElement('a'); a.href = src; a.download = imgName(s.id, i); document.body.appendChild(a); a.click(); a.remove();
+    }, delay);
+    delay += 250;
+  }));
+  toast('Downloading to ~/Downloads');
+});
+document.getElementById('resetAll').addEventListener('click', () => {
+  if (!confirm('Clear every tick, note and screenshot?')) return;
+  state = { steps: {} }; save(); renderGroups(); refreshMeta();
+});
+
+function showTab(name) {
+  const recap = name === 'recap';
+  document.getElementById('viewSteps').classList.toggle('hidden', recap);
+  document.getElementById('viewRecap').classList.toggle('hidden', !recap);
+  document.getElementById('filters').classList.toggle('hidden', recap);
+  document.querySelectorAll('#tabs button').forEach((b) => b.classList.toggle('active', b.dataset.tab === name));
+  try { history.replaceState(null, '', recap ? '#recap' : '#'); } catch (e) {}
+  window.scrollTo({ top: 0 });
+}
+
+const themeBtn = document.getElementById('themeBtn');
+function setTheme(t) {
+  if (t) document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme;
+  try { t ? localStorage.setItem('tournois-recette-theme', t) : localStorage.removeItem('tournois-recette-theme'); } catch (e) {}
+}
+try { const t = localStorage.getItem('tournois-recette-theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+themeBtn.addEventListener('click', () => {
+  const cur = document.documentElement.dataset.theme
+    || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  setTheme(cur === 'dark' ? 'light' : 'dark');
+});
+
+(async () => {
+  renderCast();
+  await load();
+  renderGroups();
+  refreshMeta();
+  if (location.hash === '#recap') showTab('recap');
+})();
+</script>
+</body>
+</html>
