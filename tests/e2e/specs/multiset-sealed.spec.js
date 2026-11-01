@@ -304,13 +304,29 @@ test('form: in-booster uniques capped by the boosters with unique data', { tag: 
 test('form: the exact / random switch and the slider; a random tournament stored', { tag: ['@ms-e-form'] }, async ({ openAs, api }) => {
   const page = await openForm(openAs)
   await tile(page, 'CYCLONE').click()
-  await uniquesStepper(page, 'in').getByRole('button', { name: '+' }).click()
-  await expect(uniquesStepper(page, 'in')).toContainText('2')
   const exact = page.getByTestId('uniques-mode-exact')
   const random = page.getByTestId('uniques-mode-random')
   const slider = page.getByTestId('random-one-in')
   const sliderText = page.getByTestId('random-one-in-text')
   await expect(exact).toHaveAttribute('aria-checked', 'true')
+
+  // No unique at all in exact mode: the faction chips are off; random mode alone turns them on.
+  const chips = uniqueFactionPills(page).getByRole('radio')
+  expect(await chips.count()).toBeGreaterThan(0)
+  await uniquesStepper(page, 'in').getByRole('button', { name: '−' }).click()
+  await uniquesStepper(page, 'out').getByRole('button', { name: '−' }).click()
+  await expect(uniquesStepper(page, 'in')).toContainText('0')
+  await expect(uniquesStepper(page, 'out')).toContainText('0')
+  for (const chip of await chips.all()) await expect(chip).toBeDisabled()
+  await random.click()
+  for (const chip of await chips.all()) await expect(chip).toBeEnabled()
+  await exact.click()
+  for (const chip of await chips.all()) await expect(chip).toBeDisabled()
+
+  await clickTimes(uniquesStepper(page, 'in').getByRole('button', { name: '+' }), 2)
+  await uniquesStepper(page, 'out').getByRole('button', { name: '+' }).click()
+  await expect(uniquesStepper(page, 'in')).toContainText('2')
+  await expect(uniquesStepper(page, 'out')).toContainText('1')
 
   await random.click()
   await expect(random).toHaveAttribute('aria-checked', 'true')
@@ -320,7 +336,7 @@ test('form: the exact / random switch and the slider; a random tournament stored
   await expect(page.getByText(t('tournaments.randomOneInHint'))).toBeVisible()
   await expect(page.locator('#even-factions')).toHaveCount(0)
   await expect(uniquesStepper(page, 'out')).toBeVisible()
-  for (const chip of await uniqueFactionPills(page).getByRole('radio').all()) await expect(chip).toBeEnabled()
+  for (const chip of await chips.all()) await expect(chip).toBeEnabled()
 
   await slider.fill('10')
   await expect(sliderText).toHaveText(t('tournaments.randomOneInText', { n: 10, pct: 10 }))
@@ -349,12 +365,15 @@ test('form: the exact / random switch and the slider; a random tournament stored
   await expect(page.getByTestId('tournament-summary')).toContainText(t('tournaments.summaryUniquesRandom', { n: 4 }))
 })
 
-test('random on one set, every booster, 1 guaranteed: 8 uniques', { tag: ['@ms-e-set'] }, async ({ seed, db }) => {
+test('random on one set, every booster, 1 guaranteed: 8 uniques', { tag: ['@ms-e-set'] }, async ({ seed, db, api }) => {
   const { id } = await seed.tournament('alice', tournamentBody({
     name: 'Random SKY',
     bgaUrl: bga(123491),
     config: { source: { type: 'set', setCode: 'CYCLONE' }, heroes: 'packs', uniques: { inBoosters: 0, guaranteed: 1, randomOneIn: 1 } },
   }))
+  const { body } = await api(null).get(`/api/tournaments/${id}`)
+  expect(body.config.source).toEqual({ type: 'set', setCode: 'CYCLONE', boosters: 7 })
+  expect(body.config.uniques).toEqual({ inBoosters: 0, guaranteed: 1, evenFactions: false, faction: null, randomOneIn: 1 })
   await seed.pool('alice', id)
   const pool = await storedPool(db, id, 'alice')
   expect(pool.boosters).toHaveLength(7)
@@ -401,7 +420,7 @@ test('random on an Axiom mono-faction mix: Axiom uniques, none from NEJ', { tag:
   expect(member[0]?.faction.code, uniques[0]).toBe('AX')
 })
 
-test('API: invalid splits and random values refused; a one-set multiset stored as a set', { tag: ['@ms-f-api', '@ms-f-normalize'] }, async ({ api }) => {
+test('API: invalid splits and random values refused; a one-set multiset stored as a set', { tag: ['@ms-f-api', '@ms-f-normalize'] }, async ({ api, seed, db }) => {
   const none = { inBoosters: 0, guaranteed: 0 }
   const body = (sets, uniques = none) => ({
     name: 'Guard multiset', bgaUrl: bga(123494), startsAt: tournamentBody().startsAt,
@@ -423,10 +442,17 @@ test('API: invalid splits and random values refused; a one-set multiset stored a
   }
   expect((await api(null).get('/api/tournaments')).body.tournaments.map(tn => tn.name)).not.toContain('Guard multiset')
 
-  const res = await api('alice').post('/api/tournaments', { ...body({ CYCLONE: 7 }), name: 'Normalized SKY', bgaUrl: bga(123495) })
+  // A set at 0 is dropped, then the one set left makes a `set` source, with a set-code pool.
+  const res = await api('alice').post('/api/tournaments', {
+    ...body({ CYCLONE: 7, EOLE: 0 }, { inBoosters: 1, guaranteed: 0 }), name: 'Normalized SKY', bgaUrl: bga(123495),
+  })
   expect(res.status).toBe(201)
   expect(res.body.config.source).toEqual({ type: 'set', setCode: 'CYCLONE', boosters: 7 })
-  expect([200, 204]).toContain((await api('alice').delete(`/api/tournaments/${res.body.id}`)).status)
+  expect(res.body.config.uniques).toEqual({ inBoosters: 1, guaranteed: 0, evenFactions: false, faction: null, randomOneIn: null })
+  await seed.pool('alice', res.body.id)
+  const pool = await storedPool(db, res.body.id, 'alice')
+  expect(pool.set_code).toBe('CYCLONE')
+  expect(pool.boosters).toHaveLength(7)
 })
 
 test('BGA: the first call creates a multi-set pool and a deck taken from it', { tag: ['@ms-g-bga'] }, async ({ seed, api, db, fakes }) => {
