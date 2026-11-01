@@ -311,7 +311,8 @@ const DECKS = (tok, filter) => pre(`curl -s -H "Authorization: Bearer $TOKEN_${t
 // Every command runs from any directory: the compose file and make/npm are reached through REPO.
 const REPO = '~/Perso/altered-reunion/altered-draft';
 const DB = `docker compose -f ${REPO}/docker-compose.yml exec -T postgres psql -U altered-draft -d altered-draft`;
-const PSQL = (sql) => pre(`${DB} -c "${sql}"`);
+// Unaligned, tuples only, ' | ' between columns: the output is exactly the Expected lines.
+const PSQL = (sql) => pre(`${DB} -At -F ' | ' -c "${sql}"`);
 
 // Helpers that only shorten this file: every step still prints its whole command.
 // The keys printed for a stored config, in a fixed order (Postgres jsonb does not keep the insertion order).
@@ -350,7 +351,7 @@ const GROUPS = [
       { id: 'ms-0-e2e', title: 'Playwright suite green, the three acceptance pages read',
         html: `${pre(`cd ${REPO} && make e2e && npm run test:e2e:coverage`)}<p>Expected: the suite passes; the coverage report lists the three acceptance pages (<code>acceptance-user-tournaments.html</code>, <code>acceptance-mono-faction-sealed.html</code>, <code>acceptance-multiset-sealed.html</code>) and exits without error. The steps of this page it replays carry the <span class="new-tag auto">auto</span> badge.</p>` },
       { id: 'ms-0-clean', title: 'Start without the tournaments of this page, alice under the cap',
-        html: `<p>This page uses the BGA ids 123490 to 123499 (123499: the throwaway tournament of ms-e-summary).</p>${PSQL(`SELECT bga_tournament_id, name, detached_at FROM tournaments WHERE bga_tournament_id ~ '^1234(9[0-9])$'`)}<p>Expected: <code>(0 rows)</code>. To start over on them only:</p>${PSQL(`DELETE FROM sealed_pools WHERE tournament_id ~ '^1234(9[0-9])$' OR tournament_ref IN (SELECT id FROM tournaments WHERE bga_tournament_id ~ '^1234(9[0-9])$'); DELETE FROM tournaments WHERE bga_tournament_id ~ '^1234(9[0-9])$'`)}
+        html: `<p>This page uses the BGA ids 123490 to 123499 (123499: the throwaway tournament of ms-e-summary).</p>${PSQL(`SELECT count(*) FROM tournaments WHERE bga_tournament_id ~ '^1234(9[0-9])$'`)}<p>Expected: <code>0</code>. To start over on them only:</p>${PSQL(`DELETE FROM sealed_pools WHERE tournament_id ~ '^1234(9[0-9])$' OR tournament_ref IN (SELECT id FROM tournaments WHERE bga_tournament_id ~ '^1234(9[0-9])$'); DELETE FROM tournaments WHERE bga_tournament_id ~ '^1234(9[0-9])$'`)}
 <p>alice has up to 5 open tournaments of this page at once, and an organizer has 10 at most. Her open tournaments now:</p>${pre(`${DB} -At -c "SELECT count(*) FROM tournaments WHERE organizer_sub = '${ALICE_SUB}' AND detached_at IS NULL AND cancelled_at IS NULL AND ended_at IS NULL AND (ends_at IS NULL OR ends_at > now())"`)}<p>Expected: <code>5</code> or less. Otherwise cancel her older ones (lot 1 and V2 runs; a cancelled tournament keeps its pools):</p>${PSQL(`UPDATE tournaments SET cancelled_at = now() WHERE organizer_sub = '${ALICE_SUB}' AND NOT bga_tournament_id ~ '^1234(9[0-9])$' AND detached_at IS NULL AND cancelled_at IS NULL AND ended_at IS NULL`)}` },
     ],
   },
@@ -535,7 +536,8 @@ ${PSQL(`SELECT p.set_code, jsonb_array_length(p.boosters) AS boosters ${FROM} WH
         html: `${pre(`T=$TOKEN_CAROL node -e '(async () => { const h = { Authorization: "Bearer " + process.env.T }; const b = await (await fetch("${API}/api/tournament-bga-decklist?tournamentId=123490&tournamentName=BGA%20name&gameId=g-123490", { headers: h })).json(); const m = b["hydra:member"]?.[0]; if (!m) return console.log("no deck", JSON.stringify(b)); const d = await (await fetch("http://localhost:8001/api/decks/" + m.id, { headers: { ...h, Accept: "application/json" } })).json(); const pool = await (await fetch("${API}/api/tournament-pool-counts?tournamentId=123490", { headers: h })).json(); const cards = (d.deckCards ?? d.cards ?? []).map(c => [String(c.cardReference ?? c.reference ?? "").toUpperCase(), Math.max(1, parseInt(c.quantity ?? 1, 10) || 1)]); const outside = cards.filter(([r, q]) => (pool.cards[r] ?? 0) < q).map(([r]) => r); console.log(m.name, "|", m.faction?.reference, "|", cards.reduce((n, [, q]) => n + q, 0), "cards | outside the pool:", outside.join(" ") || "none") })()'`)}
 <p>Expected: <code>Random SKY ROC NEJ mix | &lt;faction&gt; | N cards | outside the pool: none</code> with N ≥ 30 (every copy of the deck is in carol’s pool).</p>
 ${PSQL(`SELECT left(sub, 4) AS player, created_by, set_code IS NULL AS no_set_code, jsonb_array_length(boosters) AS boosters, tournament_name FROM sealed_pools WHERE tournament_id = '123490' ORDER BY created_by`)}
-<p>Expected: carol’s row <code>bga | t | 7 | SKY ROC NEJ mix</code> and alice’s row <code>1111 | page | t | 7 | SKY ROC NEJ mix</code>.</p>` },
+<p>Expected, carol’s row (the first 4 characters of her id) then alice’s:</p><pre>&lt;carol&gt; | bga | t | 7 | SKY ROC NEJ mix
+1111 | page | t | 7 | SKY ROC NEJ mix</pre>` },
     ],
   },
   {
