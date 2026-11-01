@@ -5,14 +5,18 @@ export async function copyText(text) {
   if (!text) return false
   try { await navigator.clipboard.writeText(text); return true }
   catch {
+    let ta = null
+    const prev = document.activeElement
     try {
-      const ta = document.createElement('textarea')
+      ta = document.createElement('textarea')
       ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0'
       document.body.appendChild(ta); ta.select()
-      const ok = document.execCommand('copy')
-      document.body.removeChild(ta)
-      return ok
+      return document.execCommand('copy')
     } catch { return false }
+    finally {
+      if (ta && ta.parentNode) ta.parentNode.removeChild(ta)
+      if (prev && prev !== document.body && document.contains(prev) && typeof prev.focus === 'function') prev.focus()
+    }
   }
 }
 

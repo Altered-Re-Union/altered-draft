@@ -1,6 +1,6 @@
 # User-created sealed tournaments — design spec
 
-> Status: **validated design, not implemented** (2026-10-16). Companion to `README.md` in this
+> Status: **validated design (2026-10-16); lot 1, V2, V3 and V4 implemented, lots 2–3 pending**. Companion to `README.md` in this
 > folder, which documents the tournament feature as it exists today (one global competitive
 > format, one pending pool per player, lazy binding on the first BGA call). This spec describes
 > how that model is extended so that **organizers declare their own tournaments** with their own
