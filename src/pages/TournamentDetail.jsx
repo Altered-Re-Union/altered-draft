@@ -6,7 +6,7 @@ import { getTournament, updateTournament, deleteTournament, fetchTournamentPool 
 import TopNav from '../components/TopNav.jsx'
 import Footer from '../components/Footer.jsx'
 import TournamentChecklist from '../components/TournamentChecklist.jsx'
-import { StatusPill, formatDateTime, ConfigSummary } from '../components/TournamentBits.jsx'
+import { StatusPill, PrivateBadge, formatDateTime, ConfigSummary } from '../components/TournamentBits.jsx'
 import { TOURNAMENT_HUB_PATH } from '../lib/links.js'
 
 export default function TournamentDetail() {
@@ -98,6 +98,7 @@ export default function TournamentDetail() {
               <div className="flex items-center gap-3 flex-wrap">
                 <h1 className="text-2xl font-display">{tournament.name}</h1>
                 <StatusPill status={tournament.status} t={t} />
+                {tournament.visibility === 'private' && <PrivateBadge t={t} />}
               </div>
               <p className="text-sm text-ink2">
                 {t('tournaments.startsAt', { date: formatDateTime(tournament.startsAt) })}

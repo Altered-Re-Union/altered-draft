@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { configSummaryParts } from './TournamentBits.jsx'
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
+import { configSummaryParts, PrivateBadge } from './TournamentBits.jsx'
 import { SETS } from '../lib/cardData.js'
 const t = (key, vars = {}) => `${key}${Object.keys(vars).length ? ' ' + JSON.stringify(vars) : ''}`
 const tc = (key, n) => `${key} ${n}`
@@ -36,5 +38,15 @@ describe('configSummaryParts', () => {
   it('keeps the uniques faction part in random mode even with no guaranteed unique', () => {
     const texts = configSummaryParts(multi({ CYCLONE: 7 }, { randomOneIn: 8, faction: 'AX' }), t, tc).map(p => p.text)
     expect(texts).toContain('tournaments.summaryFaction {"faction":"Axiom"}')
+  })
+})
+
+describe('PrivateBadge', () => {
+  it('a labelled, titled pill with an aria-hidden icon', () => {
+    const html = renderToStaticMarkup(createElement(PrivateBadge, { t }))
+    expect(html).toContain('data-testid="tournament-private"')
+    expect(html).toContain('title="tournaments.privateBadgeTitle"')
+    expect(html).toContain('aria-hidden="true"')
+    expect(html).toContain('tournaments.privateBadge<')
   })
 })
