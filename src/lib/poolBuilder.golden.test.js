@@ -79,3 +79,11 @@ describe('legacy pool regeneration (golden)', () => {
     expect(digest).toMatchSnapshot()
   })
 })
+
+describe('mono-faction pool (golden)', () => {
+  it('the draw for a mono-faction config is frozen', async () => {
+    const config = { v: 1, format: 'sealed', source: { type: 'faction', faction: 'AX', sets: { CORE: 1, EOLE: 2 }, boosters: 7 }, heroes: 'packs', uniques: { inBoosters: 1, guaranteed: 1, evenFactions: false, faction: 'AX' }, excludeBanlist: false }
+    const { boosters, cards: counts } = await buildPool('11111111-1111-1111-1111-111111111111', { config, nonce: 'n-faction' }, { fetchCards: async code => fakeSet(code) })
+    expect(crypto.createHash('sha256').update(JSON.stringify({ boosters, counts })).digest('hex')).toMatchSnapshot()
+  })
+})

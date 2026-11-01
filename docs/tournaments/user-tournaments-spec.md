@@ -203,7 +203,7 @@ How registered pools sit in the **existing** `sealed_pools` columns (no index ch
 - The legacy snapshot columns (`set_code`, `unique_count`, `even_factions`, `heroes_in_pool`,
   `guaranteed_uniques`, `nonce`) are still filled from the config in lot 1 (single set), which
   keeps `NOT NULL` and lets `regeneratePool` reproduce the stored pool bit for bit (a property
-  the tests use). Lot 2 relaxes `set_code` to nullable for multi-set and cube pools.
+  the tests use). `set_code` was relaxed to nullable by V2 (mono-faction sealed pools span several sets and store `NULL`); lot 2 cube and multi-set pools will use the same.
 - Legacy rows: `tournament_ref`, `config`, `cards`, `boosters` are `null`; `created_by` is
   `'legacy'` for rows that predate the column (backfilled by the migration).
 
@@ -224,7 +224,7 @@ One shape for tournaments, for the legacy format (converted on read), and later 
 }
 ```
 
-- `source.type`: lot 1 accepts `set` only. Lot 2 adds `cube` (`{ type, cubeId?, name, cards[],
+- `source.type`: lot 1 accepts `set`; **V2 (2026-10-30) accepts `faction`**: `{ type: 'faction', faction, sets: { CODE: 1..3 }, boosters: 7 }` (weights 1–3, zero dropped, COREKS refused, `uniques.faction` forced to `faction`, `evenFactions` false). Lot 2 adds `cube` (`{ type, cubeId?, name, cards[],
   heroes[] }` — built-in cubes are snapshotted by refs, not referenced by id) and `multiset`
   (`{ type, mix: { SET: boosters } }`), plus `uniques.random` (per-booster probability).
 - `heroes`: `packs` (one hero per booster) or `free` (no hero in boosters, every hero of the
@@ -257,7 +257,7 @@ uniques), with two additions: `excludeBanlist` filters the set with `filterBanne
 generation and rejects banned unique families (`pickDeterministicUniques` gets an optional
 `isAllowed` predicate; its existing retry loop redraws). `uniques.faction` is passed as
 `pickDeterministicUniques`'s `faction` option: every draw targets that faction (precedence over
-`evenFactions`). Lot 2 ports the Lobby's other sealed
+`evenFactions`). **V2 branch:** `source.type = 'faction'` goes to `buildFactionPool` (`quotas()` exact split of the hero, common and rare card slots over the weighted sets, `generateFactionSealedPool`, uniques from range-capable sets only); the `set` branch is unchanged. Lot 2 ports the Lobby's other sealed
 branches into it.
 
 Rules:
@@ -434,6 +434,7 @@ Theming: semantic tokens only (`surface`, `ink`, `accent`, …), as in `CLAUDE.m
 | **1. Registry + attached pools** | Everything above with `source.type = 'set'` (7 boosters of one set), heroes packs/free, exact + guaranteed uniques, even factions, ban list. Stored pools, freeze script, BGA path, public list, create/edit/cancel/close/delete, checklist page, moderators via env. | Yes | 4–6 days |
 | **2. Full Lobby options** | Extract the Lobby's "Cards" step (presets / cubes incl. paste + Re:Union decks / multi-set) into a shared component driven by the §5.1 config; port the Lobby's sealed `handleStart` branches into `poolBuilder` (rng-injectable, used by both the browser and the server); cubes snapshotted by refs; multi-set; live random uniques (`uniques.random`), which also lifts the FUGUE limit; sets derived from refs in `TournamentPoolView` and `buildCardMap`; `PackReveal` generic over booster count and extras. | Needs lot 1 | 4–6 days |
 | **3. Polish** | Home "Sealed set 6" block → generic "Tournaments"; "pools created by BGA" indicator; purge policy for boosters of long-ended tournaments (optional); docs. | After lot 1 | 2–3 days |
+| **V2. Mono-faction sealed** | source.type = 'faction', weighted sets, exact quotas, nullable set_code, recette page + Playwright steps | After lot 1 | 3–4 days |
 
 Estimates are effective dev days with Claude Code, tests and review included, excluding time
 waiting on Re:Union.

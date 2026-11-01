@@ -23,7 +23,7 @@ Table of contents
 11. [Local development and testing](#11-local-development-and-testing)
 12. [Invariants, pitfalls, and how to extend](#12-invariants-pitfalls-and-how-to-extend)
 13. [History and design decisions](#13-history-and-design-decisions)
-14. [User-created tournaments (lot 1)](#14-user-created-tournaments-lot-1)
+14. [User-created tournaments](#14-user-created-tournaments)
 15. [Glossary](#15-glossary)
 
 ---
@@ -42,7 +42,8 @@ against the player's pool by calling altered-draft back.
 Two ways a sealed configuration is chosen:
 
 - **Declared tournaments** (§14): an organizer declares a BGA tournament on altered-draft with
-  its own configuration (7 boosters of one set, heroes, uniques, ban list). Its players get
+  its own configuration (7 boosters of one set, or of one faction over weighted sets (§14.6),
+  heroes, uniques, ban list). Its players get
   a pool built from that configuration.
 - **The current competitive format** (a row in `current_format`, seeded by
   `sealed-pools-schema.sql`) for the two generic flows: the casual "normal" pool and the
@@ -1205,15 +1206,16 @@ flags; a normal-pool reset deletes the deck to keep decks-api caching simple; on
 
 ---
 
-## 14. User-created tournaments (lot 1)
+## 14. User-created tournaments
 
 Any logged-in Re:Union account can now **declare a sealed tournament** (name, description,
 mandatory BGA link, start, optional end, sealed configuration) instead of a developer
 changing `current_format`. Design: [`user-tournaments-spec.md`](user-tournaments-spec.md);
 implementation plan: [`user-tournaments-lot1-plan.md`](user-tournaments-lot1-plan.md). Lot 1
-covers `source.type = 'set'` only (7 boosters of one visible set, heroes in boosters or free
+covers `source.type = 'set'` (7 boosters of one visible set, heroes in boosters or free
 choice, exact uniques inside boosters, guaranteed uniques outside, uniques restricted to one
-faction, even factions, ban list).
+faction, even factions, ban list); V2 (§14.6) adds `source.type = 'faction'`, mono-faction
+sealed over weighted sets.
 
 ### 14.1 Stored pools
 
@@ -1327,6 +1329,61 @@ organizer's declaration (or, for a released pool, straight to that pool, step 1 
 detached row stays as a read-only trace (status `detached`, any PATCH → 409
 `tournament_detached`, DELETE still allowed). The confirmation re-reads the pool count at click
 time and states it, and says which pools are kept.
+
+### 14.6 Mono-faction sealed (V2)
+
+Format: 7 boosters in which **every card of the pool belongs to one chosen faction**, drawn over
+one or several sets with a weight each. It removes the colour lottery of a classic sealed.
+Design approved 2026-10-30.
+
+**Config.** `source: { type: 'faction', faction, sets: { CODE: 1..3 }, boosters: 7 }`, validated in
+`src/lib/tournamentConfig.js` (`SOURCE_TYPES = ['set', 'faction']`, `MAX_SET_WEIGHT = 3`,
+`configSetCodes`). Zero weights are dropped; COREKS is refused; error codes `source.type`,
+`source.faction`, `source.sets`. For this source `uniques.faction` is forced to the source faction
+(only when the pool has uniques, else `null`) and `evenFactions` to `false`; `uniques.unsupportedSet` is raised only when the sets are otherwise
+valid but none of the included ones has faction-range data. `legacyColumnsFromConfig` writes
+`set_code: null`.
+
+**Generation.** `quotas(weights, n, rng)` (`src/lib/packGenerator.js`) splits n card **slots** over
+the sets by **largest remainder**, ties broken by shuffling the tied group with the pool rng.
+`generateFactionSealedPool` applies it separately to the 7 hero slots (heroes `packs`), the 63
+common slots and the 21 rare slots (over the sets that have a card of that rarity in the
+faction), then shuffles the set labels over the slots: each set's share is exact per rarity
+across the pool, and a booster mixes sets. Each slot is drawn from the set its label assigns,
+falling back to the other included sets, then left empty (never another rarity). Each set's
+faction pool is de-duplicated by name (one print per card name within a set), and across the pool
+a card is only kept from repeating **within a booster**: reprints of the same card in different
+sets stay distinct, and out-of-faction `_R2` prints of the faction are included (faction =
+`card.faction`, never the ref letters). Hero slots stay distinct until every faction hero of the
+included sets has been dealt, then repeat. `buildPool` routes to `buildFactionPool`
+(`src/lib/poolBuilder.js`); the `set` branch and its golden digest are untouched.
+
+**Heroes.** Through the existing `heroes` option: `packs` = one hero per booster, distinct until the
+pool of faction heroes is exhausted; `free` = every hero of that faction in the included sets.
+
+**Uniques.** The total (in boosters + guaranteed) is split by `quotas()` over the included sets that
+have faction-range data, with their weights renormalised over those sets (**NEJ is excluded**),
+drawn with `pickDeterministicUniques` per set in `SETS` order (`configSetCodes` sorts, a jsonb config does not keep key order), always of the source faction, then shuffled: the
+first `inBoosters` replace rare slots, the rest are guaranteed.
+
+**Data and server.** `sealed_pools.set_code` becomes nullable (idempotent `alter` in
+`sealed-pools-schema.sql`); faction pools store `NULL`. A pool can now span several sets, so
+`buildCardMap(refs)` (`api/_lib/tournamentPool.js`) loads every set present in the refs rather than
+one set, only codes known to `SETS` (a stray ref in a deck edited on decks-api is left out of the
+card map instead of aborting the deck reconciliation); the pool page does the same client-side and skips the single-set booster cover for mixed
+pools.
+
+**UI.** The tournament form's Cards step has a source switch "One set" / "Mono-faction mix": faction
+pills, a weight stepper per set (×0 to ×3) with its share in %, and a fixed-faction line for the
+uniques. Public summary: `7 boosters · [icon] Axiom mono-faction · all sets`, or
+`... · SKY, ROC ×2, NEJ` when weights are not uniform.
+
+**Recette.** `docs/tournaments/acceptance-mono-faction-sealed.html` (step ids `mf-<group>-<slug>`,
+11 replayed by `tests/e2e/specs/faction-sealed.spec.js`). `scripts/e2e-acceptance-coverage.mjs`
+reads both acceptance pages (`ACCEPTANCE_PAGES`) and refuses an id present in two pages.
+
+**Merge.** Kept as a draft PR: not merged before the lot 1 beta is closed and #22 (unmasking) is
+merged. Rebase then; `README.md`, `index.html` and `CLAUDE.md` are shared with #22.
 
 ---
 

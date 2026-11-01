@@ -76,7 +76,20 @@ export async function login(returnPath) {
   window.location.assign(`${keycloakIssuer}/protocol/openid-connect/auth?${p.toString()}`)
 }
 
-export async function handleCallback() {
+// The code exchange in flight on /auth/callback. AuthProvider's mount-time refresh must wait
+// for it: on a reconnect after an expired session, the stale refresh cookie is still there,
+// and a refresh racing the exchange fails AFTER it, so /api/token clears the brand-new
+// cookies and refresh() drops the new in-memory token — the user lands back logged out.
+let pendingLogin = null
+
+// AuthCallback's effect runs before AuthProvider's (React runs child effects first), so
+// pendingLogin is set before the provider asks for a token: keep the assignment synchronous.
+export function handleCallback() {
+  pendingLogin = exchangeCode().finally(() => { pendingLogin = null })
+  return pendingLogin
+}
+
+async function exchangeCode() {
   const params = new URLSearchParams(window.location.search)
   const code = params.get('code')
   const state = params.get('state')
@@ -113,6 +126,7 @@ async function refresh() {
 // Returns a valid access token (refreshing via the cookie if needed), or null. Also
 // covers fresh page loads, where the in-memory token is gone but the cookie persists.
 export async function getAccessToken() {
+  if (pendingLogin) await pendingLogin.catch(() => {})
   if (session && Date.now() < session.expires_at - 30_000) return session.access_token
   if (!isLoggedIn()) return null
   const t = await refresh()

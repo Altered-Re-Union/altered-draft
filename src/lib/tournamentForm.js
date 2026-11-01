@@ -7,7 +7,7 @@ import { validateTournamentConfig } from './tournamentConfig.js'
 import { parseBgaTournamentUrl } from './bgaUrl.js'
 
 // Display order = order of the fields on the page.
-const FIELD_ORDER = ['name', 'description', 'bgaUrl', 'startsAt', 'endsAt', 'setCode', 'uniques']
+const FIELD_ORDER = ['name', 'description', 'bgaUrl', 'startsAt', 'endsAt', 'setCode', 'faction', 'sets', 'uniques']
 
 /**
  * @param {object} p
@@ -47,7 +47,9 @@ export function tournamentFormIssues({ body, config, now = new Date(), isCreate,
   if (!locked) {
     const cfg = validateTournamentConfig(config)
     if (cfg.errors.includes('source.setCode')) issues.push({ field: 'setCode', code: 'required' })
-    const other = cfg.errors.filter(e => e !== 'source.setCode')
+    if (cfg.errors.includes('source.faction')) issues.push({ field: 'faction', code: 'required' })
+    if (cfg.errors.includes('source.sets')) issues.push({ field: 'sets', code: 'required' })
+    const other = cfg.errors.filter(e => !['source.setCode', 'source.faction', 'source.sets'].includes(e))
     if (other.length) issues.push({ field: 'uniques', code: other[0] })
   }
 

@@ -1,3 +1,5 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
 exports[`legacy pool regeneration (golden) > the draw for the current format is frozen 1`] = `"b7d467043eef4531f9d8b2bd729c7375a16b83ae48e89673a712fda79c8cdabe"`;
+
+exports[`mono-faction pool (golden) > the draw for a mono-faction config is frozen 1`] = `"a94a3798ca59240f84e5230280b35e1670f62bdbcc33c1738e12780377b3bfc0"`;

@@ -6,10 +6,11 @@ import { parseBgaTournamentUrl } from '../lib/bgaUrl.js'
 import { tournamentFormIssues } from '../lib/tournamentForm.js'
 import { validateTournamentConfig } from '../lib/tournamentConfig.js'
 import { hasFactionRanges } from '../lib/uniqueFactionRanges.js'
+import { SETS } from '../lib/cardData.js'
 import { createTournament, updateTournament, getTournament, checkBgaTournament } from '../lib/tournamentApi.js'
 import TopNav from '../components/TopNav.jsx'
 import Footer from '../components/Footer.jsx'
-import SetPresetGrid from '../components/SetPresetGrid.jsx'
+import TournamentCardsSource from '../components/TournamentCardsSource.jsx'
 import SettingsFields from '../components/SettingsFields.jsx'
 import TournamentUniqueFields from '../components/TournamentUniqueFields.jsx'
 
@@ -26,6 +27,11 @@ function fromLocalInput(value) {
   const d = new Date(value)
   return Number.isNaN(d.getTime()) ? null : d.toISOString()
 }
+// Mono-faction mix: every visible set at ×1; a stored source's weights expanded the same
+// way, absent sets at 0 (excluded).
+function setWeightsFrom(sets = null) {
+  return Object.fromEntries(SETS.filter(s => !s.hidden).map(s => [s.code, sets ? sets[s.code] ?? 0 : 1]))
+}
 function defaultStart() {
   const d = new Date()
   d.setDate(d.getDate() + 1)
@@ -38,15 +44,15 @@ function defaultStart() {
 // Each listed problem jumps to its field. Inline messages appear once a field was touched.
 const FIELD_DOM_ID = {
   name: 'tn-name', description: 'tn-desc', bgaUrl: 'tn-bga', startsAt: 'tn-start', endsAt: 'tn-end',
-  setCode: 'tn-cards', uniques: 'tn-settings',
+  setCode: 'tn-cards', faction: 'tn-cards', sets: 'tn-cards', uniques: 'tn-settings',
 }
 const FIELD_LABEL_KEY = {
   name: 'tournaments.nameLabel', description: 'tournaments.descriptionLabel', bgaUrl: 'tournaments.bgaUrlLabel',
   startsAt: 'tournaments.startsAtLabel', endsAt: 'tournaments.endsAtLabel', setCode: 'tournaments.sectionCards',
-  uniques: 'tournaments.tournamentUniquesTitle',
+  faction: 'tournaments.sectionCards', sets: 'tournaments.sectionCards', uniques: 'tournaments.tournamentUniquesTitle',
 }
 
-function issueMessage({ field, code }, t) {
+function issueMessage({ field, code }, t, factionSource = false) {
   switch (field) {
     case 'name': return t('tournaments.errName')
     case 'description': return t('tournaments.errDescription')
@@ -54,8 +60,10 @@ function issueMessage({ field, code }, t) {
     case 'startsAt': return code === 'must_be_before_end' ? t('tournaments.errStartsAtBeforeEnd') : t('tournaments.errStartsAt')
     case 'endsAt': return t('tournaments.errEndsAt')
     case 'setCode': return t('tournaments.errSelectSet')
+    case 'faction': return t('tournaments.errSelectFaction')
+    case 'sets': return t('tournaments.errSelectSets')
     case 'uniques':
-      if (code === 'uniques.unsupportedSet') return t('tournaments.uniquesUnsupported')
+      if (code === 'uniques.unsupportedSet') return t(factionSource ? 'tournaments.uniquesUnsupportedSets' : 'tournaments.uniquesUnsupported')
       if (code === 'uniques.faction') return t('tournaments.errUniquesFaction')
       return t('tournaments.errGeneric', { msg: code })
     default: return t('tournaments.errGeneric', { msg: code })
@@ -81,7 +89,10 @@ export default function TournamentForm() {
   const [bgaUrl, setBgaUrl] = useState('')
   const [startsAt, setStartsAt] = useState(defaultStart)
   const [endsAt, setEndsAt] = useState('')
+  const [sourceType, setSourceType] = useState('set')
   const [setCode, setSetCode] = useState(null)
+  const [faction, setFaction] = useState(null)
+  const [setWeights, setSetWeights] = useState(() => setWeightsFrom())
   const [heroes, setHeroes] = useState('packs')
   const [uniques, setUniques] = useState({ inBoosters: 1, guaranteed: 1, evenFactions: false, faction: null })
   const [excludeBanlist, setExcludeBanlist] = useState(false)
@@ -117,12 +128,13 @@ export default function TournamentForm() {
     setName(d.name ?? ''); setDescription(d.description ?? ''); setStartsAt(d.startsAt ?? ''); setEndsAt(d.endsAt ?? '')
     if (withConfig) {
       setBgaUrl(d.bgaUrl ?? ''); if (d.setCode !== undefined) setSetCode(d.setCode)
+      if (d.sourceType) setSourceType(d.sourceType); if (d.faction !== undefined) setFaction(d.faction); if (d.setWeights) setSetWeights(d.setWeights)
       if (d.heroes) setHeroes(d.heroes); if (d.uniques) setUniques(d.uniques); setExcludeBanlist(!!d.excludeBanlist)
     }
   }
   function reconnect() {
     try {
-      sessionStorage.setItem(draftKey, JSON.stringify({ name, description, bgaUrl, startsAt, endsAt, setCode, heroes, uniques, excludeBanlist }))
+      sessionStorage.setItem(draftKey, JSON.stringify({ name, description, bgaUrl, startsAt, endsAt, sourceType, setCode, faction, setWeights, heroes, uniques, excludeBanlist }))
     } catch { /* storage unavailable: the reconnect still works, the draft is lost */ }
     login(isEdit ? `/tournament/t/${id}/edit` : '/tournament/new')
   }
@@ -150,8 +162,14 @@ export default function TournamentForm() {
         }
         setName(tn.name); setDescription(tn.description); setBgaUrl(tn.bgaUrl)
         setStartsAt(toLocalInput(tn.startsAt)); setEndsAt(toLocalInput(tn.endsAt))
-        setSetCode(tn.config.source.setCode); setHeroes(tn.config.heroes)
-        setUniques(tn.config.uniques); setExcludeBanlist(!!tn.config.excludeBanlist)
+        const src = tn.config.source
+        setSourceType(src.type === 'faction' ? 'faction' : 'set')
+        if (src.type === 'faction') { setFaction(src.faction); setSetWeights(setWeightsFrom(src.sets)) } else setSetCode(src.setCode)
+        setHeroes(tn.config.heroes)
+        // A faction source stores its own faction as the uniques faction (forced server-side):
+        // keep it out of the shared uniques state, or switching to "One set" would preselect it.
+        setUniques(src.type === 'faction' ? { ...tn.config.uniques, faction: null, evenFactions: false } : tn.config.uniques)
+        setExcludeBanlist(!!tn.config.excludeBanlist)
         setLocked(!!tn.locked)
         const d = readDraft()
         if (d) applyDraft(d, { withConfig: !tn.locked })
@@ -196,20 +214,24 @@ export default function TournamentForm() {
   useEffect(() => {
     if (!imposed) return
     const c = legacy.config
-    setSetCode(c.source.setCode); setHeroes(c.heroes); setUniques({ ...c.uniques, faction: c.uniques.faction ?? null }); setExcludeBanlist(!!c.excludeBanlist)
+    setSourceType('set'); setSetCode(c.source.setCode); setHeroes(c.heroes); setUniques({ ...c.uniques, faction: c.uniques.faction ?? null }); setExcludeBanlist(!!c.excludeBanlist)
   }, [imposed, legacy])
   const mixedBgaIds = new Set([...legacyByBgaId].filter(([, l]) => l.mixed).map(([bgaId]) => bgaId))
   const configFrozen = locked || imposed
 
   const bgaParsed = useMemo(() => parseBgaTournamentUrl(bgaUrl), [bgaUrl])
-  const uniqueSupport = !setCode || hasFactionRanges(setCode)
+  const isFaction = sourceType === 'faction'
+  const uniqueSupport = isFaction
+    ? Object.entries(setWeights).some(([c, w]) => w > 0 && hasFactionRanges(c))
+    : !setCode || hasFactionRanges(setCode)
   const tz = useMemo(() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone } catch { return 'UTC' } }, [])
 
   const config = {
     v: 1, format: 'sealed',
-    source: { type: 'set', setCode, boosters: 7 },
+    source: isFaction ? { type: 'faction', faction, sets: setWeights, boosters: 7 } : { type: 'set', setCode, boosters: 7 },
     heroes,
-    uniques: uniqueSupport ? uniques : { inBoosters: 0, guaranteed: 0, evenFactions: false, faction: null },
+    uniques: !uniqueSupport ? { inBoosters: 0, guaranteed: 0, evenFactions: false, faction: null }
+      : isFaction ? { ...uniques, faction, evenFactions: false } : uniques,
     excludeBanlist,
   }
   const body = { name, description, bgaUrl, startsAt: fromLocalInput(startsAt), endsAt: fromLocalInput(endsAt) }
@@ -260,7 +282,7 @@ export default function TournamentForm() {
         focusField('bgaUrl')
       } else if (err.status === 400 && err.data?.fields && Object.keys(err.data.fields).length) {
         const first = Object.keys(err.data.fields)[0]
-        setServerError(issueMessage({ field: first, code: err.data.fields[first] }, t))
+        setServerError(issueMessage({ field: first, code: err.data.fields[first] }, t, isFaction))
         focusField(first)
       } else if (err.status === 409 && err.data?.error === 'tournament_locked') setServerError(t('tournaments.errLocked'))
       else if (err.status === 429) setServerError(t('tournaments.errTooMany'))
@@ -274,10 +296,10 @@ export default function TournamentForm() {
   const inputCls = invalid => `w-full bg-surface2 border rounded-lg px-3 py-2 text-sm focus:outline-none ${invalid ? 'border-danger focus:border-danger' : 'border-line focus:border-accent'}`
   const ErrorLine = ({ field }) => {
     const issue = fieldIssue(field)
-    return issue ? <p className="text-xs text-danger mt-1" role="alert">{issueMessage(issue, t)}</p> : null
+    return issue ? <p className="text-xs text-danger mt-1" role="alert">{issueMessage(issue, t, isFaction)}</p> : null
   }
   const submitLabel = saving ? t('tournaments.saving') : isEdit ? t('tournaments.submitSave') : t('tournaments.submitCreate')
-  const issuesText = issues.map(i => `${t(FIELD_LABEL_KEY[i.field])} — ${issueMessage(i, t)}`)
+  const issuesText = issues.map(i => `${t(FIELD_LABEL_KEY[i.field])} — ${issueMessage(i, t, isFaction)}`)
 
   if (!authLoading && !user) {
     return (
@@ -369,9 +391,13 @@ export default function TournamentForm() {
           <h2 className="font-semibold">{t('tournaments.sectionCards')}</h2>
           {locked && <p className="text-xs text-accent-ink">{t('tournaments.lockedNotice')}</p>}
           {imposed && <p className="text-sm text-accent-ink" role="status">{tc('tournaments.legacyImposed', legacy.pools)}</p>}
-          <p className="text-sm text-muted">{t('tournaments.cardsHint')}</p>
-          <SetPresetGrid selected={setCode} onSelect={edit('setCode', setSetCode)} disabled={configFrozen || saving} />
-          <ErrorLine field="setCode" />
+          <TournamentCardsSource
+            sourceType={sourceType} onSourceType={v => { setSourceType(v); setServerError('') }}
+            setCode={setCode} onSetCode={edit('setCode', setSetCode)}
+            faction={faction} onFaction={edit('faction', setFaction)}
+            weights={setWeights} onWeights={edit('sets', setSetWeights)}
+            disabled={configFrozen || saving} />
+          <ErrorLine field="setCode" /><ErrorLine field="faction" /><ErrorLine field="sets" />
         </section>
 
         {/* Section 3 — settings */}
@@ -386,7 +412,8 @@ export default function TournamentForm() {
               excludeBanlist={excludeBanlist} setExcludeBanlist={setExcludeBanlist}
               showBanlist
             />
-            <TournamentUniqueFields uniques={uniques} onChange={setUniques} uniqueSupport={uniqueSupport} disabled={configFrozen || saving} />
+            <TournamentUniqueFields uniques={uniques} onChange={setUniques} uniqueSupport={uniqueSupport} disabled={configFrozen || saving}
+              factionSource={isFaction} fixedFaction={isFaction ? faction : null} />
           </fieldset>
         </section>
 
