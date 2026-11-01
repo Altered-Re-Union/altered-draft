@@ -11,6 +11,7 @@ import { factionTournamentBody, tournamentBody } from '../support/api.js'
 import { FAKES_URL, ROOT_DIR } from '../support/env.js'
 import { expectNoHorizontalScroll } from '../support/guards.js'
 import { openPoolPage } from '../support/pages.js'
+import { countBySet, storedPool } from '../support/pools.js'
 import { PERSONAS } from '../support/personas.js'
 import { t, tc } from '../support/i18n.js'
 
@@ -49,20 +50,6 @@ async function setWeights(page, targets) {
     for (let w = 1; w > target; w--) await weightButton(page, code, '−').click()
     await expect(weight(page, code)).toContainText(`×${target}`)
   }
-}
-
-// The faction pool of `who` on `tournamentId`, as stored.
-async function storedPool(db, tournamentId, who) {
-  const { rows } = await db.query('SELECT set_code, created_by, boosters, cards FROM sealed_pools WHERE tournament_ref = $1 AND sub = $2', [tournamentId, PERSONAS[who].sub])
-  expect(rows).toHaveLength(1)
-  return rows[0]
-}
-
-const setOf = ref => ref.split('_')[1]
-function countBySet(refs) {
-  const counts = {}
-  for (const ref of refs) counts[setOf(ref)] = (counts[setOf(ref)] ?? 0) + 1
-  return counts
 }
 
 test.beforeEach(async ({ db, fakes }) => {

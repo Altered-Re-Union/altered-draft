@@ -11,6 +11,7 @@ import { factionTournamentBody, multisetTournamentBody, tournamentBody } from '.
 import { FAKES_URL, ROOT_DIR } from '../support/env.js'
 import { expectNoHorizontalScroll } from '../support/guards.js'
 import { openPoolPage } from '../support/pages.js'
+import { countBySet, setOf, storedPool } from '../support/pools.js'
 import { PERSONAS } from '../support/personas.js'
 import { t, tc } from '../support/i18n.js'
 
@@ -40,7 +41,6 @@ const uniquesStepper = (page, which) => page.getByTestId(which === 'in' ? 'uniqu
 const submit = page => page.getByRole('button', { name: t('tournaments.submitCreate') })
 const problems = page => page.getByTestId('form-problems')
 const isUnique = ref => ref.includes('_U_')
-const setOf = ref => ref.split('_')[1]
 
 async function openForm(openAs) {
   const page = await openAs('alice')
@@ -58,19 +58,6 @@ async function fillMix(page, counts) {
   if (await mixToggle(page).getAttribute('aria-expanded') !== 'true') await mixToggle(page).click()
   for (const [code, n] of Object.entries(counts)) await clickTimes(countButton(page, code, '+'), n)
   await expect(total(page)).toHaveText(t('tournaments.mixSetsCounter', { n: Object.values(counts).reduce((a, b) => a + b, 0) }))
-}
-
-// The pool of `who` on `tournamentId`, as stored.
-async function storedPool(db, tournamentId, who) {
-  const { rows } = await db.query('SELECT set_code, created_by, boosters, cards FROM sealed_pools WHERE tournament_ref = $1 AND sub = $2', [tournamentId, PERSONAS[who].sub])
-  expect(rows).toHaveLength(1)
-  return rows[0]
-}
-
-function countBySet(refs) {
-  const counts = {}
-  for (const ref of refs) counts[setOf(ref)] = (counts[setOf(ref)] ?? 0) + 1
-  return counts
 }
 
 test.beforeEach(async ({ db, fakes }) => {
