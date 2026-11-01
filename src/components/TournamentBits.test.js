@@ -33,4 +33,8 @@ describe('configSummaryParts', () => {
     expect(configSummaryParts({ source: { type: 'set', setCode: 'CYCLONE', boosters: 7 }, uniques: { randomOneIn: 1 }, heroes: 'packs' }, t, tc).map(p => p.text))
       .toEqual(['tournaments.summaryBoosters {"n":7,"set":"Skybound Odyssey"}', 'tournaments.summaryUniquesEvery'])
   })
+  it('keeps the uniques faction part in random mode even with no guaranteed unique', () => {
+    const texts = configSummaryParts(multi({ CYCLONE: 7 }, { randomOneIn: 8, faction: 'AX' }), t, tc).map(p => p.text)
+    expect(texts).toContain('tournaments.summaryFaction {"faction":"Axiom"}')
+  })
 })

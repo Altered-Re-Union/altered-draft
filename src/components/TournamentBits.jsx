@@ -58,7 +58,7 @@ export function configSummaryParts(config, t, tc) {
     parts.push({ text: u.randomOneIn === 1 ? t('tournaments.summaryUniquesEvery') : t('tournaments.summaryUniquesRandom', { n: u.randomOneIn }) })
   } else if (u.inBoosters > 0) parts.push({ text: tc('tournaments.summaryUniquesIn', u.inBoosters) })
   if (u.guaranteed > 0) parts.push({ text: tc('tournaments.summaryUniquesOut', u.guaranteed) })
-  if (!isFaction && u.faction && (u.inBoosters + u.guaranteed) > 0) {
+  if (!isFaction && u.faction && (u.randomOneIn || (u.inBoosters + u.guaranteed) > 0)) {
     parts.push({ text: t('tournaments.summaryFaction', { faction: FACTION_NAMES[u.faction] ?? u.faction }), icon: FACTION_ICONS[u.faction] })
   }
   if (!u.randomOneIn && u.evenFactions && (u.inBoosters + u.guaranteed) >= 2) parts.push({ text: t('tournaments.summaryEven') })
