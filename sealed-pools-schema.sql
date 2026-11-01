@@ -217,3 +217,7 @@ create index if not exists sealed_pools_legacy_by_bga_id
 -- V2 (mono-faction sealed): a pool drawn from several sets has no single set; the legacy
 -- snapshot column is null for those rows (their contents are always stored, never regenerated).
 alter table sealed_pools alter column set_code drop not null;
+
+-- V4 (private tournaments): listing-only visibility; every existing row is public.
+alter table tournaments add column if not exists visibility text not null default 'public'
+  check (visibility in ('public', 'private'));

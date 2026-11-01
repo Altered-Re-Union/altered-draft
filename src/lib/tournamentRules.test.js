@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { tournamentStatus, validateTournamentFields, groupCreatedTournaments } from './tournamentRules.js'
+import { tournamentStatus, validateTournamentFields, groupCreatedTournaments, canSeeTournament } from './tournamentRules.js'
 
 const NOW = new Date('2026-11-01T12:00:00Z')
 const later = '2026-11-02T19:00:00Z'
@@ -29,7 +29,7 @@ describe('validateTournamentFields (create)', () => {
     expect(r.ok).toBe(true)
     expect(r.values).toEqual({
       name: 'Winter Cup', description: 'd', startsAt: new Date(later), endsAt: null,
-      bgaUrl: 'https://boardgamearena.com/tournament?id=7', bgaTournamentId: '7',
+      bgaUrl: 'https://boardgamearena.com/tournament?id=7', bgaTournamentId: '7', visibility: 'public',
     })
   })
 
@@ -85,5 +85,36 @@ describe('groupCreatedTournaments', () => {
     expect(g.active.map(x => [x.status, x.items.map(i => i.name)])).toEqual([['ongoing', ['O1']], ['upcoming', ['U1', 'U2']]])
     expect(g.archive.map(x => [x.status, x.items.map(i => i.name)])).toEqual([['ended', ['E0', 'E1']], ['cancelled', ['C1']]])
     expect(g.archiveCount).toBe(3)
+  })
+})
+
+describe('validateTournamentFields (visibility)', () => {
+  const good = { name: 'Winter Cup', description: 'd', startsAt: later, endsAt: null, bgaUrl: 'https://boardgamearena.com/tournament?id=7' }
+  it('defaults to public on create and accepts both values', () => {
+    expect(validateTournamentFields(good, { now: NOW, isCreate: true }).values.visibility).toBe('public')
+    expect(validateTournamentFields({ ...good, visibility: 'private' }, { now: NOW, isCreate: true }).values.visibility).toBe('private')
+    expect(validateTournamentFields({ visibility: 'public' }).values).toEqual({ visibility: 'public' })
+  })
+  it('rejects anything else; a patch validates it only when present', () => {
+    for (const v of ['hidden', 'PRIVATE', 1, {}]) {
+      expect(validateTournamentFields({ ...good, visibility: v }, { now: NOW, isCreate: true }).errors.visibility, String(v)).toBe('invalid_visibility')
+    }
+    expect(validateTournamentFields({ visibility: null }).errors).toEqual({ visibility: 'invalid_visibility' })
+    expect(validateTournamentFields({ name: 'Winter Cup' })).toMatchObject({ ok: true, values: { name: 'Winter Cup' } })
+    expect(validateTournamentFields({ name: 'Winter Cup' }).values).not.toHaveProperty('visibility')
+  })
+})
+
+describe('canSeeTournament', () => {
+  const pub = { visibility: 'public', organizer_sub: 'org' }
+  const priv = { visibility: 'private', organizer_sub: 'org' }
+  it('public for everyone; private for the organizer, a pool holder and a moderator only', () => {
+    expect(canSeeTournament(pub, null)).toBe(true)
+    expect(canSeeTournament({ organizer_sub: 'org' }, null)).toBe(true)
+    expect(canSeeTournament(priv, null)).toBe(false)
+    expect(canSeeTournament(priv, { sub: 'x', isModerator: false })).toBe(false)
+    expect(canSeeTournament(priv, { sub: 'org', isModerator: false })).toBe(true)
+    expect(canSeeTournament(priv, { sub: 'x', isModerator: false }, { hasPool: true })).toBe(true)
+    expect(canSeeTournament(priv, { sub: 'x', isModerator: true })).toBe(true)
   })
 })
