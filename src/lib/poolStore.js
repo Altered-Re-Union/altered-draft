@@ -263,7 +263,8 @@ export async function listBoundTournamentPools(sub) {
   const { rows } = await query(
     `SELECT p.*,
             t.name AS t_name, t.starts_at AS t_starts_at, t.ends_at AS t_ends_at,
-            t.cancelled_at AS t_cancelled_at, t.ended_at AS t_ended_at
+            t.cancelled_at AS t_cancelled_at, t.ended_at AS t_ended_at,
+            t.visibility AS t_visibility
      FROM sealed_pools p
      LEFT JOIN tournaments t ON t.id = p.tournament_ref
      WHERE p.sub = $1 AND p.kind = 'tournament' AND p.tournament_id IS NOT NULL

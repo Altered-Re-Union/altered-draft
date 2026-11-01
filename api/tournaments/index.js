@@ -2,7 +2,7 @@
 // See docs/tournaments/user-tournaments-spec.md §7.
 import { verifyUser, bearerToken } from '../_lib/auth.js'
 import { jsonBody, queryParam } from '../_lib/request.js'
-import { validateTournamentFields, MAX_OPEN_TOURNAMENTS } from '../../src/lib/tournamentRules.js'
+import { validateTournamentFields, canSeeTournament, MAX_OPEN_TOURNAMENTS } from '../../src/lib/tournamentRules.js'
 import { validateTournamentConfig, legacyFormatForBgaTournament } from '../../src/lib/tournamentConfig.js'
 import { listTournaments, listTournamentsByOrganizer, createTournament, countOpenTournaments, getTournamentByBgaId, toTournamentJson } from '../../src/lib/tournamentStore.js'
 import { countPoolsByTournament, poolSummariesForTournaments, legacyFormatsForBgaId } from '../../src/lib/poolStore.js'
@@ -29,13 +29,15 @@ export default async function handler(req, res) {
     if (onlyMine && !user) return res.status(401).json({ error: 'unauthorized' })
     const rows = onlyMine ? await listTournamentsByOrganizer(user.sub)
       : bgaId ? [await getTournamentByBgaId(bgaId)].filter(Boolean)
-      : await listTournaments(status)
+      : await listTournaments(status, user && { sub: user.sub, isModerator: user.isModerator })
     const ids = rows.map(r => r.id)
     const [counts, mine] = await Promise.all([
       countPoolsByTournament(ids),
       user ? poolSummariesForTournaments(user.sub, ids) : {},
     ])
-    const tournaments = rows.map(row => toTournamentJson(row, {
+    const tournaments = rows.map(row => bgaId && !canSeeTournament(row, user, { hasPool: !!mine[row.id] })
+      ? { visibility: 'private' } // redacted: the form only needs to know the link is taken
+      : toTournamentJson(row, {
       poolCount: counts[row.id] ?? 0,
       ...(user ? {
         viewer: {
@@ -84,6 +86,7 @@ export default async function handler(req, res) {
         organizerSub: user.sub,
         organizerName: user.name,
         config: finalConfig,
+        visibility: fields.values.visibility,
       })
     } catch (e) {
       if (e.code === 'bga_tournament_taken') return res.status(409).json({ error: 'bga_tournament_taken' })

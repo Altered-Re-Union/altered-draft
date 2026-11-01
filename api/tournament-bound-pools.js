@@ -29,6 +29,7 @@ export default async function handler(req, res) {
           id: p.tournament_ref,
           name: p.t_name,
           startsAt: p.t_starts_at,
+          visibility: p.t_visibility ?? 'public',
           status: tournamentStatus({ starts_at: p.t_starts_at, ends_at: p.t_ends_at, cancelled_at: p.t_cancelled_at, ended_at: p.t_ended_at }),
         }
       : null,

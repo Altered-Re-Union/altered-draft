@@ -20,17 +20,17 @@ const ADOPT_LEGACY = (src) => `adopted AS (
        RETURNING 1
      )`
 
-export async function createTournament({ name, description, bgaUrl, bgaTournamentId, startsAt, endsAt, organizerSub, organizerName, config }) {
+export async function createTournament({ name, description, bgaUrl, bgaTournamentId, startsAt, endsAt, organizerSub, organizerName, config, visibility = 'public' }) {
   try {
     const { rows } = await query(
       `WITH t AS (
          INSERT INTO tournaments
-           (name, description, bga_url, bga_tournament_id, starts_at, ends_at, organizer_sub, organizer_name, config)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+           (name, description, bga_url, bga_tournament_id, starts_at, ends_at, organizer_sub, organizer_name, config, visibility)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          RETURNING *
        ), ${ADOPT_LEGACY('t')}
        SELECT t.*, (SELECT count(*)::int FROM adopted) AS adopted_pools FROM t`,
-      [name, description ?? '', bgaUrl, bgaTournamentId, startsAt, endsAt ?? null, organizerSub, organizerName, JSON.stringify(config)],
+      [name, description ?? '', bgaUrl, bgaTournamentId, startsAt, endsAt ?? null, organizerSub, organizerName, JSON.stringify(config), visibility],
     )
     return rows[0]
   } catch (e) {
@@ -59,12 +59,22 @@ export async function getTournamentByBgaId(bgaId) {
 const OPEN_SQL = 'detached_at IS NULL AND cancelled_at IS NULL AND ended_at IS NULL AND (ends_at IS NULL OR ends_at > now())'
 
 /** @param {'open'|'upcoming'|'ongoing'|'all'} status */
-export async function listTournaments(status = 'open') {
+export async function listTournaments(status = 'open', viewer = null) {
   const where = status === 'all' ? 'TRUE'
     : status === 'upcoming' ? `${OPEN_SQL} AND starts_at > now()`
     : status === 'ongoing' ? `${OPEN_SQL} AND starts_at <= now()`
     : OPEN_SQL
-  const { rows } = await query(`SELECT * FROM tournaments WHERE ${where} ORDER BY starts_at ASC, created_at ASC`)
+  // Private rows (listing only, spec §14.3): the organizer, a pool holder and a moderator still see them.
+  const { rows } = await query(
+    `SELECT t.* FROM tournaments t
+     WHERE ${where}
+       AND (t.visibility = 'public'
+            OR $2
+            OR t.organizer_sub = $1
+            OR EXISTS (SELECT 1 FROM sealed_pools p WHERE p.tournament_ref = t.id AND p.sub = $1))
+     ORDER BY t.starts_at ASC, t.created_at ASC`,
+    [viewer?.sub ?? null, !!viewer?.isModerator],
+  )
   return rows
 }
 
@@ -97,6 +107,7 @@ const COLUMN_OF = {
   config: 'config',
   cancelledAt: 'cancelled_at',
   endedAt: 'ended_at',
+  visibility: 'visibility',
 }
 
 /**
@@ -203,6 +214,7 @@ export function toTournamentJson(row, extras = {}) {
     startsAt: iso(row.starts_at),
     endsAt: iso(row.ends_at),
     status: tournamentStatus(row),
+    visibility: row.visibility ?? 'public',
     organizer: { name: row.organizer_name },
     config: row.config,
     cancelledAt: iso(row.cancelled_at),
