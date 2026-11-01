@@ -23,7 +23,7 @@ export default function TournamentUniqueFields({
   factionSource = false, fixedFaction = null, multiSet = false, maxInBoosters = Infinity,
   lastOneIn = DEFAULT_RANDOM_ONE_IN, onLastOneIn = () => {},
 }) {
-  const { t } = useLang()
+  const { t, lang } = useLang()
   const off = disabled || !uniqueSupport
   const random = uniqueSupport && uniques.randomOneIn != null
   const total = (uniques.inBoosters ?? 0) + (uniques.guaranteed ?? 0)
@@ -47,7 +47,7 @@ export default function TournamentUniqueFields({
   const oneIn = uniques.randomOneIn ?? lastOneIn
   const oneInText = oneIn === 1
     ? t('tournaments.randomOneInEvery')
-    : t('tournaments.randomOneInText', { n: oneIn, pct: Math.round(1000 / oneIn) / 10 })
+    : t('tournaments.randomOneInText', { n: oneIn, pct: (Math.round(1000 / oneIn) / 10).toLocaleString(lang) })
   const tab = active => `flex-1 px-3 py-1.5 rounded-md text-sm font-medium transition-colors disabled:opacity-60 ${
     active ? 'bg-accent text-on-accent' : 'text-ink2 hover:bg-surface3'}`
 

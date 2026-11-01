@@ -482,7 +482,7 @@ Add, verbatim (EN / FR):
 | `randomOneInEvery` | `every booster (100 %)` | `chaque booster (100 %)` |
 | `randomOneInMin` | `1 in 10` | `1 sur 10` |
 | `randomOneInMax` | `every booster` | `chaque booster` |
-| `randomOneInHint` | `Each booster rolls on its own: a pool holds 0 to 7 uniques.` | `Chaque booster tire à part : un pool contient de 0 à 7 uniques.` |
+| `randomOneInHint` | `Each booster rolls on its own: 0 to 7 uniques in a pool's boosters.` | `Chaque booster tire à part : de 0 à 7 uniques dans les boosters d’un pool.` |
 | `uniquesPartialSupport` | `Boosters of Neverending Journey never hold a unique: no unique data yet.` | `Les boosters Neverending Journey n’ont jamais d’unique : pas encore de données d’uniques.` |
 | `summaryUniquesRandom` | `1 unique in {{n}} boosters` | `1 unique pour {{n}} boosters` |
 | `summaryUniquesEvery` | `a unique in every booster` | `une unique dans chaque booster` |

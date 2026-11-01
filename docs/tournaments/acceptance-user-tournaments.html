@@ -637,7 +637,7 @@ ${pre(`curl -s "${API}/api/tournament-bga-decklist?tournamentId=484848&tournamen
       { id: 'l-tests', v11: true, title: 'Automated suites green (new faction tests)',
         html: `${pre('make test')}<p>Expected: all green, including the <code>pickDeterministicUniques faction</code> and <code>validateTournamentConfig faction</code> blocks.</p>` },
       { id: 'l-form', who: 'alice', v11: true, title: 'Form: faction pills and interactions',
-        html: `<ul><li>${url(WEB + '/tournament/new')}, Cards: Skybound Odyssey. Under the unique steppers (1 / 1 by default): “Faction of the uniques / Faction des uniques” with 7 pills, “All factions / Toutes” then the 6 factions with their icon. “All factions” is selected. Below: “Drawn from the selected set. / Tirées dans l'extension sélectionnée.”.</li>
+        html: `<ul><li>${url(WEB + '/tournament/new')}, Cards: Skybound Odyssey. Under the unique steppers (1 / 1 by default): “Faction of the uniques / Faction des uniques” with 7 pills, “All factions / Toutes” then the 6 factions with their icon. “All factions” is selected. Below: “Drawn from the chosen sets. / Tirées dans les extensions choisies.”.</li>
 <li>Check “Spread the uniques evenly across factions”, then click Axiom. Expected: Axiom highlighted, the box unchecks and greys out.</li>
 <li>Click “All factions” again: the box can be checked again (and stays unchecked).</li>
 <li>Choose Bravos, then bring both steppers down to 0. Expected: pills greyed out, “All factions” selected again. Back up to 1: still “All factions”.</li>
