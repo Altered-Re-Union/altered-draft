@@ -67,6 +67,15 @@ describe('tournamentFormIssues', () => {
       .toEqual([{ field: 'uniques', code: 'uniques.unsupportedSet' }])
   })
 
+  it('reports an invalid visibility under its own field, between the description and the link', () => {
+    const issues = tournamentFormIssues({ body: { ...body, description: 'x'.repeat(2001), visibility: 'hidden', bgaUrl: 'nope' }, config, now: NOW, isCreate: true })
+    expect(issues).toEqual([
+      { field: 'description', code: 'too_long' },
+      { field: 'visibility', code: 'invalid_visibility' },
+      { field: 'bgaUrl', code: 'invalid_bga_url' },
+    ])
+  })
+
   it('reports an unknown unique faction on the uniques field', () => {
     expect(tournamentFormIssues({ body, config: { ...config, uniques: { ...config.uniques, faction: 'XX' } }, now: NOW, isCreate: true }))
       .toEqual([{ field: 'uniques', code: 'uniques.faction' }])
