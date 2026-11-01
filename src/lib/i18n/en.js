@@ -530,6 +530,7 @@ export default {
     endsAtLabel: 'End (optional)',
     cardsHint: 'Each player receives 7 boosters. Pick a set, or mix several below.',
     mixSetsToggle: 'Mix several sets',
+    mixSetsToggleHint: 'Split the 7 boosters across several sets',
     mixSetsHint: 'Boosters of each set, 7 in total. Each booster holds only cards of its set.',
     mixSetsCounter: '{{n}} / 7',
     sourceLabel: 'Card source',

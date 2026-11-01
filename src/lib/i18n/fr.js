@@ -525,6 +525,7 @@ export default {
     endsAtLabel: 'Fin (optionnel)',
     cardsHint: 'Chaque joueur reçoit 7 boosters. Choisissez une extension, ou mélangez-en plusieurs ci-dessous.',
     mixSetsToggle: 'Mélanger plusieurs extensions',
+    mixSetsToggleHint: 'Répartir les 7 boosters entre plusieurs extensions',
     mixSetsHint: 'Boosters de chaque extension, 7 au total. Chaque booster ne contient que des cartes de son extension.',
     mixSetsCounter: '{{n}} / 7',
     sourceLabel: 'Source des cartes',

@@ -360,11 +360,11 @@ const GROUPS = [
     intro: 'As alice, on a blank form. Nothing is created in this group.',
     steps: [
       { id: 'ms-a-grid', who: 'alice', title: 'The grid: one click = the 7 boosters of a set',
-        html: `<ul><li>${url(WEB + '/tournament/new')}, Cards section: a two-way switch “Sets” / “Mono-faction mix”, <strong>“Sets”</strong> selected; the hint “Each player receives 7 boosters. Pick a set, or mix several below.”; the set grid; below it a closed “▸ Mix several sets” line and no counter.</li>
+        html: `<ul><li>${url(WEB + '/tournament/new')}, Cards section: a two-way switch “Sets” / “Mono-faction mix”, <strong>“Sets”</strong> selected; the hint “Each player receives 7 boosters. Pick a set, or mix several below.”; the set grid; below it a closed accordion header, framed like a tile: “Mix several sets”, under it “Split the 7 boosters across several sets”, a chevron pointing down on the right, and no counter. Hovering it outlines it in gold.</li>
 <li>Click Skybound Odyssey: ✓ on its tile, still no counter.</li>
 <li>Click it again: no set selected (no ✓, no badge).</li></ul>` },
       { id: 'ms-a-mix', who: 'alice', title: 'The “Mix several sets” disclosure: steppers, counter, badges',
-        html: `<ul><li>Click “Mix several sets”: it opens (the arrow turns), with the hint “Boosters of each set, 7 in total. Each booster holds only cards of its set.”, one stepper per set (7 rows, no Beyond the Gates KS), all at <strong>0</strong>, and the counter <strong>“0 / 7”</strong> on the right of the line.</li>
+        html: `<ul><li>Click the “Mix several sets” header: it opens (the chevron turns up, the steppers panel attached below the header in the same frame), with the hint “Boosters of each set, 7 in total. Each booster holds only cards of its set.”, one stepper per set (7 rows, no Beyond the Gates KS), all at <strong>0</strong>, and the counter <strong>“0 / 7”</strong> on the right of the header, next to the chevron.</li>
 <li>Click the Skybound Odyssey tile in the grid: its stepper reads <strong>7</strong>, the counter <strong>“7 / 7”</strong> (green), every “+” is greyed out.</li>
 <li>“−” three times on Skybound Odyssey: <strong>“4 / 7”</strong>, the “+” are active again, the tile shows a <strong>×4</strong> badge instead of the ✓.</li>
 <li>“+” three times on Roots of Corruption: <strong>“7 / 7”</strong>, its tile shows <strong>×3</strong>, every “+” greyed out again.</li></ul>` },
@@ -544,7 +544,7 @@ ${PSQL(`SELECT left(sub, 4) AS player, created_by, set_code IS NULL AS no_set_co
     letter: 'H', title: 'Edit',
     steps: [
       { id: 'ms-h-locked', who: 'alice', title: 'Config locked once a pool exists',
-        html: `<p>“SKY ROC NEJ mix” › Edit. Expected: the locked notice (“Cards, settings and the BGA link are locked: pools already exist.”); the Sets tab with the “Mix several sets” disclosure <strong>open by itself</strong>, Skybound Odyssey 3, Roots of Corruption 3, Neverending Journey 1, “7 / 7”, every stepper greyed out; the grid (×3, ×3, ×1 badges), the Sets / Mono-faction switch, the disclosure line and the uniques switch greyed out. Name, description and dates stay editable. Leave without saving.</p>` },
+        html: `<p>“SKY ROC NEJ mix” › Edit. Expected: the locked notice (“Cards, settings and the BGA link are locked: pools already exist.”); the Sets tab with the “Mix several sets” disclosure <strong>open by itself</strong>, Skybound Odyssey 3, Roots of Corruption 3, Neverending Journey 1, “7 / 7”, every stepper greyed out; the grid (×3, ×3, ×1 badges), the Sets / Mono-faction switch, the disclosure header and the uniques switch greyed out. Name, description and dates stay editable. Leave without saving.</p>` },
       { id: 'ms-h-unlocked', who: 'alice', title: 'Edit before any pool: the split changes, the summary follows',
         html: `<p>Delete the pool opened in ms-f-normalize, so “Normalized SKY” (BGA id 123495) has none:</p>
 ${PSQL(`DELETE FROM sealed_pools WHERE tournament_id = '123495'`)}

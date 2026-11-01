@@ -1456,7 +1456,11 @@ nullable), its sets come from the refs. `poolResponse` exposes `sourceType` (fro
 and two views: the set grid (one click = the 7 boosters of that set, a `×n` badge on a set at
 1–6, the ✓ at 7) and a **"Mix several sets"** disclosure (`set-mix-toggle`, closed by default,
 opened for an edited multiset) with a 0–7 stepper per set (`set-count-<CODE>`) and an `n / 7`
-counter (`set-count-total`; "+" greys out at 7). Live issues: "Choose a set." at 0, "The boosters
+counter (`set-count-total`; "+" greys out at 7). The disclosure is drawn as an accordion: a
+full-width bordered header under the grid (the label, the hint "Split the 7 boosters across
+several sets", a chevron on the right that turns when open, the counter beside it) and the
+steppers panel attached below it in the same box; the hint is the button's description
+(`aria-describedby`), so its accessible name stays "Mix several sets". Live issues: "Choose a set." at 0, "The boosters
 must add up to 7 (n now)." otherwise, and the cap message when too many uniques are asked in the
 boosters with data. Settings: a switch **"Exact number" / "Random, like real packs"**; random
 shows a slider from "1 in 10" to "every booster" (`random-one-in`, default 1 in 8, live text

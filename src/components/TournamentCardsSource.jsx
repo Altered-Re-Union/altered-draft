@@ -49,23 +49,32 @@ export default function TournamentCardsSource({
           <p className="text-sm text-muted">{t('tournaments.cardsHint')}</p>
           <SetPresetGrid selected={single} counts={setCounts} disabled={disabled}
             onSelect={code => onSetCounts(code ? { [code]: SEALED_BOOSTERS } : {})} />
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-3">
+          {/* "Mix several sets": an accordion, header row + steppers panel in one bordered box. The
+              counter sits beside the button (not inside), so the button's name stays the label. */}
+          <div className="rounded-lg border border-line bg-surface2 overflow-hidden transition-colors has-[>div>button:hover:enabled]:border-accent/60">
+            <div className="flex items-center gap-3 pr-3 transition-colors has-[>button:hover:enabled]:bg-surface3">
               <button type="button" aria-expanded={mixOpen} aria-controls="tn-set-mix" data-testid="set-mix-toggle"
+                aria-labelledby="tn-set-mix-label" aria-describedby="tn-set-mix-desc"
                 disabled={disabled} onClick={() => onMixOpen(!mixOpen)}
-                className="flex items-center gap-2 text-sm text-ink2 hover:text-ink disabled:opacity-60">
-                <span aria-hidden="true" className={`inline-block transition-transform ${mixOpen ? 'rotate-90' : ''}`}>▸</span>
-                {t('tournaments.mixSetsToggle')}
+                className="flex-1 min-w-0 flex items-center gap-3 px-3 py-2.5 text-left rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent disabled:opacity-60 disabled:cursor-not-allowed">
+                <span className="flex-1 min-w-0">
+                  <span id="tn-set-mix-label" className="block text-sm text-ink font-medium">{t('tournaments.mixSetsToggle')}</span>
+                  <span id="tn-set-mix-desc" className="block text-xs text-muted">{t('tournaments.mixSetsToggleHint')}</span>
+                </span>
+                <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                  className={`w-5 h-5 shrink-0 text-ink2 transition-transform ${mixOpen ? 'rotate-180' : ''}`}>
+                  <path d="M5 7.5l5 5 5-5" />
+                </svg>
               </button>
               {(mixOpen || codes.length > 1) && (
                 <span data-testid="set-count-total"
-                  className={`text-sm font-semibold tabular-nums ${total === SEALED_BOOSTERS ? 'text-ok' : 'text-accent-ink'}`}>
+                  className={`shrink-0 text-sm font-semibold tabular-nums ${total === SEALED_BOOSTERS ? 'text-ok' : 'text-accent-ink'}`}>
                   {t('tournaments.mixSetsCounter', { n: total })}
                 </span>
               )}
             </div>
             {mixOpen && (
-              <div id="tn-set-mix" className="space-y-1.5">
+              <div id="tn-set-mix" className="border-t border-line bg-surface px-3 py-2 space-y-1.5">
                 <p className="text-xs text-muted">{t('tournaments.mixSetsHint')}</p>
                 <SetWeightsList weights={setCounts} onChange={changeCounts} disabled={disabled}
                   max={SEALED_BOOSTERS} maxTotal={SEALED_BOOSTERS} format={v => String(v)} trailing={null} testIdPrefix="set-count" />
