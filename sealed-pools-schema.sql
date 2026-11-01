@@ -218,17 +218,15 @@ create index if not exists sealed_pools_legacy_by_bga_id
 -- snapshot column is null for those rows (their contents are always stored, never regenerated).
 alter table sealed_pools alter column set_code drop not null;
 
--- "My pools" tab: the player tucked this bound pool into the archive section by hand (old
--- events, typically legacy pools that have no tournament status to archive them). Display
--- only — never read by binding, validation or BGA lookups.
-alter table sealed_pools add column if not exists hidden_at timestamptz;
-
--- Hub "Ongoing" tab: tournaments a player tucked into the folded section by hand (an
--- organizer forgot to close theirs). Per player, any tournament, with or without a pool.
--- Display only.
+-- Hub: tournaments a player tucked into the folded sections by hand — an organizer forgot to
+-- close theirs ("Ongoing"), or an old event clutters "My pools". Keyed by the BGA tournament
+-- id, which both a declaration (bga_tournament_id) and every bound pool (tournament_id,
+-- legacy pools included) carry, so one hide covers the tournament everywhere in the hub.
+-- Per player, display only: binding, validation and BGA lookups never read it. No FK: a
+-- legacy BGA id has no tournaments row.
 create table if not exists hidden_tournaments (
-  sub           text not null,
-  tournament_id uuid not null references tournaments(id) on delete cascade,
-  hidden_at     timestamptz not null default now(),
-  primary key (sub, tournament_id)
+  sub               text not null,
+  bga_tournament_id text not null,
+  hidden_at         timestamptz not null default now(),
+  primary key (sub, bga_tournament_id)
 );

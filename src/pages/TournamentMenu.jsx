@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthProvider.jsx'
-import { fetchBoundPools, listTournaments, listMyTournaments, setPoolHidden, setTournamentHidden } from '../lib/tournamentApi.js'
+import { fetchBoundPools, listTournaments, listMyTournaments, setTournamentHidden } from '../lib/tournamentApi.js'
 import { useLang } from '../lib/i18n/i18n.jsx'
 import TopNav from '../components/TopNav.jsx'
 import Footer from '../components/Footer.jsx'
@@ -130,7 +130,7 @@ function CreatedTournaments({ list, t, tc }) {
 function BoundPools({ pools, visible, archived, onToggle, busy, t, tc }) {
   const card = p => {
     const name = p.tournamentName || t('tournamentPages.sealedPoolFallback', { set: p.setCode })
-    const hidden = !!p.hiddenAt
+    const hidden = !!p.hidden
     // A pool archived because its tournament is over stays there: no button.
     const canToggle = !poolTournamentOver(p)
     return (
@@ -139,7 +139,7 @@ function BoundPools({ pools, visible, archived, onToggle, busy, t, tc }) {
       <CardWithDeckCta key={p.id} t={t} label={name}
         to={p.tournament ? `/tournament/t/${p.tournament.id}` : `/tournament/pools/${p.id}`}
         deckTo={p.tournament ? `/tournament/t/${p.tournament.id}/pool` : `/tournament/pools/${p.id}`}
-        action={canToggle && <HideButton hidden={hidden} name={name} disabled={busy.has(p.id)} onClick={() => onToggle(p, !hidden)} t={t} />}>
+        action={canToggle && <HideButton hidden={hidden} name={name} disabled={busy.has(p.tournamentId)} onClick={() => onToggle(p, !hidden)} t={t} />}>
         <p className="font-semibold text-sm flex items-center gap-2 flex-wrap">
           {name}
           {p.tournament && <StatusPill status={p.tournament.status} t={t} />}
@@ -194,10 +194,8 @@ export default function TournamentMenu() {
   const [pools, setPools] = useState(null)
   const [pending, setPending] = useState(null)
   const [poolsError, setPoolsError] = useState('')
-  const [poolActionError, setPoolActionError] = useState('')
-  const [poolsBusy, setPoolsBusy] = useState(() => new Set())
-  const [ongoingActionError, setOngoingActionError] = useState('')
-  const [tournamentsBusy, setTournamentsBusy] = useState(() => new Set())
+  const [hideError, setHideError] = useState('')
+  const [hideBusy, setHideBusy] = useState(() => new Set())
   const [created, setCreated] = useState(null)
   const [createdError, setCreatedError] = useState('')
 
@@ -224,45 +222,29 @@ export default function TournamentMenu() {
   // Hidden by the player (an organizer forgot to close it): folded under the Ongoing list.
   const ongoing = ongoingAll.filter(tn => !tn.viewer?.hidden)
   const ongoingHidden = ongoingAll.filter(tn => tn.viewer?.hidden)
-  const myOngoing = ongoing.filter(tn => tn.viewer?.hasPool && !tn.viewer?.poolHidden)
+  const myOngoing = ongoing.filter(tn => tn.viewer?.hasPool)
   const poolSplit = pools ? splitBoundPools(pools) : null
   const counts = { upcoming: tournaments && upcoming.length, ongoing: tournaments && ongoing.length, pools: poolSplit?.visible.length, created: created?.length }
 
-  // Optimistic toggles: the card moves at once, and moves back if the server refuses.
-  const markBusy = (setter, id, on) => setter(prev => { const next = new Set(prev); if (on) next.add(id); else next.delete(id); return next })
-  const patchViewer = (id, fields) => setTournaments(list => list?.map(tn => (tn.id === id && tn.viewer ? { ...tn, viewer: { ...tn.viewer, ...fields } } : tn)))
-
-  const toggleTournamentHidden = async (tn, hidden) => {
-    setOngoingActionError('')
-    markBusy(setTournamentsBusy, tn.id, true)
-    patchViewer(tn.id, { hidden })
-    try {
-      await setTournamentHidden(tn.id, hidden)
-    } catch {
-      patchViewer(tn.id, { hidden: !hidden })
-      setOngoingActionError(t('tournaments.couldNotUpdate'))
-    } finally {
-      markBusy(setTournamentsBusy, tn.id, false)
-    }
+  // One hide per BGA tournament, shared by "Ongoing", "My ongoing tournaments" and "My
+  // pools" (a pool's `tournamentId` is its BGA id). Optimistic: the cards move at once, and
+  // move back with an error line if the server refuses.
+  const applyHidden = (bgaId, hidden) => {
+    setTournaments(list => list?.map(tn => (tn.bgaTournamentId === bgaId && tn.viewer ? { ...tn, viewer: { ...tn.viewer, hidden } } : tn)))
+    setPools(list => list?.map(p => (p.tournamentId === bgaId ? { ...p, hidden } : p)))
   }
-
-  const togglePoolHidden = async (pool, hidden) => {
-    // The pool's tournament leaves (or comes back to) "My ongoing tournaments" with it.
-    const patch = hiddenAt => {
-      setPools(list => list.map(p => (p.id === pool.id ? { ...p, hiddenAt } : p)))
-      if (pool.tournament) patchViewer(pool.tournament.id, { poolHidden: !!hiddenAt })
-    }
-    setPoolActionError('')
-    markBusy(setPoolsBusy, pool.id, true)
-    patch(hidden ? new Date().toISOString() : null)
+  const toggleHidden = async (bgaId, hidden) => {
+    if (!bgaId) return
+    setHideError('')
+    setHideBusy(prev => new Set(prev).add(bgaId))
+    applyHidden(bgaId, hidden)
     try {
-      const res = await setPoolHidden(pool.id, hidden)
-      patch(res.hiddenAt)
+      await setTournamentHidden(bgaId, hidden)
     } catch {
-      patch(pool.hiddenAt ?? null)
-      setPoolActionError(t('tournaments.couldNotUpdate'))
+      applyHidden(bgaId, !hidden)
+      setHideError(t('tournaments.couldNotUpdate'))
     } finally {
-      markBusy(setPoolsBusy, pool.id, false)
+      setHideBusy(prev => { const next = new Set(prev); next.delete(bgaId); return next })
     }
   }
 
@@ -335,16 +317,16 @@ export default function TournamentMenu() {
             {tab === 'ongoing' && (listError || !tournaments ? listState(tournaments && ongoing, listError, 'tournaments.noOngoing') : (
               // Logged in, any ongoing tournament can be hidden (per player, display only).
               <>
-                {ongoingActionError && <p role="alert" className="text-danger text-sm">{ongoingActionError}</p>}
+                {hideError && <p role="alert" className="text-danger text-sm">{hideError}</p>}
                 {ongoing.length ? ongoing.map(tn => (
                   <TournamentCard key={tn.id} tn={tn} t={t} tc={tc}
-                    action={user && <HideButton hidden={false} name={tn.name} disabled={tournamentsBusy.has(tn.id)} onClick={() => toggleTournamentHidden(tn, true)} t={t} />} />
+                    action={user && <HideButton hidden={false} name={tn.name} disabled={hideBusy.has(tn.bgaTournamentId)} onClick={() => toggleHidden(tn.bgaTournamentId, true)} t={t} />} />
                 )) : <p className="text-muted text-sm">{t('tournaments.noOngoing')}</p>}
                 {user && ongoingHidden.length > 0 && (
                   <FoldedSection testId="ongoing-hidden" title={t('tournaments.ongoingHidden', { n: ongoingHidden.length })}>
                     {ongoingHidden.map(tn => (
                       <TournamentCard key={tn.id} tn={tn} t={t} tc={tc}
-                        action={<HideButton hidden name={tn.name} disabled={tournamentsBusy.has(tn.id)} onClick={() => toggleTournamentHidden(tn, false)} t={t} />} />
+                        action={<HideButton hidden name={tn.name} disabled={hideBusy.has(tn.bgaTournamentId)} onClick={() => toggleHidden(tn.bgaTournamentId, false)} t={t} />} />
                     ))}
                   </FoldedSection>
                 )}
@@ -354,9 +336,9 @@ export default function TournamentMenu() {
             {tab === 'pools' && (!user && !authLoading ? <ConnectBox t={t} login={login} /> : (
               listState(user ? pools : null, poolsError, 'tournamentPages.noOngoingTournaments')
                 ?? <>
-                  {poolActionError && <p role="alert" className="text-danger text-sm">{poolActionError}</p>}
+                  {hideError && <p role="alert" className="text-danger text-sm">{hideError}</p>}
                   <BoundPools pools={pools} visible={poolSplit.visible} archived={poolSplit.archived}
-                    onToggle={togglePoolHidden} busy={poolsBusy} t={t} tc={tc} />
+                    onToggle={(p, hidden) => toggleHidden(p.tournamentId, hidden)} busy={hideBusy} t={t} tc={tc} />
                 </>
             ))}
 

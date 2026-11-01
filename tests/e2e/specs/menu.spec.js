@@ -314,9 +314,13 @@ test('"my pools": ended / cancelled folded, a pool hidden by hand', { tag: ['@h-
   await expect(folded()).toHaveCount(0)
   await expect(panel(carol).getByRole('link', { name: 'Legacy cup', exact: true })).toBeVisible()
 
-  // Hiding an ongoing tournament's pool also takes it out of "My ongoing tournaments".
+  // One hide per BGA tournament: hiding an ongoing tournament's pool also takes it out of
+  // "My ongoing tournaments" and folds it in "Ongoing".
   await hideBtn(panel(carol), 'Test cup').click()
   await expect(myOngoing(carol).getByRole('link', { name: 'Test cup', exact: true })).toHaveCount(0)
+  await tab(carol, 'tabOngoing').click()
+  await expect(panel(carol).getByTestId('ongoing-hidden')).toContainText(t('tournaments.ongoingHidden', { n: 1 }))
+  await tab(carol, 'tabPools').click()
   await folded().getByText(t('tournaments.poolsArchive', { n: 1 })).click()
   await showBtn(folded(), 'Test cup').click()
   await expect(myOngoing(carol).getByRole('link', { name: 'Test cup', exact: true })).toBeVisible()

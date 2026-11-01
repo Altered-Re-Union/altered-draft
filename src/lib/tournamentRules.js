@@ -117,13 +117,13 @@ export function poolTournamentOver(pool) {
 }
 
 /**
- * "My pools": a pool goes to the archive section when the player hid it by hand
- * (`hiddenAt`) or when its declared tournament is over (ended / cancelled / detached).
+ * "My pools": a pool goes to the archive section when the player hid its BGA tournament
+ * (`hidden`) or when its declared tournament is over (ended / cancelled / detached).
  * Legacy pools (no declared tournament, no status) only move by hand. Order is kept.
- * Items are API bound pools (`hiddenAt`, `tournament?.status`).
+ * Items are API bound pools (`hidden`, `tournament?.status`).
  * @returns {{ visible: object[], archived: object[] }}
  */
 export function splitBoundPools(pools) {
-  const archived = p => !!p.hiddenAt || poolTournamentOver(p)
+  const archived = p => !!p.hidden || poolTournamentOver(p)
   return { visible: pools.filter(p => !archived(p)), archived: pools.filter(archived) }
 }

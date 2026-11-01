@@ -69,8 +69,7 @@ import tournamentsIndex from '../../api/tournaments/index.js'
 import tournamentsItem from '../../api/tournaments/[id].js'
 import tournamentPoolFor from '../../api/tournaments/[id]/pool.js'
 import boundPools from '../../api/tournament-bound-pools.js'
-import poolVisibility from '../../api/tournament-pool-visibility.js'
-import tournamentVisibility from '../../api/tournaments/[id]/visibility.js'
+import tournamentVisibility from '../../api/tournament-visibility.js'
 import { freezeSealedPools } from '../../scripts/freeze-sealed-pools.mjs'
 
 function mockRes() {
@@ -505,77 +504,54 @@ describe('GET /api/tournament-bound-pools', () => {
   })
 })
 
-describe('PATCH /api/tournament-pool-visibility', () => {
-  it('hides then shows one of the caller\'s bound pools, reflected in the bound-pools list', async () => {
+describe('PATCH /api/tournament-visibility', () => {
+  const hide = (bgaTournamentId, hidden = true) => call(tournamentVisibility, { method: 'PATCH', body: { bgaTournamentId, hidden } })
+
+  it('hides a legacy pool by its BGA id, for the caller only, and shows it again', async () => {
     const legacy = await bindTournamentId('alice', '7007', 'ROC Launch Sealed Event 2')
+    await bindTournamentId('bob', '7007', 'ROC Launch Sealed Event 2')
     verifySub.mockResolvedValue('alice')
-
-    let res = await call(poolVisibility, { method: 'PATCH', body: { id: legacy.id, hidden: true } })
+    let res = await hide('7007')
     expect(res.statusCode).toBe(200)
-    expect(res.body.hiddenAt).toBeTruthy()
+    expect((await hide('7007')).statusCode).toBe(200) // idempotent
     res = await call(boundPools)
-    expect(res.body.pools.find(p => p.id === legacy.id).hiddenAt).toBeTruthy()
+    expect(res.body.pools.find(p => p.id === legacy.id).hidden).toBe(true)
 
-    res = await call(poolVisibility, { method: 'PATCH', body: { id: legacy.id, hidden: false } })
-    expect(res.body.hiddenAt).toBeNull()
+    verifySub.mockResolvedValue('bob')
     res = await call(boundPools)
-    expect(res.body.pools.find(p => p.id === legacy.id).hiddenAt).toBeNull()
-  })
+    expect(res.body.pools[0].hidden).toBe(false)
 
-  it('404s on another player\'s pool or an unbound one, 400s on a bad body, 401s logged out, 405s on GET', async () => {
-    const bobs = await bindTournamentId('bob', '8008', 'Bob event')
-    const prep = await getOrCreatePreparationPool('alice')
     verifySub.mockResolvedValue('alice')
-    expect((await call(poolVisibility, { method: 'PATCH', body: { id: bobs.id, hidden: true } })).statusCode).toBe(404)
-    expect((await call(poolVisibility, { method: 'PATCH', body: { id: prep.id, hidden: true } })).statusCode).toBe(404)
-    expect((await query('SELECT hidden_at FROM sealed_pools WHERE id = $1', [bobs.id])).rows[0].hidden_at).toBeNull()
-    expect((await call(poolVisibility, { method: 'PATCH', body: { id: 'nope', hidden: true } })).statusCode).toBe(400)
-    expect((await call(poolVisibility, { method: 'PATCH', body: { id: bobs.id, hidden: 'yes' } })).statusCode).toBe(400)
-    expect((await call(poolVisibility, { method: 'GET' })).statusCode).toBe(405)
-    verifySub.mockResolvedValue(null)
-    expect((await call(poolVisibility, { method: 'PATCH', body: { id: bobs.id, hidden: true } })).statusCode).toBe(401)
+    await hide('7007', false)
+    res = await call(boundPools)
+    expect(res.body.pools.find(p => p.id === legacy.id).hidden).toBe(false)
   })
-})
 
-describe('PATCH /api/tournaments/:id/visibility', () => {
-  it('hides a tournament for the caller only, with or without a pool, and flags a hidden pool', async () => {
-    const t = await mkTournament({ name: 'Forgotten', startsAt: inDays(-1) })
+  it('one hide covers a declared tournament everywhere: the list (viewer.hidden) and the pool', async () => {
+    const t = await mkTournament({ name: 'Forgotten', startsAt: inDays(-1), bgaTournamentId: '9009' })
     asUser(ALICE)
-    let res = await call(tournamentVisibility, { method: 'PATCH', query: { id: t.id }, body: { hidden: true } })
-    expect(res.statusCode).toBe(200)
-    res = await call(tournamentVisibility, { method: 'PATCH', query: { id: t.id }, body: { hidden: true } }) // idempotent
-    expect(res.statusCode).toBe(200)
+    verifySub.mockResolvedValue('alice')
+    await hide('9009')
+    let res = await call(tournamentsIndex, { query: { status: 'open' } })
+    expect(res.body.tournaments.find(x => x.id === t.id).viewer).toMatchObject({ hidden: true, hasPool: false })
 
-    res = await call(tournamentsIndex, { query: { status: 'open' } })
-    expect(res.body.tournaments.find(x => x.id === t.id).viewer).toMatchObject({ hidden: true, hasPool: false, poolHidden: false })
+    await getOrCreateTournamentPool('alice', t)
+    res = await call(boundPools)
+    expect(res.body.pools.find(p => p.tournament?.id === t.id).hidden).toBe(true)
+
     asUser(MOD)
     res = await call(tournamentsIndex, { query: { status: 'open' } })
     expect(res.body.tournaments.find(x => x.id === t.id).viewer.hidden).toBe(false)
+  })
 
-    asUser(ALICE)
-    const pool = await getOrCreateTournamentPool('alice', t)
+  it('400s on a bad body, 401s logged out, 405s on GET', async () => {
     verifySub.mockResolvedValue('alice')
-    await call(poolVisibility, { method: 'PATCH', body: { id: pool.id, hidden: true } })
-    await call(tournamentVisibility, { method: 'PATCH', query: { id: t.id }, body: { hidden: false } })
-    res = await call(tournamentsIndex, { query: { status: 'open' } })
-    expect(res.body.tournaments.find(x => x.id === t.id).viewer).toMatchObject({ hidden: false, hasPool: true, poolHidden: true })
-  })
-
-  it('404s on an unknown tournament, 400s on a bad body, 401s logged out, 405s on GET', async () => {
-    const t = await mkTournament()
-    asUser(ALICE)
-    expect((await call(tournamentVisibility, { method: 'PATCH', query: { id: '00000000-0000-0000-0000-000000000000' }, body: { hidden: true } })).statusCode).toBe(404)
-    expect((await call(tournamentVisibility, { method: 'PATCH', query: { id: t.id }, body: {} })).statusCode).toBe(400)
-    expect((await call(tournamentVisibility, { method: 'GET', query: { id: t.id } })).statusCode).toBe(405)
-    expect((await call(tournamentVisibility, { method: 'PATCH', query: { id: t.id }, body: { hidden: true }, auth: false })).statusCode).toBe(401)
-  })
-
-  it('is removed with its tournament', async () => {
-    const t = await mkTournament()
-    asUser(ALICE)
-    await call(tournamentVisibility, { method: 'PATCH', query: { id: t.id }, body: { hidden: true } })
-    expect(await deleteTournamentIfNoPools(t.id)).toBeTruthy()
-    expect((await query('SELECT count(*)::int AS n FROM hidden_tournaments')).rows[0].n).toBe(0)
+    expect((await call(tournamentVisibility, { method: 'PATCH', body: { hidden: true } })).statusCode).toBe(400)
+    expect((await call(tournamentVisibility, { method: 'PATCH', body: { bgaTournamentId: '  ', hidden: true } })).statusCode).toBe(400)
+    expect((await call(tournamentVisibility, { method: 'PATCH', body: { bgaTournamentId: '1', hidden: 'yes' } })).statusCode).toBe(400)
+    expect((await call(tournamentVisibility, { method: 'GET' })).statusCode).toBe(405)
+    verifySub.mockResolvedValue(null)
+    expect((await hide('1')).statusCode).toBe(401)
   })
 })
 

@@ -4,7 +4,7 @@ import { verifyUser, bearerToken } from '../_lib/auth.js'
 import { jsonBody, queryParam } from '../_lib/request.js'
 import { validateTournamentFields, MAX_OPEN_TOURNAMENTS } from '../../src/lib/tournamentRules.js'
 import { validateTournamentConfig, legacyFormatForBgaTournament } from '../../src/lib/tournamentConfig.js'
-import { listTournaments, listTournamentsByOrganizer, createTournament, countOpenTournaments, getTournamentByBgaId, toTournamentJson, hiddenTournamentIds } from '../../src/lib/tournamentStore.js'
+import { listTournaments, listTournamentsByOrganizer, createTournament, countOpenTournaments, getTournamentByBgaId, toTournamentJson, hiddenBgaTournamentIds } from '../../src/lib/tournamentStore.js'
 import { countPoolsByTournament, poolSummariesForTournaments, legacyFormatsForBgaId } from '../../src/lib/poolStore.js'
 
 const STATUSES = ['open', 'upcoming', 'ongoing', 'all']
@@ -34,7 +34,7 @@ export default async function handler(req, res) {
     const [counts, mine, hidden] = await Promise.all([
       countPoolsByTournament(ids),
       user ? poolSummariesForTournaments(user.sub, ids) : {},
-      user ? hiddenTournamentIds(user.sub, ids) : new Set(),
+      user ? hiddenBgaTournamentIds(user.sub, rows.map(r => r.bga_tournament_id)) : new Set(),
     ])
     const tournaments = rows.map(row => toTournamentJson(row, {
       poolCount: counts[row.id] ?? 0,
@@ -44,9 +44,8 @@ export default async function handler(req, res) {
           hasPool: !!mine[row.id],
           poolId: mine[row.id]?.id ?? null,
           deck: mine[row.id]?.deckName ? { name: mine[row.id].deckName, cardQuantity: mine[row.id].deckCardQuantity } : null,
-          // Display preferences: the player hid the tournament itself, or their pool for it.
-          hidden: hidden.has(row.id),
-          poolHidden: !!mine[row.id]?.hidden,
+          // Display preference: the player hid this BGA tournament in the hub.
+          hidden: hidden.has(row.bga_tournament_id),
         },
       } : {}),
     }))

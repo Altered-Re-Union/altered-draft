@@ -89,12 +89,12 @@ describe('groupCreatedTournaments', () => {
 })
 
 describe('splitBoundPools', () => {
-  const pool = (id, status, hiddenAt = null) => ({ id, hiddenAt, tournament: status ? { status } : null })
+  const pool = (id, status, hidden = false) => ({ id, hidden, tournament: status ? { status } : null })
   it('archives hidden pools and pools of ended / cancelled / detached tournaments, keeping the order', () => {
     const pools = [
       pool('cancelled', 'cancelled'), pool('ongoing', 'ongoing'), pool('ended', 'ended'),
       pool('upcoming', 'upcoming'), pool('detached', 'detached'), pool('legacy', null),
-      pool('legacy-hidden', null, '2026-10-01T00:00:00Z'), pool('ongoing-hidden', 'ongoing', '2026-10-01T00:00:00Z'),
+      pool('legacy-hidden', null, true), pool('ongoing-hidden', 'ongoing', true),
     ]
     const { visible, archived } = splitBoundPools(pools)
     expect(visible.map(p => p.id)).toEqual(['ongoing', 'upcoming', 'legacy'])

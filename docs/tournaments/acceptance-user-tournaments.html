@@ -606,9 +606,9 @@ ${pre(`curl -s "${API}/api/tournament-bga-decklist?tournamentId=484848&tournamen
         html: `<ul><li>${url(WEB + '/tournament?tab=pools')}: the pools of ended, cancelled or detached tournaments are no longer in the list but in “▸ Ended, cancelled and hidden (N)” folded below it; the tab counter counts only the list.</li>
 <li>On a legacy pool (e.g. “Legacy cup”) or a pool of an open tournament: “Hide” → the card moves at once to the folded block and the counter drops by 1; it stays there after a reload and on another browser (stored on the account).</li>
 <li>In the folded block, “Show” on that pool brings it back to the list. A pool folded because its tournament is over has no “Show” button.</li>
-<li>Hiding the pool of an ongoing tournament also removes it from “My ongoing tournaments” at the top.</li></ul>` },
+<li>One hide per BGA tournament: hiding the pool of an ongoing tournament also removes it from “My ongoing tournaments” at the top and folds it in the “Ongoing” tab’s “Hidden (1)”.</li></ul>` },
       { id: 'h-ongoing-hide', v11: true, who: 'carol', title: '“Ongoing”: hide a tournament its organizer forgot to close',
-        html: `<ul><li>${url(WEB + '/tournament?tab=ongoing')}: each card has a “Hide” button (logged in only; logged out there is none). Click it on a tournament, with or without a pool: it leaves the list into “▸ Hidden (1)” folded below, the counter drops by 1, and it leaves “My ongoing tournaments” too.</li>
+        html: `<ul><li>${url(WEB + '/tournament?tab=ongoing')}: each card has a “Hide” button (logged in only; logged out there is none). Click it on a tournament, with or without a pool: it leaves the list into “▸ Hidden (1)” folded below, the counter drops by 1, and it leaves “My ongoing tournaments” too; if you have a pool in it, that pool folds in “My pools” as well.</li>
 <li>Reload: still hidden. As alice, the same tournament is still listed (hiding is per player).</li>
 <li>“Show” in the folded block brings it back.</li></ul>` },
     ],
