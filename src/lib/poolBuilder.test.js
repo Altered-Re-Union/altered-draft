@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
-import { buildPool, buildPoolSeedString } from './poolBuilder.js'
+import { buildPool, buildPoolSeedString, placeRandomUniques } from './poolBuilder.js'
+import { mulberry32 } from './prng.js'
 import { FACTIONS } from './cardData.js'
 import EOLE from './data/factionRanges/EOLE.json' with { type: 'json' }
 
@@ -251,5 +252,111 @@ describe('buildPool multiset source', () => {
   it('throws when uniques are wanted and no included set has range data', async () => {
     const config = multiConfig({ source: { type: 'multiset', sets: { FUGUE: 7 }, boosters: 7 }, uniques: { inBoosters: 0, guaranteed: 1, evenFactions: false, faction: null, randomOneIn: null } })
     await expect(buildPool(SUB, { config, nonce: 'n' }, { fetchCards })).rejects.toThrow(/unique/)
+  })
+})
+
+describe('buildPool random uniques', () => {
+  const SUB = 'sub'
+  const setOf = ref => ref.split('_')[1]
+  const uniquesOf = cards => Object.keys(cards).filter(r => r.includes('_U_'))
+
+  it('placeRandomUniques: every eligible booster at 1 in 1, none above the threshold, data-less hits dropped', () => {
+    const mk = () => [['ALT_CYCLONE_B_AX_1_C', ...Array(12).fill('ALT_CYCLONE_B_AX_2_C')], ['ALT_FUGUE_B_AX_1_C', ...Array(12).fill('ALT_FUGUE_B_AX_2_C')]]
+    const gate = () => true
+    const b = mk()
+    const placed = placeRandomUniques(b, { rng: () => 0, uRng: mulberry32(1), oneIn: 8, setForHit: i => (setOf(b[i][0]) === 'CYCLONE' ? 'CYCLONE' : null), faction: null, isAllowed: gate, onDrawn: () => {} })
+    expect(placed).toHaveLength(1)
+    expect(b[0][12]).toMatch(/^ALT_CYCLONE_B_.*_U_\d+$/)
+    expect(b[1][12]).toBe('ALT_FUGUE_B_AX_2_C')
+    const c = mk()
+    expect(placeRandomUniques(c, { rng: () => 0.9, uRng: mulberry32(1), oneIn: 8, setForHit: () => 'CYCLONE', faction: null, isAllowed: gate, onDrawn: () => {} })).toEqual([])
+  })
+
+  it('placeRandomUniques: feeds every drawn ref to onDrawn and throws when the set cannot give enough', () => {
+    const b = [Array(13).fill('ALT_CYCLONE_B_AX_2_C'), Array(13).fill('ALT_CYCLONE_B_AX_2_C')]
+    const seen = []
+    const placed = placeRandomUniques(b, { rng: () => 0, uRng: mulberry32(1), oneIn: 1, setForHit: () => 'CYCLONE', faction: null, isAllowed: () => true, onDrawn: refs => seen.push(...refs) })
+    expect(seen).toEqual(placed)
+    expect(() => placeRandomUniques(b, { rng: () => 0, uRng: mulberry32(1), oneIn: 1, setForHit: () => 'CYCLONE', faction: null, isAllowed: () => false, onDrawn: () => {} })).toThrow(/uniques/)
+  })
+
+  it('set source at 1 in 1: a unique in every booster\'s last slot, plus the guaranteed one, no serial twice', async () => {
+    const cfg = config({ source: { type: 'set', setCode: 'EOLE', boosters: 7 }, uniques: { inBoosters: 0, guaranteed: 1, evenFactions: false, faction: null, randomOneIn: 1 } })
+    const { boosters, cards } = await buildPool(SUB, { config: cfg, nonce: 'n' }, { fetchCards: async () => fakeSet() })
+    for (const b of boosters) { expect(b[12]).toMatch(/^ALT_EOLE_B_.*_U_\d+$/); expect(b.slice(0, 12).some(r => r.includes('_U_'))).toBe(false) }
+    expect(uniquesOf(cards)).toHaveLength(8)
+  })
+
+  it('set source in random mode: a hit is a booster\'s last slot only, about one booster in N over many pools', async () => {
+    let hits = 0
+    for (let i = 0; i < 40; i++) {
+      const cfg = config({ source: { type: 'set', setCode: 'EOLE', boosters: 7 }, uniques: { inBoosters: 0, guaranteed: 0, evenFactions: false, faction: null, randomOneIn: 2 } })
+      const { boosters } = await buildPool(SUB, { config: cfg, nonce: `n${i}` }, { fetchCards: async () => fakeSet() })
+      for (const b of boosters) {
+        expect(b.slice(0, 12).some(r => r.includes('_U_'))).toBe(false)
+        if (b[12].includes('_U_')) hits++
+      }
+    }
+    expect(hits).toBeGreaterThan(100)
+    expect(hits).toBeLessThan(180)
+  })
+
+  it('multiset at 1 in 1: only the boosters of sets with data get one, of their own set', async () => {
+    const cfg = { v: 1, format: 'sealed', source: { type: 'multiset', sets: { CYCLONE: 3, FUGUE: 4 }, boosters: 7 }, heroes: 'packs', uniques: { inBoosters: 0, guaranteed: 0, evenFactions: false, faction: null, randomOneIn: 1 }, excludeBanlist: false }
+    const { boosters, cards } = await buildPool(SUB, { config: cfg, nonce: 'n' }, { fetchCards: async code => fakeMultiSet(code) })
+    const hits = boosters.filter(b => b[12].includes('_U_'))
+    expect(hits).toHaveLength(3)
+    for (const b of hits) { expect(setOf(b[0])).toBe('CYCLONE'); expect(setOf(b[12])).toBe('CYCLONE') }
+    expect(uniquesOf(cards)).toHaveLength(3)
+  })
+
+  it('multiset at 1 in 1 with guaranteed uniques: every one distinct, the guaranteed ones outside the boosters', async () => {
+    const cfg = { v: 1, format: 'sealed', source: { type: 'multiset', sets: { CYCLONE: 4, EOLE: 3 }, boosters: 7 }, heroes: 'packs', uniques: { inBoosters: 0, guaranteed: 2, evenFactions: false, faction: 'LY', randomOneIn: 1 }, excludeBanlist: false }
+    const { boosters, cards } = await buildPool(SUB, { config: cfg, nonce: 'n' }, { fetchCards: async code => fakeMultiSet(code) })
+    for (const b of boosters) expect(setOf(b[12])).toBe(setOf(b[0]))
+    expect(uniquesOf(cards)).toHaveLength(9)
+    for (const r of uniquesOf(cards)) expect(cards[r]).toBe(1)
+  })
+
+  it('multiset with no set with data in random mode and nothing guaranteed: no unique, no throw', async () => {
+    const cfg = { v: 1, format: 'sealed', source: { type: 'multiset', sets: { FUGUE: 7 }, boosters: 7 }, heroes: 'packs', uniques: { inBoosters: 0, guaranteed: 0, evenFactions: false, faction: null, randomOneIn: 1 }, excludeBanlist: false }
+    const { cards } = await buildPool(SUB, { config: cfg, nonce: 'n' }, { fetchCards: async code => fakeMultiSet(code) })
+    expect(uniquesOf(cards)).toHaveLength(0)
+  })
+
+  it('faction source at 1 in 1: seven uniques from the range-capable sets, after the guaranteed ones', async () => {
+    const cfg = { v: 1, format: 'sealed', source: { type: 'faction', faction: 'AX', sets: { CORE: 1, FUGUE: 1 }, boosters: 7 }, heroes: 'packs', uniques: { inBoosters: 0, guaranteed: 1, evenFactions: false, faction: 'AX', randomOneIn: 1 }, excludeBanlist: false }
+    const { boosters, cards } = await buildPool(SUB, { config: cfg, nonce: 'n' }, { fetchCards: async code => fakeFactionSet(code) })
+    for (const b of boosters) expect(b[12]).toMatch(/^ALT_CORE_B_.*_U_\d+$/)
+    expect(new Set(uniquesOf(cards)).size).toBe(8)
+  })
+
+  // randomOneIn null leaves every exact path untouched: pinned by the goldens.
+
+  // Two pickDeterministicUniques calls on the SAME set in one pool (the guaranteed draw, then
+  // the random hits). Every call is forced to restart the same rng sequence, so the second
+  // call's first draw IS the guaranteed unique: only the gate keeps the serials distinct.
+  it('never hands out the same serial twice when two draws hit the same set', async () => {
+    vi.resetModules()
+    vi.doMock('./uniqueFactionRanges.js', async importOriginal => {
+      const real = await importOriginal()
+      return { ...real, pickDeterministicUniques: (code, _rng, opts) => real.pickDeterministicUniques(code, mulberry32(7), opts) }
+    })
+    try {
+      const { buildPool: build } = await import('./poolBuilder.js')
+      for (const cfg of [
+        config({ source: { type: 'set', setCode: 'EOLE', boosters: 7 }, uniques: { inBoosters: 0, guaranteed: 1, evenFactions: false, faction: null, randomOneIn: 1 } }),
+        { v: 1, format: 'sealed', source: { type: 'faction', faction: 'AX', sets: { CORE: 1 }, boosters: 7 }, heroes: 'packs', uniques: { inBoosters: 0, guaranteed: 1, evenFactions: false, faction: 'AX', randomOneIn: 1 }, excludeBanlist: false },
+      ]) {
+        const fetch = async code => (cfg.source.type === 'set' ? fakeSet() : fakeFactionSet(code))
+        const { cards } = await build(SUB, { config: cfg, nonce: 'n' }, { fetchCards: fetch })
+        const uniques = uniquesOf(cards)
+        expect(uniques).toHaveLength(8)
+        for (const r of uniques) expect(cards[r]).toBe(1)
+      }
+    } finally {
+      vi.doUnmock('./uniqueFactionRanges.js')
+      vi.resetModules()
+    }
   })
 })

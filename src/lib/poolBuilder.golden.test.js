@@ -95,3 +95,21 @@ describe('multi-set pool (golden)', () => {
     expect(crypto.createHash('sha256').update(JSON.stringify({ boosters, counts })).digest('hex')).toMatchSnapshot()
   })
 })
+
+describe('random uniques (golden)', () => {
+  const SUB = '11111111-1111-1111-1111-111111111111'
+  const digest = ({ boosters, cards: counts }) => crypto.createHash('sha256').update(JSON.stringify({ boosters, counts })).digest('hex')
+  const base = { v: 1, format: 'sealed', heroes: 'packs', excludeBanlist: false }
+  it('the random draw of a set source is frozen', async () => {
+    const config = { ...base, source: { type: 'set', setCode: 'EOLE', boosters: 7 }, uniques: { inBoosters: 0, guaranteed: 1, evenFactions: false, faction: null, randomOneIn: 1 } }
+    expect(digest(await buildPool(SUB, { config, nonce: 'n-random-set' }, { fetchCards: async code => fakeSet(code) }))).toMatchSnapshot()
+  })
+  it('the random draw of a multi-set source is frozen', async () => {
+    const config = { ...base, source: { type: 'multiset', sets: { CORE: 4, EOLE: 3 }, boosters: 7 }, uniques: { inBoosters: 0, guaranteed: 0, evenFactions: false, faction: null, randomOneIn: 2 } }
+    expect(digest(await buildPool(SUB, { config, nonce: 'n-random-mix' }, { fetchCards: async code => fakeSet(code) }))).toMatchSnapshot()
+  })
+  it('the random draw of a mono-faction source is frozen', async () => {
+    const config = { ...base, source: { type: 'faction', faction: 'AX', sets: { CORE: 1, EOLE: 2 }, boosters: 7 }, uniques: { inBoosters: 0, guaranteed: 1, evenFactions: false, faction: 'AX', randomOneIn: 1 } }
+    expect(digest(await buildPool(SUB, { config, nonce: 'n-random-faction' }, { fetchCards: async code => fakeSet(code) }))).toMatchSnapshot()
+  })
+})
