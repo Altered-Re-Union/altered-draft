@@ -679,6 +679,11 @@ export default {
     close: 'Fermer',
     openBooster: 'Ouvrir',
   },
+  cardImage: {
+    pending: '{{name}} : révélation de l’unique…',
+    failed: '{{name}} : l’unique n’a pas pu être dessinée',
+    retry: 'Réessayer',
+  },
   poolGrid: {
     deckOnly: 'Deck uniquement',
     groupBy: 'Grouper par :',
@@ -692,6 +697,10 @@ export default {
     noCost: 'Sans coût',
     costN: 'Coût {{n}}',
     hero: 'Héros',
+    addAll: '+ Tout',
+    removeAll: '− Tout',
+    addAllAria: 'Ajouter au deck toutes les cartes « {{group}} » affichées (héros exclus)',
+    removeAllAria: 'Retirer du deck toutes les cartes « {{group}} » affichées (héros exclus)',
   },
   helpModal: {
     title: 'Comment ça marche',

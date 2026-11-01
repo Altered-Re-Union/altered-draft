@@ -686,6 +686,11 @@ export default {
     close: 'Close',
     openBooster: 'Open',
   },
+  cardImage: {
+    pending: '{{name}}: revealing the unique…',
+    failed: '{{name}}: the unique could not be drawn',
+    retry: 'Retry',
+  },
   poolGrid: {
     deckOnly: 'Deck only',
     groupBy: 'Group by:',
@@ -699,6 +704,10 @@ export default {
     noCost: 'No cost',
     costN: 'Cost {{n}}',
     hero: 'Hero',
+    addAll: '+ All',
+    removeAll: '− All',
+    addAllAria: 'Add every “{{group}}” card shown to the deck (heroes excluded)',
+    removeAllAria: 'Remove every “{{group}}” card shown from the deck (heroes excluded)',
   },
   helpModal: {
     title: 'How it works',

@@ -53,6 +53,11 @@ stays up serving it, Ctrl+C to quit). Traces of failed tests are in `test-result
 data (`menu`, `lifecycle`, `moderation`…) runs serially: after a failure, the rest of that
 file is reported as skipped, so fix the first red test.
 
+**In CI** (`.github/workflows/test.yml`, job *E2E (Playwright)*) the report doesn't open: download
+the `playwright-report` artifact from the failed run (GitHub › Actions › the run › Artifacts),
+unzip it, then `npx playwright show-report playwright-report` or `show-trace` on a
+`test-results/<test>/trace.zip`.
+
 **Traps.**
 - `npm run test:e2e` tests the last build, not the code in `src/` (a warning says so when
   `dist/` is older); `make e2e` always rebuilds.

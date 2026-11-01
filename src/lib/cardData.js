@@ -90,56 +90,13 @@ export function canonicalCardRef(ref) {
 const LOCALE = { EN: 'en-us', FR: 'fr-fr', ES: 'es-es', DE: 'de-de', IT: 'it-it' }
 const uniqueCache = {}
 
-// Render a UNIQUE's TRUE face to an image via the <altered-card> web component (the Altered Card
-// Renderer, loaded in index.html) — it draws the correct art + the unique's OWN stats onto a
-// canvas. We snapshot that canvas to a JPEG data URL and use it as the card image. This exists
-// because the real unique faces no longer live on any host (Altered's S3 is locked) and the
-// community CDN only has the base rare (…_R1) — so without this, uniques render as their rare.
-// Returns null if the renderer isn't loaded / times out / the canvas is tainted; the caller then
-// keeps the _R1 fallback (no worse than before). Renders once per ref+locale (cached promise) —
-// but a FAILED (null) render is evicted from the cache rather than kept, so a later call (a
-// remount, a retry from fetchUnique below) gets a fresh attempt instead of permanently reusing
-// a stale failure from e.g. the renderer not being defined yet on the very first try.
-const uniqueFaceCache = {}
-function renderUniqueFace(reference, lang = 'EN') {
-  const loc = (LOCALE[lang] ?? 'en-us').slice(0, 2)
-  const key = `${reference}_${loc}`
-  if (uniqueFaceCache[key]) return uniqueFaceCache[key]
-  const job = (async () => {
-    if (typeof document === 'undefined' || typeof window === 'undefined' || !window.customElements) return null
-    const CE = window.customElements
-    if (!CE.get('altered-card')) {
-      try { await Promise.race([CE.whenDefined('altered-card'), new Promise((_, rej) => setTimeout(rej, 6000))]) }
-      catch { return null }
-    }
-    const host = document.createElement('div')
-    host.setAttribute('aria-hidden', 'true')
-    host.style.cssText = 'position:fixed;left:-10000px;top:0;width:744px;height:1039px;opacity:0;pointer-events:none;z-index:-1'
-    const el = document.createElement('altered-card')
-    el.setAttribute('ref', reference)
-    el.setAttribute('locale', loc)
-    host.appendChild(el)
-    document.body.appendChild(host)
-    try {
-      const start = Date.now()
-      let prev = ''
-      while (Date.now() - start < 10000) {
-        await new Promise(r => setTimeout(r, 250))
-        const canvas = el.querySelector('canvas')
-        if (!canvas || !canvas.width) continue
-        let url
-        try { url = canvas.toDataURL('image/jpeg', 0.85) } catch { return null } // CORS-tainted → give up
-        if (url && url.length > 8000 && url === prev) return url // two identical reads → fully drawn
-        prev = url
-      }
-      return (prev && prev.length > 8000) ? prev : null
-    } finally {
-      try { document.body.removeChild(host) } catch { /* already detached */ }
-    }
-  })()
-  uniqueFaceCache[key] = job
-  job.then(result => { if (!result) delete uniqueFaceCache[key] })
-  return job
+// A stalled cards.alteredcore.org request must not hang the page: abort it so the retries /
+// fallbacks below kick in. The random-uniques query is slow by nature (~1.5 s server-side
+// random sort), hence its longer budget.
+const UNIQUE_TIMEOUT_MS = 8000
+const RANDOM_UNIQUES_TIMEOUT_MS = 15000
+function fetchTimeout(ms = UNIQUE_TIMEOUT_MS) {
+  return typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(ms) : undefined
 }
 
 // Unique cards (…_U_<serial>) don't exist in the community set files. The 24 cube
@@ -167,7 +124,7 @@ export async function fetchUnique(reference, lang = 'EN') {
     for (let attempt = 0; attempt < attempts && !card; attempt++) {
       try {
         // Filter by reference (the /api/cards/<id> path expects a numeric id, not a ref).
-        const res = await fetch(`${endpoints().cardsApiUrl}/api/cards?reference=${encodeURIComponent(reference)}`, { headers: { Accept: 'application/json' } })
+        const res = await fetch(`${endpoints().cardsApiUrl}/api/cards?reference=${encodeURIComponent(reference)}`, { headers: { Accept: 'application/json' }, signal: fetchTimeout() })
         if (!res.ok) throw new Error(`Failed to fetch unique ${reference}: ${res.status}`)
         const raw = (await res.json()).member?.[0]
         if (!raw) throw new Error(`Unique ${reference} not found`)
@@ -179,31 +136,19 @@ export async function fetchUnique(reference, lang = 'EN') {
     }
     if (!card) {
       // API down / not found after retries → fall back to the bundled EN snapshot if we have
-      // one, else a synthetic card built from the reference alone (still gets the base rare's
-      // art via cardImageUrl's own _R1 fallback, and may yet get upgraded to the true face
-      // below since <altered-card> doesn't depend on this same API call) — better than leaving
-      // the caller with nothing to render (a bare ref/number placeholder) after every retry.
+      // one, else a synthetic card built from the reference alone, whose face can still be
+      // drawn (the renderer doesn't depend on this same API call) — better than leaving the
+      // caller with nothing to render (a bare ref/number placeholder) after every retry.
       if (snapshot) { uniqueCache[key] = snapshot; return snapshot }
       card = {
         reference, name: reference, faction: 'XX', factionName: 'Unknown', rarity: 'U',
-        imagePath: cardImageUrl(reference, lang), cardType: '',
+        imagePath: null, faceLang: lang, cardType: '',
         mainCost: null, recallCost: null, forestPower: null, mountainPower: null, oceanPower: null,
       }
       uniqueCache[key] = card
     }
   }
 
-  // Upgrade the image from the _R1 rare fallback to the true unique face (rendered once per
-  // successful attempt — see renderUniqueFace). A couple of retries here since the very first
-  // attempt on a cold page load can lose the race against the <altered-card> component's own
-  // script still registering; any failure after that leaves the _R1 fallback in place, no
-  // worse than before.
-  if (card && isUniqueRef(reference) && !card._uniqueFace) {
-    for (let attempt = 0; attempt < 2 && !card._uniqueFace; attempt++) {
-      try { const face = await renderUniqueFace(reference, lang); if (face) { card.imagePath = face; card._uniqueFace = true } }
-      catch { /* try again, or keep the _R1 fallback after the last attempt */ }
-    }
-  }
   return card
 }
 
@@ -226,7 +171,7 @@ export async function fetchRandomUniques(setCode, count = 50, lang = 'EN') {
   const loc = (LOCALE[lang] ?? 'en-us').slice(0, 2)
   try {
     const url = `${endpoints().cardsApiUrl}/api/cards?rarity=UNIQUE&set.reference=${encodeURIComponent(setCode)}&random=1&itemsPerPage=${count}`
-    const res = await fetch(url, { headers: { Accept: 'application/json' } })
+    const res = await fetch(url, { headers: { Accept: 'application/json' }, signal: fetchTimeout(RANDOM_UNIQUES_TIMEOUT_MS) })
     if (!res.ok) throw new Error(`uniques ${setCode}: ${res.status}`)
     const members = (await res.json()).member ?? []
     // Dedupe by reference — the random=1 query can return the same serial more than once,
@@ -296,10 +241,11 @@ function normalizeCard(raw, lang = 'EN') {
 // Map a card from cards.alteredcore.org into our normalized shape. Its JSON differs
 // from the old API: name/imagePath are per-locale objects, faction/cardType/rarity are
 // nested, and powers are flat integers (no #…# markers). Its `imagePath` points at the
-// now-dead S3 buckets, so we ignore it and build the image URL from the reference
-// (community CDN) via cardImageUrl instead.
+// now-dead S3 buckets, so we ignore it. A unique's face exists on no host: `imagePath` stays
+// null and `faceLang` tells CardImage to draw it (uniqueFaces.js) — never the base rare's art.
 function normalizeAlteredCore(raw, loc = 'en', lang = 'EN') {
   const refStr = raw.reference ?? ''
+  const unique = isUniqueRef(refStr)
   const pick = obj => obj == null ? null
     : typeof obj === 'string' ? obj
     : (obj[loc] ?? obj.en ?? Object.values(obj)[0] ?? null)
@@ -309,7 +255,8 @@ function normalizeAlteredCore(raw, loc = 'en', lang = 'EN') {
     faction: raw.faction?.code ?? 'XX',
     factionName: raw.faction?.name ?? 'Unknown',
     rarity: normalizeRarity(raw.rarity, refStr),
-    imagePath: cardImageUrl(refStr, lang),
+    imagePath: unique ? null : cardImageUrl(refStr, lang),
+    ...(unique ? { faceLang: lang } : {}),
     cardType: raw.cardType?.reference ?? '',
     mainCost: raw.mainCost ?? null,
     recallCost: raw.recallCost ?? null,

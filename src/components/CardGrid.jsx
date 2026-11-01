@@ -2,6 +2,7 @@ import { FACTION_ICONS, RARITY_GEMS } from '../lib/assets.js'
 import { FACTION_NAMES } from '../lib/cardData.js'
 import { useZoomOrigin } from './PoolGrid.jsx'
 import { useLang } from '../lib/i18n/i18n.jsx'
+import CardImage from './CardImage.jsx'
 
 // One draftable card: art grows in place on hover (deckbuilder-style, anchored to stay
 // on-screen), info bar stays put below it. Clicking the art drafts the card.
@@ -19,12 +20,9 @@ function DraftCard({ ref_, card, onPick, disabled }) {
         style={{ transformOrigin: origin }} title={card?.name ?? ref_}
         className={`aspect-[2/3] bg-surface2 overflow-hidden rounded-t-lg relative transition-transform duration-150 ease-out
           ${disabled ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer hover:scale-[1.6] hover:z-30 hover:shadow-xl hover:shadow-black/70'}`}>
-        {card?.imagePath ? (
-          <img src={card.imagePath} alt={card.name} className="w-full h-full object-cover" loading="lazy"
-            onError={e => { e.currentTarget.style.display = 'none' }} />
-        ) : (
+        <CardImage card={card} className="w-full h-full object-cover" loading="lazy" fallback={
           <div className="w-full h-full flex items-center justify-center text-faint text-xs px-2 text-center break-all">{card?.name ?? ref_}</div>
-        )}
+        } />
       </button>
       <div className="p-1.5 space-y-1">
         <p className="text-xs font-medium leading-tight line-clamp-1 text-ink">{card?.name ?? ref_}</p>

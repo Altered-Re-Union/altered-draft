@@ -116,6 +116,11 @@ make e2e              # Playwright: build, then a real browser against fakes + a
   app, a throwaway Postgres and fake Re:Union services — nothing leaves `localhost`, no need for
   `make dev` or altered-dev-environment. How to run one test, the UI mode, keeping the database
   between runs and reading a failure: [TESTING.md › E2E suite](TESTING.md#e2e-suite-make-e2e).
+- **CI** (`.github/workflows/test.yml`, every PR and every push to `main`): two parallel jobs on
+  GitHub-hosted runners (free, the repo is public) — *Unit + integration* (`npm test`,
+  `npm run test:integration`, `npm run build`, ~1 min) and *E2E (Playwright)* (build, Chromium,
+  `npm run test:e2e`, ~5 min). On an e2e failure the Playwright report and traces are uploaded
+  as the `playwright-report` artifact (kept 7 days). A new push on a PR cancels the previous run.
 
 ---
 

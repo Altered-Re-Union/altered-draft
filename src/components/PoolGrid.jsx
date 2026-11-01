@@ -6,6 +6,8 @@ import {
 import { FACTION_ICONS, RARITY_GEMS, SET_ICONS, setCodeFromRef } from '../lib/assets.js'
 import { useCardZoom } from './CardZoom.jsx'
 import { useLang } from '../lib/i18n/i18n.jsx'
+import { addRefsToDeck, removeRefsFromDeck, bulkDeckState } from '../lib/deckBulk.js'
+import CardImage from './CardImage.jsx'
 
 const TYPE_LABEL = {
   HERO: 'Hero', CHARACTER: 'Character', SPELL: 'Spell',
@@ -148,12 +150,15 @@ function useZoomNavigation(cardMap, deck, poolCounts, onAdd, onRemove) {
  * Shared pool browser with faction filter, sort/group, +/- deck controls,
  * and a large hover preview. Heroes are grouped inside their own faction.
  */
-export default function PoolGrid({ refs, cardMap, deck, poolCounts, onAdd, onRemove, loading }) {
+export default function PoolGrid({ refs, cardMap, deck, poolCounts, onAdd, onRemove, onDeckChange, loading }) {
   const [filterFactions, setFilterFactions] = useState([])
   const [sortBy, setSortBy] = useState('faction')
   const [viewMode, setViewMode] = useState('cards') // 'cards' (art grid) | 'list' (compact columns)
   const [onlyInDeck, setOnlyInDeck] = useState(false)
   const canFilterByDeck = !!(deck && onAdd && onRemove)
+  // "+ All" / "− All" on the faction and cost group headers, over the cards each group shows
+  // (heroes excluded, see deckBulk.js) — not on the Hero cost group, which holds only heroes.
+  const canBulkEdit = canFilterByDeck && !!onDeckChange && !!poolCounts && (sortBy === 'faction' || sortBy === 'cost')
   const zoom = useZoomNavigation(cardMap, deck, poolCounts, onAdd, onRemove)
   const { t } = useLang()
   const sortLabels = { faction: t('poolGrid.sortFaction'), type: t('poolGrid.sortType'), cost: t('poolGrid.sortCost'), set: t('poolGrid.sortSet') }
@@ -292,9 +297,14 @@ export default function PoolGrid({ refs, cardMap, deck, poolCounts, onAdd, onRem
         <div className="overflow-y-auto flex-1 px-8 pt-8 pb-40 space-y-6" style={{ scrollbarGutter: 'stable' }}>
           {groups.map(group => (
             <div key={group.key}>
-              <div className={`inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded border mb-2 ${group.colorCls}`}>
-                {group.icon && <img src={group.icon} alt="" className="w-3.5 h-3.5 object-contain" onError={e => { e.currentTarget.style.display = 'none' }} />}
-                {group.label} <span className="font-bold">({group.refs.length})</span>
+              <div className="flex items-center gap-2 mb-2">
+                <div className={`inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded border ${group.colorCls}`}>
+                  {group.icon && <img src={group.icon} alt="" className="w-3.5 h-3.5 object-contain" onError={e => { e.currentTarget.style.display = 'none' }} />}
+                  {group.label} <span className="font-bold">({group.refs.length})</span>
+                </div>
+                {canBulkEdit && group.key !== 'HERO' && (
+                  <GroupDeckButtons refs={group.refs} label={group.label} deck={deck} poolCounts={poolCounts} cardMap={cardMap} onDeckChange={onDeckChange} />
+                )}
               </div>
               <CardGridInner refs={group.refs} cardMap={cardMap} loading={loading}
                 deck={deck} poolCounts={poolCounts} onAdd={onAdd} onRemove={onRemove}
@@ -309,9 +319,14 @@ export default function PoolGrid({ refs, cardMap, deck, poolCounts, onAdd, onRem
           <div className="flex flex-wrap gap-x-6 gap-y-4 items-start">
             {groups.map(group => (
               <div key={group.key} className="min-w-[210px] flex-1">
-                <div className={`inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded border mb-1.5 ${group.colorCls}`}>
-                  {group.icon && <img src={group.icon} alt="" className="w-3.5 h-3.5 object-contain" onError={e => { e.currentTarget.style.display = 'none' }} />}
-                  {group.label} <span className="font-bold">({group.refs.length})</span>
+                <div className="flex items-center gap-2 mb-1.5">
+                  <div className={`inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded border ${group.colorCls}`}>
+                    {group.icon && <img src={group.icon} alt="" className="w-3.5 h-3.5 object-contain" onError={e => { e.currentTarget.style.display = 'none' }} />}
+                    {group.label} <span className="font-bold">({group.refs.length})</span>
+                  </div>
+                  {canBulkEdit && group.key !== 'HERO' && (
+                    <GroupDeckButtons refs={group.refs} label={group.label} deck={deck} poolCounts={poolCounts} cardMap={cardMap} onDeckChange={onDeckChange} />
+                  )}
                 </div>
                 <div>
                   {dedupeRefs(group.refs).map(([ref, occ]) => (
@@ -325,6 +340,25 @@ export default function PoolGrid({ refs, cardMap, deck, poolCounts, onAdd, onRem
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+/** "+ All" / "− All" for one group: every non-hero card it shows in or out of the deck. */
+function GroupDeckButtons({ refs, label, deck, poolCounts, cardMap, onDeckChange }) {
+  const { t } = useLang()
+  const { canAdd, canRemove } = bulkDeckState(deck, poolCounts, cardMap, refs)
+  const btn = 'px-2 py-0.5 rounded text-xs font-bold bg-surface2 text-muted border border-line hover:text-ink disabled:opacity-40 disabled:hover:text-muted transition-colors'
+  return (
+    <div className="flex items-center gap-1">
+      <button onClick={() => onDeckChange(removeRefsFromDeck(deck, cardMap, refs))} disabled={!canRemove}
+        aria-label={t('poolGrid.removeAllAria', { group: label })} title={t('poolGrid.removeAllAria', { group: label })} className={btn}>
+        {t('poolGrid.removeAll')}
+      </button>
+      <button onClick={() => onDeckChange(addRefsToDeck(deck, poolCounts, cardMap, refs))} disabled={!canAdd}
+        aria-label={t('poolGrid.addAllAria', { group: label })} title={t('poolGrid.addAllAria', { group: label })} className={btn}>
+        {t('poolGrid.addAll')}
+      </button>
     </div>
   )
 }
@@ -438,18 +472,15 @@ function PoolCard({ ref_, occurrences, card, loading, deck, poolCounts, onAdd, o
         {Array.from({ length: ghostLayers }).map((_, i) => (
           <div key={i} aria-hidden style={{ transform: `translate(${(ghostLayers - i) * 4}px, ${-(ghostLayers - i) * 4}px)`, zIndex: i }}
             className="absolute inset-0 rounded-t-lg overflow-hidden bg-surface2 border border-line brightness-75">
-            {card?.imagePath && <img src={card.imagePath} alt="" className="w-full h-full object-cover" />}
+            <CardImage card={card} alt="" className="w-full h-full object-cover" />
           </div>
         ))}
         <div style={{ zIndex: ghostLayers }} className="absolute inset-0 bg-surface2 overflow-hidden rounded-t-lg border border-line">
-          {card?.imagePath ? (
-            <img src={card.imagePath} alt={card?.name} className="w-full h-full object-cover" loading="lazy"
-              onError={e => { e.currentTarget.style.display = 'none' }} />
-          ) : (
+          <CardImage card={card} className="w-full h-full object-cover" loading="lazy" fallback={
             <div className="w-full h-full flex items-center justify-center p-1">
               <span className="text-xs text-faint text-center leading-tight">{loading ? '…' : (card?.name ?? ref_)}</span>
             </div>
-          )}
+          } />
           {setIcon && (
             <img src={setIcon} alt="" className="absolute bottom-1 right-1 w-3 h-3 object-contain opacity-60"
               onError={e => { e.currentTarget.style.display = 'none' }} />
