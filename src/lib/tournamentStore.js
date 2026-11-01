@@ -213,3 +213,25 @@ export function toTournamentJson(row, extras = {}) {
     ...extras,
   }
 }
+
+/** Hides (or shows again) a tournament in one player's hub lists. Display only. */
+export async function setTournamentHidden(sub, tournamentId, hidden) {
+  if (hidden) {
+    await query(
+      'INSERT INTO hidden_tournaments (sub, tournament_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+      [sub, tournamentId],
+    )
+  } else {
+    await query('DELETE FROM hidden_tournaments WHERE sub = $1 AND tournament_id = $2', [sub, tournamentId])
+  }
+}
+
+/** The subset of `ids` the player hid, as a Set. */
+export async function hiddenTournamentIds(sub, ids) {
+  if (!ids.length) return new Set()
+  const { rows } = await query(
+    'SELECT tournament_id FROM hidden_tournaments WHERE sub = $1 AND tournament_id = ANY($2)',
+    [sub, ids],
+  )
+  return new Set(rows.map(r => r.tournament_id))
+}

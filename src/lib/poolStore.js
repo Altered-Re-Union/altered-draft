@@ -273,6 +273,21 @@ export async function listBoundTournamentPools(sub) {
   return rows
 }
 
+/**
+ * Tucks a bound tournament pool into (or out of) the "My pools" archive section, scoped to
+ * its owner. Display only. Returns the new `hidden_at`, or undefined when the caller owns
+ * no such bound pool.
+ */
+export async function setPoolHidden(sub, id, hidden) {
+  const { rows } = await query(
+    `UPDATE sealed_pools SET hidden_at = CASE WHEN $3 THEN COALESCE(hidden_at, now()) ELSE NULL END
+     WHERE id = $1 AND sub = $2 AND kind = 'tournament' AND tournament_id IS NOT NULL
+     RETURNING hidden_at`,
+    [id, sub, hidden],
+  )
+  return rows.length ? rows[0].hidden_at : undefined
+}
+
 /** Records that `gameId` has been played against `poolId` (deduped, see schema). */
 export async function recordGamePlayed(poolId, gameId) {
   await query(
@@ -367,8 +382,8 @@ export async function countPoolsByOrigin(tournamentId) {
 export async function poolSummariesForTournaments(sub, ids) {
   if (!ids.length) return {}
   const { rows } = await query(
-    'SELECT id, tournament_ref, deck_name, deck_card_quantity FROM sealed_pools WHERE sub = $1 AND tournament_ref = ANY($2)',
+    'SELECT id, tournament_ref, deck_name, deck_card_quantity, hidden_at FROM sealed_pools WHERE sub = $1 AND tournament_ref = ANY($2)',
     [sub, ids],
   )
-  return Object.fromEntries(rows.map(r => [r.tournament_ref, { id: r.id, deckName: r.deck_name, deckCardQuantity: r.deck_card_quantity }]))
+  return Object.fromEntries(rows.map(r => [r.tournament_ref, { id: r.id, deckName: r.deck_name, deckCardQuantity: r.deck_card_quantity, hidden: !!r.hidden_at }]))
 }

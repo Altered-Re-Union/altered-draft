@@ -61,6 +61,16 @@ export async function fetchBoundPools() {
   return handle(res)
 }
 
+/** Moves one of the caller's bound pools into (`hidden: true`) or out of the "My pools" archive. */
+export async function setPoolHidden(id, hidden) {
+  const res = await fetch('/api/tournament-pool-visibility', {
+    method: 'PATCH',
+    headers: { ...(await authHeaders()), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id, hidden }),
+  })
+  return handle(res)
+}
+
 export async function fetchPoolById(id) {
   const res = await fetch(`/api/tournament-pool?id=${encodeURIComponent(id)}`, { headers: await authHeaders() })
   return handle(res)
@@ -127,6 +137,16 @@ export async function updateTournament(id, body) {
     method: 'PATCH',
     headers: { ...(await authHeaders()), 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
+  })
+  return handle(res)
+}
+
+/** Hides (or shows again) a tournament in the caller's hub lists. */
+export async function setTournamentHidden(id, hidden) {
+  const res = await fetch(`/api/tournaments/${encodeURIComponent(id)}/visibility`, {
+    method: 'PATCH',
+    headers: { ...(await authHeaders()), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ hidden }),
   })
   return handle(res)
 }

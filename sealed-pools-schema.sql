@@ -217,3 +217,18 @@ create index if not exists sealed_pools_legacy_by_bga_id
 -- V2 (mono-faction sealed): a pool drawn from several sets has no single set; the legacy
 -- snapshot column is null for those rows (their contents are always stored, never regenerated).
 alter table sealed_pools alter column set_code drop not null;
+
+-- "My pools" tab: the player tucked this bound pool into the archive section by hand (old
+-- events, typically legacy pools that have no tournament status to archive them). Display
+-- only — never read by binding, validation or BGA lookups.
+alter table sealed_pools add column if not exists hidden_at timestamptz;
+
+-- Hub "Ongoing" tab: tournaments a player tucked into the folded section by hand (an
+-- organizer forgot to close theirs). Per player, any tournament, with or without a pool.
+-- Display only.
+create table if not exists hidden_tournaments (
+  sub           text not null,
+  tournament_id uuid not null references tournaments(id) on delete cascade,
+  hidden_at     timestamptz not null default now(),
+  primary key (sub, tournament_id)
+);

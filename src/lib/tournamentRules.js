@@ -110,3 +110,20 @@ export function groupCreatedTournaments(list) {
   const archive = group(ARCHIVE_ORDER)
   return { active: group(ACTIVE_ORDER), archive, archiveCount: archive.reduce((n, g) => n + g.items.length, 0) }
 }
+
+/** A bound pool whose declared tournament is over (ended / cancelled / detached). */
+export function poolTournamentOver(pool) {
+  return ARCHIVE_ORDER.includes(pool.tournament?.status)
+}
+
+/**
+ * "My pools": a pool goes to the archive section when the player hid it by hand
+ * (`hiddenAt`) or when its declared tournament is over (ended / cancelled / detached).
+ * Legacy pools (no declared tournament, no status) only move by hand. Order is kept.
+ * Items are API bound pools (`hiddenAt`, `tournament?.status`).
+ * @returns {{ visible: object[], archived: object[] }}
+ */
+export function splitBoundPools(pools) {
+  const archived = p => !!p.hiddenAt || poolTournamentOver(p)
+  return { visible: pools.filter(p => !archived(p)), archived: pools.filter(archived) }
+}
