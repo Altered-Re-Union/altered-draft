@@ -43,8 +43,9 @@ Two ways a sealed configuration is chosen:
 
 - **Declared tournaments** (§14): an organizer declares a BGA tournament on altered-draft with
   its own configuration (7 boosters of one set or split over several sets (§14.7), or of one
-  faction over weighted sets (§14.6), heroes, exact or random uniques, ban list). Its players get
-  a pool built from that configuration.
+  faction over weighted sets (§14.6), heroes, exact or random uniques, ban list), public or
+  private (listed only to the people it concerns, §14.8). Its players get a pool built from that
+  configuration.
 - **The current competitive format** (a row in `current_format`, seeded by
   `sealed-pools-schema.sql`) for the two generic flows: the casual "normal" pool and the
   "prepare my next tournament" pool used for BGA tournaments nobody declared.
@@ -106,9 +107,9 @@ All tournament pages require a Re:Union login, except the public list of declare
 | Route | Page component | What the player sees |
 | --- | --- | --- |
 | `/` | `Home.jsx` | A **"Sealed set 6"** block with two image buttons: **Tournaments** (→ `/tournament`) and **Normal mode** (→ `/tournament/normal`). |
-| `/tournament` | `TournamentMenu.jsx` | Header (title, "Create a tournament", BGA registration notice); **"My ongoing tournaments"** (logged in, when any): a grid of the started tournaments the player has a pool in, each card opening the tournament page with a direct "Change my deck" button; then **tabs**, each with a one-line explanation, the active one kept in the URL (`?tab=upcoming|ongoing|pools|created`): **Upcoming** (default, public), **Ongoing** (public: pools can still be prepared until the end), **My pools** (every bound pool, declared tournaments first; a card opens the tournament page, or the pool itself for a BGA tournament nobody declared, plus "Change my deck"), **My created tournaments** (`GET /api/tournaments?mine=1`, every status, grouped: ongoing then upcoming, each chronological, then a folded "Ended and cancelled (N)" block with the ended, cancelled and detached ones). The two personal tabs show a Connect box when logged out. **Below the tabs**, whatever tab is open, the generic "Tournament not listed here?" block: its button opens `/tournament/prep` (login first when logged out) and reads "Prepare my next tournament", or "See my pool and deck for my next tournament" once the player has a pending prep pool (`pending` from `GET /api/tournament-bound-pools`). |
-| `/tournament/new` | `TournamentForm.jsx` | Declare a tournament (§14). |
-| `/tournament/t/:id` | `TournamentDetail.jsx` | A declared tournament: description, dates, 3-step checklist, organizer panel (§14). Public. |
+| `/tournament` | `TournamentMenu.jsx` | Header (title, "Create a tournament", BGA registration notice); **"My ongoing tournaments"** (logged in, when any): a grid of the started tournaments the player has a pool in, each card opening the tournament page with a direct "Change my deck" button; then **tabs**, each with a one-line explanation, the active one kept in the URL (`?tab=upcoming|ongoing|pools|created`): **Upcoming** (default, public), **Ongoing** (public: pools can still be prepared until the end; both filtered by the visibility, §14.8), **My pools** (every bound pool, declared tournaments first; a card opens the tournament page, or the pool itself for a BGA tournament nobody declared, plus "Change my deck"), **My created tournaments** (`GET /api/tournaments?mine=1`, every status, grouped: ongoing then upcoming, each chronological, then a folded "Ended and cancelled (N)" block with the ended, cancelled and detached ones). The two personal tabs show a Connect box when logged out. **Below the tabs**, whatever tab is open, the generic "Tournament not listed here?" block: its button opens `/tournament/prep` (login first when logged out) and reads "Prepare my next tournament", or "See my pool and deck for my next tournament" once the player has a pending prep pool (`pending` from `GET /api/tournament-bound-pools`). A private tournament carries a "Private" pill on its cards (§14.8). |
+| `/tournament/new` | `TournamentForm.jsx` | Declare a tournament, public or private (§14, §14.8). |
+| `/tournament/t/:id` | `TournamentDetail.jsx` | A declared tournament: description, dates, 3-step checklist, share box, organizer panel (§14). Public, private ones included (§14.8). |
 | `/tournament/t/:id/edit` | `TournamentForm.jsx` | Edit a declared tournament (organizer / moderator). |
 | `/tournament/t/:id/pool` | `TournamentPoolPage.jsx` → `TournamentPoolView` | The player's pool for a declared tournament (get-or-create). |
 | `/tournament/prep` | `TournamentPrep.jsx` → `TournamentPoolView` | The player's single *pending* tournament pool. **No reset button**: this is the one-shot commitment. |
@@ -865,7 +866,7 @@ Handlers read query params from `req.query` or the URL (both Vercel and Express)
 | `/api/tournament-normal-pool` | GET | — | pool (+ `boosters`, `gamesPlayed`) | Get-or-create the normal pool. |
 | `/api/tournament-normal-pool` | POST | — | pool (+ `boosters`, `gamesPlayed`) or `429 { "error": "cooldown", "remainingMs" }` | Reset. Deletes the previous deck on decks-api (best-effort). |
 | `/api/tournament-prep-pool` | GET | — | pool (+ `boosters`, `gamesPlayed`) | Get-or-create the pending tournament pool. |
-| `/api/tournament-bound-pools` | GET | — | `{ "pools": [ { id, setCode, tournamentId, tournamentName, boundAt, gamesPlayed, tournament: { id, name, startsAt, status } \| null, deck: { id, name, cardQuantity } \| null } ], "pending": { id, deck: { id, name, cardQuantity } \| null } \| null }` | Declared tournaments first, then most recent first. `pending` = the player's preparation pool for their next undeclared tournament, read only (never created here). |
+| `/api/tournament-bound-pools` | GET | — | `{ "pools": [ { id, setCode, tournamentId, tournamentName, boundAt, gamesPlayed, tournament: { id, name, startsAt, visibility, status } \| null, deck: { id, name, cardQuantity } \| null } ], "pending": { id, deck: { id, name, cardQuantity } \| null } \| null }` | Declared tournaments first, then most recent first. `pending` = the player's preparation pool for their next undeclared tournament, read only (never created here). |
 | `/api/tournament-pool` | GET | `id` | pool (+ `boosters`, `gamesPlayed`); `400 invalid_request`; `404 not_found` | Owner-scoped. |
 | `/api/tournament-pool` | POST | `id`; body `{ deckId, name, heroRef, faction, cardQuantity }` | pool (+ `boosters`, `gamesPlayed`) | Updates the cached deck summary. |
 | `/api/tournament-bga-decklist` | GET | `tournamentId?`, `tournamentName?`, `gameId?` | hydra collection (below) | For altered-bga-api. Resolves the pool (§5), records the game, `ensureDeck`. |
@@ -1229,7 +1230,8 @@ covers `source.type = 'set'` (7 boosters of one visible set, heroes in boosters 
 choice, exact uniques inside boosters, guaranteed uniques outside, uniques restricted to one
 faction, even factions, ban list); V2 (§14.6) adds `source.type = 'faction'`, mono-faction
 sealed over weighted sets; V3 (§14.7) adds `source.type = 'multiset'`, the 7 single-set boosters
-split over several sets, and random uniques (one booster in N) on every source.
+split over several sets, and random uniques (one booster in N) on every source; V4 (§14.8) adds a
+public / private visibility and the share box.
 
 ### 14.1 Stored pools
 
@@ -1274,13 +1276,13 @@ pools created for the declaration.
 
 | Endpoint | Method | Auth | Purpose |
 | --- | --- | --- | --- |
-| `/api/tournaments` | GET | none (optional bearer) | List. `?status=upcoming\|ongoing\|open\|all` (`open` = upcoming + ongoing, the default), ordered by `starts_at`. `?bgaId=<numeric id>` instead returns the live (not detached) declaration of that BGA tournament whatever its status, 0 or 1 item, plus `legacy`: `null`, or `{ pools, mixed, config }` for the pools already bound to that BGA id without a declaration (the format a declaration must take): the form's duplicate-link and imposed-format check. `?mine=1` (bearer required, 401 otherwise) returns every tournament the caller organizes, whatever its status, most recent start first ("My created tournaments"). With a bearer: each item carries `viewer.hasPool` / `viewer.poolId`. |
-| `/api/tournaments` | POST | required | Create. Enforces spec §9 (10 open tournaments per account, moderators exempt). Returns the tournament. If players already have pools bound to that BGA id without a declared tournament (they are already playing it with the default format), the declaration **takes their format** (the submitted config is replaced, the form shows it locked as soon as the link is pasted) and **adopts those pools in the same statement**, so the tournament is locked from the start. If those pools do not all share one format, the declaration is refused (409 `bga_tournament_mixed_formats`). |
+| `/api/tournaments` | GET | none (optional bearer) | List. `?status=upcoming\|ongoing\|open\|all` (`open` = upcoming + ongoing, the default), ordered by `starts_at`. `?bgaId=<numeric id>` instead returns the live (not detached) declaration of that BGA tournament whatever its status, 0 or 1 item, plus `legacy`: `null`, or `{ pools, mixed, config }` for the pools already bound to that BGA id without a declaration (the format a declaration must take): the form's duplicate-link and imposed-format check. `?mine=1` (bearer required, 401 otherwise) returns every tournament the caller organizes, whatever its status, most recent start first ("My created tournaments"). With a bearer: each item carries `viewer.hasPool` / `viewer.poolId`. Every item carries `visibility`. The status lists are filtered by the caller (§14.8): a private tournament is listed only to its organizer, the players who have a pool on it and the moderators (anonymous callers get the public rows only). `?bgaId=` answers `{ visibility: 'private' }` alone when the declaration is private and the caller may not see it (`legacy` unchanged); `?mine=1` is unchanged. |
+| `/api/tournaments` | POST | required | Create. Enforces spec §9 (10 open tournaments per account, moderators exempt). `visibility` optional (`public` by default, or `private`; anything else → 400 `fields.visibility = 'invalid_visibility'`). Returns the tournament. If players already have pools bound to that BGA id without a declared tournament (they are already playing it with the default format), the declaration **takes their format** (the submitted config is replaced, the form shows it locked as soon as the link is pasted) and **adopts those pools in the same statement**, so the tournament is locked from the start. If those pools do not all share one format, the declaration is refused (409 `bga_tournament_mixed_formats`). |
 | `/api/tournaments/:id` | GET | none (optional bearer) | Detail + `poolCount`, `locked`, `poolsByOrigin` (organizer/moderator only), `viewer` (bearer only). |
-| `/api/tournaments/:id` | PATCH | organizer / moderator | Partial update: `name`, `description`, `startsAt`, `endsAt`, `bgaUrl` (unlocked only), `config` (unlocked only, atomic), `action: cancel\|restore\|close\|reopen\|detach` (`detach` moderator only, §14.5). 409 `tournament_locked` when a locked field is sent, `tournament_detached` on a detached tournament, `bga_tournament_taken` when the new link is already declared. A `bgaUrl` change to a BGA id already played with legacy pools follows the same rule as creation (their format imposed, pools adopted; mixed formats → 409 `bga_tournament_mixed_formats`). |
+| `/api/tournaments/:id` | PATCH | organizer / moderator | Partial update: `name`, `description`, `visibility` (every status but detached, never locked, §14.8), `startsAt`, `endsAt`, `bgaUrl` (unlocked only), `config` (unlocked only, atomic), `action: cancel\|restore\|close\|reopen\|detach` (`detach` moderator only, §14.5). 409 `tournament_locked` when a locked field is sent, `tournament_detached` on a detached tournament, `bga_tournament_taken` when the new link is already declared. A `bgaUrl` change to a BGA id already played with legacy pools follows the same rule as creation (their format imposed, pools adopted; mixed formats → 409 `bga_tournament_mixed_formats`). |
 | `/api/tournaments/:id` | DELETE | organizer / moderator | 409 `tournament_has_pools` unless zero pools. |
 | `/api/tournaments/:id/pool` | GET | required | Get-or-create the caller's pool (`createdBy: 'page'`). 409 `tournament_closed` when cancelled/ended **and** no pool exists yet (with `status: 'detached'` when a detach won the race), 409 `pool_unavailable` when the config kept changing during generation (§5). `/api/tournament-bga-decklist` and `/api/tournament-pool-counts` answer the same two cases with a 409 too. |
-| `/api/tournament-bound-pools` | GET | required | Unchanged shape + `tournament: { id, name, startsAt, status } \| null` per pool, + top-level `pending: { id, deck } \| null` (the pending prep pool, read only). |
+| `/api/tournament-bound-pools` | GET | required | Unchanged shape + `tournament: { id, name, startsAt, visibility, status } \| null` per pool, + top-level `pending: { id, deck } \| null` (the pending prep pool, read only). |
 | `/api/tournament-bga-decklist`, `/api/tournament-pool-counts`, `/api/tournament-pool-by-deck`, `/api/tournament-pool` | — | — | **Unchanged contracts.** Internally they go through §14.2 / `loadPool`. |
 
 A public GET carrying an expired bearer gets the anonymous view, never a 401. Moderators: the
@@ -1296,9 +1298,9 @@ with the query kept, so the testers' bookmarks still work.
 
 | Route | Page | Notes |
 | --- | --- | --- |
-| `/tournament` | `TournamentMenu.jsx` (reworked) | Header (title, "Create a tournament", BGA registration notice); **"My ongoing tournaments"** (logged in, when any): a grid of the started tournaments the player has a pool in, each card opening the tournament page with a direct "Change my deck" button; then **tabs**, each with a one-line explanation, the active one kept in the URL (`?tab=upcoming|ongoing|pools|created`): **Upcoming** (default, public), **Ongoing** (public: pools can still be prepared until the end), **My pools** (every bound pool, declared tournaments first; a card opens the tournament page, or the pool itself for a BGA tournament nobody declared, plus "Change my deck"), **My created tournaments** (`GET /api/tournaments?mine=1`, every status, grouped: ongoing then upcoming, each chronological, then a folded "Ended and cancelled (N)" block with the ended, cancelled and detached ones). The two personal tabs show a Connect box when logged out. **Below the tabs**, whatever tab is open, the generic "Tournament not listed here?" block: its button opens `/tournament/prep` (login first when logged out) and reads "Prepare my next tournament", or "See my pool and deck for my next tournament" once the player has a pending prep pool (`pending` from `GET /api/tournament-bound-pools`). |
-| `/tournament/new` | `TournamentForm.jsx` | Create mode. Live validation (`src/lib/tournamentForm.js` `tournamentFormIssues`, the API's own pure checks + a duplicate-link lookup, `GET /api/tournaments?bgaId=`, debounced while typing; the unique index + 409 on submit stay the real guard): the submit button sits in a bar stuck to the bottom of the screen, disabled while problems remain, with the list of problems next to it (each one jumps to its field; Enter in a field jumps to the first one, caught on the form's `keydown` since a disabled default button blocks implicit submission). Crossed dates are reported under the date field changed last: a start moved past the end says "The start must be before the end." under the start, an end moved before the start the reverse. A session expired while filling the form (401 on submit) shows "Reconnect (your input is kept)": the input is parked in `sessionStorage` (`tournament_form_draft:<id\|new>`) across the Keycloak round trip and put back when the form comes back (in edit mode over the server values, the config only while unlocked). |
-| `/tournament/t/:id` | `TournamentDetail.jsx` | Header, description, 3-step checklist (register on BGA → open your pool → build your deck), organizer panel. |
+| `/tournament` | `TournamentMenu.jsx` (reworked) | Header (title, "Create a tournament", BGA registration notice); **"My ongoing tournaments"** (logged in, when any): a grid of the started tournaments the player has a pool in, each card opening the tournament page with a direct "Change my deck" button; then **tabs**, each with a one-line explanation, the active one kept in the URL (`?tab=upcoming|ongoing|pools|created`): **Upcoming** (default, public), **Ongoing** (public: pools can still be prepared until the end; both filtered by the visibility, §14.8), **My pools** (every bound pool, declared tournaments first; a card opens the tournament page, or the pool itself for a BGA tournament nobody declared, plus "Change my deck"), **My created tournaments** (`GET /api/tournaments?mine=1`, every status, grouped: ongoing then upcoming, each chronological, then a folded "Ended and cancelled (N)" block with the ended, cancelled and detached ones). The two personal tabs show a Connect box when logged out. **Below the tabs**, whatever tab is open, the generic "Tournament not listed here?" block: its button opens `/tournament/prep` (login first when logged out) and reads "Prepare my next tournament", or "See my pool and deck for my next tournament" once the player has a pending prep pool (`pending` from `GET /api/tournament-bound-pools`). A private tournament carries a "Private" pill on its cards (§14.8). |
+| `/tournament/new` | `TournamentForm.jsx` | Create mode. A **Visibility** radio under the description (Public by default, or Private, §14.8). Live validation (`src/lib/tournamentForm.js` `tournamentFormIssues`, the API's own pure checks + a duplicate-link lookup, `GET /api/tournaments?bgaId=`, debounced while typing; the unique index + 409 on submit stay the real guard): the submit button sits in a bar stuck to the bottom of the screen, disabled while problems remain, with the list of problems next to it (each one jumps to its field; Enter in a field jumps to the first one, caught on the form's `keydown` since a disabled default button blocks implicit submission). Crossed dates are reported under the date field changed last: a start moved past the end says "The start must be before the end." under the start, an end moved before the start the reverse. A session expired while filling the form (401 on submit) shows "Reconnect (your input is kept)": the input is parked in `sessionStorage` (`tournament_form_draft:<id\|new>`) across the Keycloak round trip and put back when the form comes back (in edit mode over the server values, the config only while unlocked). |
+| `/tournament/t/:id` | `TournamentDetail.jsx` | Header (status pill, "Private" pill when private), description, 3-step checklist (register on BGA → open your pool → build your deck), the **share box** (link, Copy, Share…, QR code; every status but detached, §14.8), organizer panel. |
 | `/tournament/t/:id/edit` | `TournamentForm.jsx` | Edit mode; BGA link + config disabled once a pool exists. Nothing of the form renders until `GET /api/tournaments/:id` (its `viewer` block) says the viewer may edit; anyone else goes straight to the tournament page (the PATCH is refused server-side anyway, 403). |
 | `/tournament/t/:id/pool` | `TournamentPoolPage.jsx` | `TournamentPoolView` with `load = fetchTournamentPool(id)`, back link to the tournament. |
 
@@ -1394,7 +1396,7 @@ uniques. Public summary: `7 boosters · [icon] Axiom mono-faction · all sets`, 
 
 **Recette.** `docs/tournaments/acceptance-mono-faction-sealed.html` (step ids `mf-<group>-<slug>`,
 11 replayed by `tests/e2e/specs/faction-sealed.spec.js`). `scripts/e2e-acceptance-coverage.mjs`
-reads the three acceptance pages (`ACCEPTANCE_PAGES`, §14.7 adds the V3 one) and refuses an id
+reads the acceptance pages (`ACCEPTANCE_PAGES`, §14.7 and §14.8 add the V3 and V4 ones) and refuses an id
 present in two pages.
 
 **Merge.** Kept as a draft PR: not merged before the lot 1 beta is closed and #22 (unmasking) is
@@ -1476,11 +1478,101 @@ ids 123490–123499, 123499 being a throwaway tournament), 19 steps replayed by
 `tests/e2e/specs/multiset-sealed.spec.js`; the V3 tournament is SKY ×3, ROC ×3, NEJ ×1. The V2
 steps that quoted "One set" were reworded and re-id'd (`mf-a-switch-r2`, `mf-a-hints-r2`,
 `mf-g-imposed-r2`) so they come back unchecked. `scripts/e2e-acceptance-coverage.mjs` reads the
-three pages.
+three pages (four since §14.8).
 
 **Merge.** Draft PR stacked on `feat/mono-faction-sealed` (#25), retargeted to `main` once #25
 merges; the branch is updated with merge commits, never rebased. Group K of the V3 recette runs
 on preprod before production.
+
+### 14.8 Private tournaments and the share box (V4)
+
+Format: every declared tournament gets a **visibility**, `public` (the default) or `private`, and
+its page a **share box** (link, copy, native share sheet, QR code). "Private" is **listing only**:
+a private tournament is absent from Upcoming / Ongoing for the people it does not concern, while
+its page by URL, "Open your pool", the pool page, the checklist, the organizer panel, the
+moderator actions and the BGA path (§14.2) ignore the visibility (anyone with the link can prepare
+a pool, a BGA player gets one at their first game). Invitations by pseudo were weighed and kept
+out: no service resolves a pseudo (spec §14.7). Design approved 2026-11-01 (spec §14).
+
+**Data.** `tournaments.visibility text not null default 'public' check (visibility in ('public',
+'private'))`, added idempotently at the end of `sealed-pools-schema.sql` (`add column if not
+exists`); existing rows become public through the default; no index. `VISIBILITIES` lives in
+`src/lib/tournamentRules.js`: `validateTournamentFields` defaults it to `public` on create (absent,
+`null` or empty), validates it on a PATCH only when the key is sent, anything else → 400
+`fields.visibility = 'invalid_visibility'`. Editable like `name`: every status but detached, never
+locked by the pools (making a tournament public after players prepared pools is supported).
+`toTournamentJson` returns `visibility` on every tournament JSON.
+
+**Listing rule.** A private tournament is listed to its **organizer**, every player who **has a
+pool** on it (`sealed_pools.sub` with that `tournament_ref`, whether the page or a BGA call created
+it) and the **moderators**; nobody else, anonymous included. `listTournaments(status, viewer)`
+(`src/lib/tournamentStore.js`, `viewer = { sub, isModerator } | null`) applies it in SQL next to the
+status filter: `t.visibility = 'public' OR $2` (moderator) `OR t.organizer_sub = $1 OR EXISTS` (a
+pool of that tournament for `$1`); a null `$1` leaves anonymous callers with the public rows only.
+The same rule as a pure function, `canSeeTournament(row, viewer, { hasPool })`
+(`src/lib/tournamentRules.js`, DB rows), decides the redaction of the `?bgaId=` lookup.
+`listTournamentsByOrganizer` (`?mine=1`) and `listBoundTournamentPools` need no filter (the
+caller's own), and the detail endpoint never filters: the page is reachable by URL by design.
+
+**API.** `GET /api/tournaments?status=` filters with the caller's verified identity (a bad or
+expired bearer is the anonymous view, never a 401). `?bgaId=`: when the live declaration is private
+and the caller may not see it, the item is redacted to `{ visibility: 'private' }` (no id, name,
+organizer, config, dates, pool count nor viewer block; `legacy` unchanged). The form still refuses
+the link ("A tournament already exists for this BGA link."): `takenBgaIds` stores
+`holder.id ?? 'private'`, a sentinel that never equals the edited tournament's id, and the organizer
+editing their own private tournament gets the full item, so their own link is not "taken". `POST`
+and `PATCH` accept `visibility`; `/api/tournament-bound-pools` adds `visibility` to each pool's
+`tournament` block. `/api/tournaments/:id/pool` and the BGA-facing endpoints are unchanged.
+
+**UI.** Form, section 1, under the description: a **Visibility** radio group (`tn-visibility`,
+`visibility-public` / `visibility-private`): "Public — Listed in Upcoming and Ongoing for
+everyone." and "Private — Listed only for you, the players who have a pool and the moderators.
+Share its link.", each hint being its option's description. Default public, prefilled in edit
+mode, always enabled, kept in the `sessionStorage` draft, sent on create and on every PATCH;
+`tournamentFormIssues` places `visibility` after `description` (unreachable from the radios, kept
+for the API path). `PrivateBadge` (`src/components/TournamentBits.jsx`): a muted pill, an inline
+padlock SVG (`aria-hidden`) + "Private", title "Private tournament: not listed publicly",
+`data-testid="tournament-private"`; after the status pill on the hub cards (Upcoming, Ongoing,
+"My pools", "My created tournaments") and in the tournament page header, after the name on the
+"My ongoing tournaments" cards (they have no status pill); not on the pool page. The hub has no
+other change: the public tabs show the filtered list, so "My ongoing tournaments" and the tab
+counters follow. **Share box** (`ShareBox.jsx`, `share-box`) on the tournament page, between the
+checklist and the organizer panel, in every status but detached, logged out too: "Share this
+tournament", a hint (private: "This tournament is private: its link is the only way to find it.",
+in every status; public: "Anyone with the link can open this page and prepare a pool.", only while
+upcoming or ongoing), the absolute URL `${location.origin}/tournament/t/<id>` in a read-only input
+(`share-url`, selected on focus), **Copy** (`share-copy`, "✓ Copied" for 2 s), **Share…**
+(`share-native`, rendered only when `navigator.share` exists, called with the tournament name and
+the URL; a dismissed or rejected sheet is ignored) and the QR code (`share-qr`, hidden below `sm`).
+The helpers are in `src/lib/share.js` (`copyText`, `canNativeShare`, `nativeShare`,
+`tournamentShareUrl`). `copyText` moved there from `ExportMenu`: `navigator.clipboard` first, then
+the `execCommand('copy')` textarea, and it now returns `false` when `execCommand` refuses (it used to
+report a success), so `ExportMenu` shows its "copy failed" toast in that case. When the copy fails,
+the share box focuses and selects the URL so the user copies it by hand, never an error.
+
+**QR code and Lobby.** Generated locally with `qrcode-generator` (2.0.4, exact pin, MIT, no
+transitive dependency): `src/lib/qr.js` `qrSvgPath(text, { level = 'M' }) → { size, d }` (the dark
+modules as one SVG path, a 4-module quiet zone `QR_QUIET_ZONE`, throws on an empty text), rendered
+by `QrCode.jsx` (props `value`, `label`, `size` = 120, `className`, `testId` = `qr-code`; an
+`<svg role="img" aria-label>`). Always **black modules on a white tile**, in both themes (literal
+`#000` / `#fff`, the one deliberate exception to the semantic tokens: an inverted code is not read
+by every scanner). The Lobby's room QR code renders through the same component (same place,
+120 px, `lobby.qrCodeAlt`, hidden below `sm`) instead of an `<img>` from `api.qrserver.com` (amber
+on dark): nothing leaves the browser, and `tests/e2e/support/network.js` dropped that host's
+exception, so a request there is a leak that fails the test.
+
+**Recette.** `docs/tournaments/acceptance-private-tournaments.html` ("Private tournaments and the
+share box — V4", step ids `pv-<group>-<slug>`, BGA ids 123500–123509; "Private cup" is 123500,
+"Public control" 123501), 35 steps, 24 replayed by `tests/e2e/specs/private-tournaments.spec.js`
+(4 of them partially: native share, QR, FR, mobile). Group E (the duplicate-link check) runs
+**before** D on purpose, while carol is still a stranger to "Private cup"; `pv-g-copy-fallback`
+checks the refused copy; the real phone checks (scanning the QR codes, the phone's share sheet,
+joining a room by scan) are in `pv-k-preprod`. `scripts/e2e-acceptance-coverage.mjs` reads the
+four pages.
+
+**Merge.** Draft PR stacked on `feat/multiset-sealed` (#26), retargeted to `main` once #25 and #26
+merge; the branch is updated with merge commits, never rebased. Group K of the V4 recette runs on
+preprod before production.
 
 ---
 
