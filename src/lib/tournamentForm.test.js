@@ -86,6 +86,20 @@ describe('tournamentFormIssues (faction source)', () => {
   })
 })
 
+describe('tournamentFormIssues (multiset source)', () => {
+  it('reports a multiset split that does not reach 7 under the sets field', () => {
+    const issues = tournamentFormIssues({ body, config: { ...config, source: { type: 'multiset', sets: { CYCLONE: 4 } } }, now: NOW, isCreate: true })
+    expect(issues).toEqual([{ field: 'sets', code: 'required' }])
+  })
+  it('reports the in-booster cap under the uniques field', () => {
+    const issues = tournamentFormIssues({ body, config: { source: { type: 'multiset', sets: { CYCLONE: 1, FUGUE: 6 } }, heroes: 'packs', uniques: { inBoosters: 4, guaranteed: 0 } }, now: NOW, isCreate: true })
+    expect(issues).toEqual([{ field: 'uniques', code: 'uniques.inBoosters' }])
+  })
+  it('accepts a valid multiset split and random mode', () => {
+    expect(tournamentFormIssues({ body, config: { source: { type: 'multiset', sets: { CYCLONE: 4, EOLE: 3 } }, heroes: 'packs', uniques: { inBoosters: 0, guaranteed: 1, randomOneIn: 8 } }, now: NOW, isCreate: true })).toEqual([])
+  })
+})
+
 describe('tournamentFormIssues (BGA tournament already played with mixed legacy formats)', () => {
   it('blocks the link when its legacy pools have mixed formats', () => {
     const mixedBgaIds = new Set(['7'])
