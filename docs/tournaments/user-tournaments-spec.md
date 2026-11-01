@@ -479,7 +479,8 @@ PR stacked on V2's branch (`feat/multiset-sealed` from `feat/mono-faction-sealed
 sealed** source (7 classic single-set boosters split over several sets) and a **random number of
 uniques** option available with every source. Scope is declared tournaments only (`/tournament/new`,
 stored pools, the BGA path): not the Lobby, not `current_format`, not the legacy pools, no change
-to the BGA-facing contracts. Everything downstream of the stored pool (deck builder, Re:Union deck
+to the BGA-facing contracts (the only addition is the `sourceType` key that `poolResponse` now
+returns, so `/api/tournament-pool*` carry it too; additive, no consumer depends on its absence). Everything downstream of the stored pool (deck builder, Re:Union deck
 sync, BGA deck-list validation) is unchanged.
 
 ### 13.1 Why
@@ -530,30 +531,36 @@ uRng = mulberry32(hashSeed(seedStr + '#uniques')) # uniques stream
    boosters by `generateOnePack(heroes, commons, rares, [], i, 0, rng)`; then `shuffle(boosters, rng)`.
    A booster's set is `setCodeFromRef(booster[0])` (set-pure, hero or common first).
 3. In-booster positions:
-   - exact mode: `pickRareSlots(boosters, eligibleIdx, inBoosters, rng)` — the generalization
+   - exact mode: `pickRareSlots(boosters, eligibleIdx, inBoosters, rng, rareStart)` — the generalization
      of `swapUniquesIntoRareSlots` that takes the eligible booster indices (sets with range
      data); called with every index it consumes the rng exactly as before, so lot 1 / V2 keep
-     their digests. Positions are grouped by the booster's set.
-   - random mode: for `b` in booster order, `hit = rng() < 1 / randomOneIn`; a hit on an
-     eligible booster adds the position `(b, lastRareSlot)`; other hits are dropped.
+     their digests. Positions are grouped by the booster's set, in the order drawn. Fewer
+     positions than `inBoosters` → throw (the validator's cap makes it unreachable).
+   - random mode: `rollBoosterHits(boosters.length, randomOneIn, rng)`, i.e. for `b` in booster
+     order `hit = rng() < 1 / randomOneIn`; a hit on an eligible booster adds the position
+     `(b, lastSlot)` (the booster's last ref, a rare); other hits are dropped.
 4. Guaranteed: for each of `guaranteed`, draw a set on `uRng` weighted by the booster counts
-   over the eligible sets (`pickWeighted`-style cumulative draw, sets in `SETS` order).
+   over the eligible sets (`pickWeightedSet`, `src/lib/packGenerator.js`: cumulative draw, sets
+   in `SETS` order).
 5. For each eligible set in `SETS` order with a need: one `pickDeterministicUniques(set, uRng,
    { uniqueCount: inSet + outSet, faction, isAllowed })`; the first `inSet` refs fill that
-   set's positions in position order, the rest are the guaranteed uniques. `isAllowed` rejects
-   banned families (when `excludeBanlist`) **and** any ref already drawn for this pool, so two
-   calls never hand out the same serial. Fewer refs than wanted → throw (as today).
+   set's positions in the order of step 3, the rest are the guaranteed uniques. `isAllowed` is
+   the per-pool gate (`uniqueGate`, module-private, used by every source): it rejects banned
+   families (when `excludeBanlist`) **and** any ref already drawn for this pool, so two calls
+   never hand out the same serial. Fewer refs than wanted → throw (as today).
 6. `cards` = counts of every booster ref + guaranteed refs + (heroes `free`) every hero of every
    included set once.
 
 Random mode on the other sources (after their exact path, which is untouched; with
-`inBoosters = 0` that path only draws the guaranteed uniques):
+`inBoosters = 0` that path only draws the guaranteed uniques), through the exported
+`placeRandomUniques(boosters, { rng, uRng, oneIn, setForHit, faction, isAllowed, onDrawn })`:
 
 - `set`: roll every booster on `rng` (step 3, random); hits → one extra `pickDeterministicUniques`
   call for the set, refs placed in the hit boosters' last rare slot.
 - `faction`: roll every booster on `rng`; per hit, draw the set on `uRng` by weight over the
-  included range-capable sets; then per set in `SETS` order one extra call. Every call takes the
-  `isAllowed` that rejects already-drawn refs.
+  included range-capable sets (`pickWeightedSet`, drawn as each hit is rolled); then per set in
+  `SETS` order one extra call. Every call takes the `uniqueGate` predicate, so a ref drawn by the
+  exact path is never drawn again.
 
 Rng consumption order is part of the contract (golden tests): boosters, shuffle, positions or
 rolls on the booster stream; set draws then per-set unique calls on the uniques stream.
@@ -561,37 +568,46 @@ rolls on the booster stream; set draws then per-set unique calls on the uniques 
 ### 13.4 Form and pages
 
 **Cards section ("Sets" tab).** State `setCounts: { CODE: n }` (only n > 0) replaces `setCode`.
-`SetPresetGrid` takes an optional `counts` prop (badge `×n`, ✓ at 7, `aria-pressed` on 7; the
-Lobby keeps calling it without `counts`, unchanged); `onSelect(code)` → `{ [code]: 7 }`, `onSelect(null)` → `{}`.
+`SetPresetGrid` takes an optional `counts` prop (badge `×n` at 1–6,
+`data-testid="set-badge-<CODE>"`; the ✓ and `aria-pressed` stay driven by `selected`, which the
+form sets to the set holding all 7; the Lobby keeps calling it without `counts`, unchanged); `onSelect(code)` → `{ [code]: 7 }`, `onSelect(null)` → `{}`.
 The disclosure (`data-testid="set-mix-toggle"`, `aria-expanded`) wraps the generalized
 `SetWeightsList` (props `max`, `maxTotal`, `format`, `trailing`, `testIdPrefix`; the faction tab
 keeps `set-weight-<CODE>`, the Sets tab uses `set-count-<CODE>`) and the counter
-(`data-testid="set-count-total"`, "n / 7", `text-ok` at 7). The config sent is
+(`data-testid="set-count-total"`, "n / 7", `text-ok` at 7, `text-accent-ink` otherwise; shown
+while the disclosure is open or the split has several sets). The config sent is
 `{ type: 'multiset', sets: setCounts, boosters: 7 }`; the live issue on `source.sets` reads
 "Choose a set." at 0 boosters and "The boosters must add up to 7 (n now)." otherwise (the "+"
 cap makes > 7 impossible from the UI); the faction tab keeps "Include at least one set.".
+The in-booster cap (3 × the boosters of sets with range data, only finite when a data-less set
+is in the split) caps the exact stepper and, for a value already past it after the sets
+changed, shows "Too many uniques in boosters for the sets with unique data (n max)." on
+`uniques.inBoosters` (never clamped silently).
 `uniqueSupport` = no set chosen, or at least one chosen set with range data; a chosen set
 without data next to one with data shows the hint "Boosters of Neverending Journey never hold a
 unique: no unique data yet." in the uniques block. Draft (sessionStorage), edit prefill and the
 imposed legacy format all read and write `setCounts` (`set` → `{ [setCode]: 7 }`, an old draft's
 `setCode` too).
 
-**Settings section.** `TournamentUniqueFields` gains the mode switch (radiogroup, aria-label
-"Uniques inside boosters"), the slider (`<input type="range" min=1 max=10>` with `direction: rtl`
+**Settings section.** `TournamentUniqueFields` (new props `partialSupport`, `multiSet`,
+`maxInBoosters`, `lastOneIn` / `onLastOneIn`) gains the mode switch (radiogroup, aria-label
+"Uniques inside boosters", `data-testid="uniques-mode-exact"` / `"uniques-mode-random"`), the slider (`<input type="range" min=1 max=10>` with `direction: rtl`
 so the handle moves right as uniques get more frequent, `data-testid="random-one-in"`,
-`aria-valuetext` = the live text), hides the in-booster stepper in random mode and "even
+`aria-valuetext` = the live text, also shown in `data-testid="random-one-in-text"`), hides the in-booster stepper in random mode and "even
 factions" in random mode or for a multi-set split. The form state keeps `uniques.randomOneIn`
 (null in exact mode) plus the last values of both modes.
 
 **Summary** (`configSummaryParts`): see §13.2. **Pool page**: `PackReveal` derives the cover per
 booster (set-pure and `sourceType !== 'faction'`) instead of the `noCover` flag;
-`TournamentPoolView` passes `pool.sourceType`; `poolResponse` adds `sourceType`.
+`TournamentPoolView` passes `pool.sourceType` (the client-side `mixedSets` state is gone);
+`poolResponse` adds `sourceType`.
 
 **i18n** (`tournaments.*`, EN + FR): `sourceSets` ("Sets" / "Extensions"), `cardsHint` reworded
 ("Each player receives 7 boosters. Pick a set, or mix several below."), `mixSetsToggle`,
-`mixSetsCounter` ("{{n}} / 7"), `errBoostersTotal`, `uniquesModeLabel`, `uniquesModeExact`,
+`mixSetsHint`, `mixSetsCounter` ("{{n}} / 7"), `errBoostersTotal`, `errUniquesTooMany`, `uniquesModeLabel`, `uniquesModeExact`,
 `uniquesModeRandom`, `randomOneInLabel`, `randomOneInText` ("1 booster in {{n}} ({{pct}} %)"),
-`randomOneInEvery`, `randomOneInMin` ("1 in 10"), `randomOneInMax` ("every booster"),
+`randomOneInEvery` ("every booster (100 %)"), `randomOneInMin` ("1 in 10"), `randomOneInMax`
+("every booster"), `randomOneInHint`,
 `uniquesPartialSupport`, `summaryUniquesRandom` ("1 unique in {{n}} boosters"),
 `summaryUniquesEvery` ("a unique in every booster"). `sourceOneSet` is removed.
 
@@ -619,13 +635,18 @@ booster (set-pure and `sourceType !== 'faction'`) instead of the `noCover` flag;
 - Recette page groups: 0 setup, A the Sets tab, B create, C the pool, D exact uniques in a
   multi-set, E random uniques (set / multi-set / mono-faction), F API guards and normalization,
   G BGA path, H edit and lock, I FR / theme / mobile / console, K before production. BGA ids
-  123490–123498.
+  123490–123499 (123499: a throwaway tournament, created then deleted in `ms-e-summary`).
+  As built: 35 steps, 19 replayed by `multiset-sealed.spec.js`; the V2 steps that quoted "One set"
+  were reworded and re-id'd (`mf-a-switch-r2`, `mf-a-hints-r2`, `mf-g-imposed-r2`).
 
 ### 13.6 Left to the builder
 
 - The exact Tailwind layout of the disclosure and the slider (semantic tokens only; the slider's
   track colour may stay the browser default with `accent-accent`).
 - Whether `SetWeightsList` is renamed (`SetCountsList` would read better) — a rename must update
-  the V2 tests and recette text that mention it.
+  the V2 tests and recette text that mention it. **As built:** kept, generalized with `max`,
+  `maxTotal`, `format`, `trailing`, `testIdPrefix`.
 - The split of `buildMultisetPool` into helpers shared with the random roll of the other sources,
-  as long as §13.3's rng order holds and the two existing goldens do not move.
+  as long as §13.3's rng order holds and the two existing goldens do not move. **As built:**
+  `placeRandomUniques` serves `set` and `faction`; `buildMultisetPool` rolls inline (its hits
+  share the per-set call with the guaranteed uniques); `uniqueGate` is shared by all three.

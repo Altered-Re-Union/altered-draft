@@ -42,8 +42,8 @@ against the player's pool by calling altered-draft back.
 Two ways a sealed configuration is chosen:
 
 - **Declared tournaments** (§14): an organizer declares a BGA tournament on altered-draft with
-  its own configuration (7 boosters of one set, or of one faction over weighted sets (§14.6),
-  heroes, uniques, ban list). Its players get
+  its own configuration (7 boosters of one set or split over several sets (§14.7), or of one
+  faction over weighted sets (§14.6), heroes, exact or random uniques, ban list). Its players get
   a pool built from that configuration.
 - **The current competitive format** (a row in `current_format`, seeded by
   `sealed-pools-schema.sql`) for the two generic flows: the casual "normal" pool and the
@@ -432,7 +432,18 @@ Details that matter:
   No unique slot of its own (`randomUniqueRate = 0`, empty uniques pool). Pools are deduped by
   `name+faction` inside `splitPools`.
 - **Unique injection**: after the 7 packs are built, all `(pack, rareSlot)` positions (7×3)
-  are shuffled with the booster rng and the first `uniqueRefs.length` receive the uniques.
+  are shuffled with the booster rng and the first `uniqueRefs.length` receive the uniques
+  (`pickRareSlots` with every pack eligible, byte-identical to the historical draw). A
+  multi-set pool (§14.7) only lists the boosters of sets with faction-range data, and each
+  position receives a unique **of its booster's set**: one `pickDeterministicUniques` call per
+  set in `SETS` order, the guaranteed uniques of that set (drawn by booster-count weight) in
+  the same call.
+- **Random roll** (`uniques.randomOneIn = N`, §14.7): after the exact path (which then only
+  draws the guaranteed uniques), every booster rolls `rng() < 1 / N` on the booster stream, in
+  booster order; a hit puts a unique in the booster's **last slot** (a rare). The unique's set
+  is the set (`set`), the booster's set (`multiset`), or drawn by the source weights on the
+  uniques stream (`faction`); a hit whose set has no faction-range data is dropped, the roll
+  still consumed. Then one extra `pickDeterministicUniques` call per set (`placeRandomUniques`).
 - **Unique drawing** (`pickDeterministicUniques`): uses the bundled per-set tables
   `src/lib/data/factionRanges/<SET>.json` = `{ family_id: { faction: [[start, end], ...] } }`,
   derived from real production data. Each rare *family* (e.g. `AX_106`) has a serial range
@@ -444,8 +455,10 @@ Details that matter:
   is AX, out-of-faction prints of other factions' cards included (every set has 14 to 41
   such families per faction). Otherwise `evenFactions: true` round-robins target factions
   (the config drops it below 2 uniques and whenever a faction is set). Dedupes within one call (so booster and outside
-  uniques never overlap); an optional `isAllowed(ref)` predicate redraws refused refs (the
-  ban list).
+  uniques never overlap); an optional `isAllowed(ref)` predicate redraws refused refs. Every
+  call of `poolBuilder.js` passes the same per-pool gate (`uniqueGate`): banned families when
+  the ban list is on, and every ref already drawn for this pool, so two calls on the same
+  uniques stream never hand out the same serial.
   Sets covered: CORE, COREKS, ALIZE, BISE, CYCLONE, DUSTER, EOLE. **FUGUE has no table**: a
   declared tournament can't ask for uniques on it (config validation), and `buildPool`
   **throws** when fewer uniques than requested can be drawn instead of returning a smaller
@@ -1215,7 +1228,8 @@ implementation plan: [`user-tournaments-lot1-plan.md`](user-tournaments-lot1-pla
 covers `source.type = 'set'` (7 boosters of one visible set, heroes in boosters or free
 choice, exact uniques inside boosters, guaranteed uniques outside, uniques restricted to one
 faction, even factions, ban list); V2 (§14.6) adds `source.type = 'faction'`, mono-faction
-sealed over weighted sets.
+sealed over weighted sets; V3 (§14.7) adds `source.type = 'multiset'`, the 7 single-set boosters
+split over several sets, and random uniques (one booster in N) on every source.
 
 ### 14.1 Stored pools
 
@@ -1370,20 +1384,99 @@ first `inBoosters` replace rare slots, the rest are guaranteed.
 `sealed-pools-schema.sql`); faction pools store `NULL`. A pool can now span several sets, so
 `buildCardMap(refs)` (`api/_lib/tournamentPool.js`) loads every set present in the refs rather than
 one set, only codes known to `SETS` (a stray ref in a deck edited on decks-api is left out of the
-card map instead of aborting the deck reconciliation); the pool page does the same client-side and skips the single-set booster cover for mixed
-pools.
+card map instead of aborting the deck reconciliation); the pool page does the same client-side and never shows a booster cover
+for a faction pool (`sourceType === 'faction'`, §14.7).
 
-**UI.** The tournament form's Cards step has a source switch "One set" / "Mono-faction mix": faction
+**UI.** The tournament form's Cards step has a source switch "Sets" / "Mono-faction mix": faction
 pills, a weight stepper per set (×0 to ×3) with its share in %, and a fixed-faction line for the
 uniques. Public summary: `7 boosters · [icon] Axiom mono-faction · all sets`, or
 `... · SKY, ROC ×2, NEJ` when weights are not uniform.
 
 **Recette.** `docs/tournaments/acceptance-mono-faction-sealed.html` (step ids `mf-<group>-<slug>`,
 11 replayed by `tests/e2e/specs/faction-sealed.spec.js`). `scripts/e2e-acceptance-coverage.mjs`
-reads both acceptance pages (`ACCEPTANCE_PAGES`) and refuses an id present in two pages.
+reads the three acceptance pages (`ACCEPTANCE_PAGES`, §14.7 adds the V3 one) and refuses an id
+present in two pages.
 
 **Merge.** Kept as a draft PR: not merged before the lot 1 beta is closed and #22 (unmasking) is
 merged. Rebase then; `README.md`, `index.html` and `CLAUDE.md` are shared with #22.
+
+### 14.7 Multi-set sealed and random uniques (V3)
+
+Format: the 7 classic single-set boosters **split over several sets** ("3 Skybound Odyssey,
+3 Roots of Corruption, 1 Neverending Journey"), and an option that gives **each booster its own
+chance of a unique**, like real packs, instead of an exact count. The option works with the three
+sources. Design approved 2026-11-01 (spec §13).
+
+**Config.** `source: { type: 'multiset', sets: { CODE: 0..7 }, boosters: 7 }`, validated in
+`src/lib/tournamentConfig.js` (`SOURCE_TYPES = ['set', 'faction', 'multiset']`). Zeros are
+dropped, COREKS is refused, the counts must add up to **exactly 7**; every shape problem is
+`source.sets`. A multiset left with **one** set is stored as `{ type: 'set', setCode, boosters: 7 }`
+(the form always sends `multiset`, the validator normalizes), so a "mix" of one set keeps
+`set_code`, the legacy seed and the golden digest. `uniques.randomOneIn`: `null` (exact mode) or
+1–`MAX_RANDOM_ONE_IN` (10), "one unique in N boosters", form default `DEFAULT_RANDOM_ONE_IN` (8,
+12.5 %); always present in the normalized config, config-only (not in the seed nor the snapshot
+columns). In random mode `inBoosters` is forced to 0 and `evenFactions` to `false` (client values
+ignored, never an error); `guaranteed` and `faction` keep working. `evenFactions` is also forced
+off for a multiset. For a multiset, `uniques.inBoosters` is capped at 3 × the boosters of the
+sets that have faction-range data (error `uniques.inBoosters`); `uniques.unsupportedSet` is raised
+when a unique is wanted (exact, guaranteed or random) and no included set has range data.
+`legacyColumnsFromConfig` writes `set_code: null`.
+
+**Generation.** `buildPool` routes to `buildMultisetPool` (`src/lib/poolBuilder.js`).
+`generateMultisetSealedPool` (`src/lib/packGenerator.js`) builds `counts[set]` classic boosters
+per set in `SETS` order (`splitPools` + `generateOnePack`: hero of that set, 9 commons, 3 rares,
+no duplicate within a booster, reprints across sets distinct), then shuffles the 7 with the
+booster rng. A booster's set is the set of its first ref. Rng contract (pinned by the goldens):
+booster stream = boosters, shuffle, then rare-slot positions (`pickRareSlots`) or random rolls
+(`rollBoosterHits`); uniques stream = guaranteed set draws (`pickWeightedSet`), then one
+`pickDeterministicUniques` per set in `SETS` order. The `set` and `faction` exact paths consume
+both streams exactly as before: their two golden digests did not move, four new ones pin the
+multiset exact draw and random mode on each source.
+
+**Heroes.** `packs`: each booster's hero comes from its set. `free`: every hero of every
+included set is appended once.
+
+**Uniques.** Always from the bundled faction-range tables, never the live cards API; Neverending
+Journey still gives none. Exact mode on a multiset: the positions are drawn over the boosters
+whose set has range data only, and a unique is **of its booster's set**; each guaranteed unique's
+set is drawn weighted by the booster counts over those sets. Random mode: every booster rolls
+`rng() < 1 / N`, a hit takes the booster's last slot (a rare); the unique's set is the set
+(`set`), the booster's set (`multiset`, a hit on a NEJ booster is dropped) or drawn by the source
+weights over the sets with data (`faction`). On a multiset the hits and the guaranteed uniques of
+a set come from the same per-set call; on `set` and `faction`, `placeRandomUniques` runs after
+the untouched exact path. Every call goes through the per-pool `uniqueGate` (ban list + refs
+already drawn), so a pool never holds the same serial twice.
+
+**Data and server.** No schema change: a multiset pool stores `set_code NULL` (V2 made it
+nullable), its sets come from the refs. `poolResponse` exposes `sourceType` (from the stored
+`sealed_pools.config`, `'set'` when absent), an additive key also returned by
+`/api/tournament-pool*`.
+
+**UI.** The Cards step's first tab is **"Sets"** ("Extensions" in FR), one model (`setCounts`)
+and two views: the set grid (one click = the 7 boosters of that set, a `×n` badge on a set at
+1–6, the ✓ at 7) and a **"Mix several sets"** disclosure (`set-mix-toggle`, closed by default,
+opened for an edited multiset) with a 0–7 stepper per set (`set-count-<CODE>`) and an `n / 7`
+counter (`set-count-total`; "+" greys out at 7). Live issues: "Choose a set." at 0, "The boosters
+must add up to 7 (n now)." otherwise, and the cap message when too many uniques are asked in the
+boosters with data. Settings: a switch **"Exact number" / "Random, like real packs"**; random
+shows a slider from "1 in 10" to "every booster" (`random-one-in`, default 1 in 8, live text
+"1 booster in 8 (12.5 %)") and hides the in-booster stepper and "even factions" ("even factions"
+is hidden for a multi-set split too). A set without data next to one with data shows "Boosters of
+Neverending Journey never hold a unique". Summary: `7 boosters · SKY ×3, ROC ×3, NEJ`, and
+`1 unique in 8 boosters` / `a unique in every booster` in random mode. Pool page: `PackReveal`
+shows the pack photo for a **set-pure booster** unless `sourceType === 'faction'` (the ROC
+boosters of a multiset pool get the Roots of Corruption cover, SKY and NEJ have none yet).
+
+**Recette.** `docs/tournaments/acceptance-multiset-sealed.html` (step ids `ms-<group>-<slug>`, BGA
+ids 123490–123499, 123499 being a throwaway tournament), 19 steps replayed by
+`tests/e2e/specs/multiset-sealed.spec.js`; the V3 tournament is SKY ×3, ROC ×3, NEJ ×1. The V2
+steps that quoted "One set" were reworded and re-id'd (`mf-a-switch-r2`, `mf-a-hints-r2`,
+`mf-g-imposed-r2`) so they come back unchecked. `scripts/e2e-acceptance-coverage.mjs` reads the
+three pages.
+
+**Merge.** Draft PR stacked on `feat/mono-faction-sealed` (#25), retargeted to `main` once #25
+merges; the branch is updated with merge commits, never rebased. Group K of the V3 recette runs
+on preprod before production.
 
 ---
 
