@@ -44,11 +44,11 @@ function defaultStart() {
 // Each listed problem jumps to its field. Inline messages appear once a field was touched.
 const FIELD_DOM_ID = {
   name: 'tn-name', description: 'tn-desc', bgaUrl: 'tn-bga', startsAt: 'tn-start', endsAt: 'tn-end',
-  setCode: 'tn-cards', faction: 'tn-cards', sets: 'tn-cards', uniques: 'tn-settings',
+  faction: 'tn-cards', sets: 'tn-cards', uniques: 'tn-settings',
 }
 const FIELD_LABEL_KEY = {
   name: 'tournaments.nameLabel', description: 'tournaments.descriptionLabel', bgaUrl: 'tournaments.bgaUrlLabel',
-  startsAt: 'tournaments.startsAtLabel', endsAt: 'tournaments.endsAtLabel', setCode: 'tournaments.sectionCards',
+  startsAt: 'tournaments.startsAtLabel', endsAt: 'tournaments.endsAtLabel',
   faction: 'tournaments.sectionCards', sets: 'tournaments.sectionCards', uniques: 'tournaments.tournamentUniquesTitle',
 }
 
@@ -61,7 +61,6 @@ function issueMessage({ field, code }, t, { isFaction = false, boosterTotal = 0,
     case 'bgaUrl': return code === 'taken' ? t('tournaments.errBgaTaken') : code === 'mixed_formats' ? t('tournaments.errBgaMixed') : t('tournaments.errBgaUrl')
     case 'startsAt': return code === 'must_be_before_end' ? t('tournaments.errStartsAtBeforeEnd') : t('tournaments.errStartsAt')
     case 'endsAt': return t('tournaments.errEndsAt')
-    case 'setCode': return t('tournaments.errSelectSet')
     case 'faction': return t('tournaments.errSelectFaction')
     case 'sets':
       if (isFaction) return t('tournaments.errSelectSets')
@@ -425,7 +424,7 @@ export default function TournamentForm() {
             faction={faction} onFaction={edit('faction', setFaction)}
             weights={setWeights} onWeights={edit('sets', setSetWeights)}
             disabled={configFrozen || saving} />
-          <ErrorLine field="setCode" /><ErrorLine field="faction" /><ErrorLine field="sets" />
+          <ErrorLine field="faction" /><ErrorLine field="sets" />
         </section>
 
         {/* Section 3 — settings */}
