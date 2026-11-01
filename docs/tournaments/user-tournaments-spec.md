@@ -591,8 +591,8 @@ imposed legacy format all read and write `setCounts` (`set` → `{ [setCode]: 7 
 
 **Settings section.** `TournamentUniqueFields` (new props `partialSupport`, `multiSet`,
 `maxInBoosters`, `lastOneIn` / `onLastOneIn`) gains the mode switch (radiogroup, aria-label
-"Uniques inside boosters", `data-testid="uniques-mode-exact"` / `"uniques-mode-random"`), the slider (`<input type="range" min=1 max=10>` with `direction: rtl`
-so the handle moves right as uniques get more frequent, `data-testid="random-one-in"`,
+"Uniques inside boosters", `data-testid="uniques-mode-exact"` / `"uniques-mode-random"`), the slider (`<input type="range" min=1 max=10>` whose position is `11 - N`,
+so the handle and the fill move right as uniques get more frequent and the arrow keys follow, `data-testid="random-one-in"`,
 `aria-valuetext` = the live text, also shown in `data-testid="random-one-in-text"`), hides the in-booster stepper in random mode and "even
 factions" in random mode or for a multi-set split. The form state keeps `uniques.randomOneIn`
 (null in exact mode) plus the last values of both modes.

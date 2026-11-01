@@ -70,10 +70,11 @@ export default function TournamentUniqueFields({
             <label htmlFor="random-one-in" className="text-sm text-ink2">{t('tournaments.randomOneInLabel')}</label>
             <span data-testid="random-one-in-text" className="text-sm font-semibold text-ink tabular-nums">{oneInText}</span>
           </div>
-          {/* rtl: the handle moves right as uniques get more frequent (1 in 10 … every booster) */}
-          <input id="random-one-in" type="range" min={1} max={MAX_RANDOM_ONE_IN} step={1} value={oneIn}
-            onChange={e => set({ randomOneIn: Number(e.target.value) })} disabled={off}
-            data-testid="random-one-in" style={{ direction: 'rtl' }} className="accent-accent w-full" aria-valuetext={oneInText} />
+          {/* The position is reversed from N so the fill grows left to right as uniques get more
+              frequent: position 1 = "1 in 10", position 10 = every booster. */}
+          <input id="random-one-in" type="range" min={1} max={MAX_RANDOM_ONE_IN} step={1} value={MAX_RANDOM_ONE_IN + 1 - oneIn}
+            onChange={e => set({ randomOneIn: MAX_RANDOM_ONE_IN + 1 - Number(e.target.value) })} disabled={off}
+            data-testid="random-one-in" className="accent-accent w-full" aria-valuetext={oneInText} />
           <div className="flex justify-between text-xs text-faint">
             <span>{t('tournaments.randomOneInMin')}</span>
             <span>{t('tournaments.randomOneInMax')}</span>
