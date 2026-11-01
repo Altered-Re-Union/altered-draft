@@ -58,6 +58,22 @@ export function factionTournamentBody(overrides = {}) {
   })
 }
 
+// "SKY ROC NEJ mix" of the V3 acceptance page: the 7 boosters split over three sets, each
+// booster set-pure (Neverending Journey has no unique data: its booster never holds one).
+export function multisetTournamentBody(overrides = {}) {
+  return tournamentBody({
+    name: 'SKY ROC NEJ mix',
+    bgaUrl: 'https://boardgamearena.com/tournament?id=123490',
+    config: {
+      source: { type: 'multiset', sets: { CYCLONE: 3, EOLE: 3, FUGUE: 1 } },
+      heroes: 'packs',
+      uniques: { inBoosters: 2, guaranteed: 1, evenFactions: false, faction: null, randomOneIn: null },
+      excludeBanlist: false,
+    },
+    ...overrides,
+  })
+}
+
 function expectStatus(res, status, what) {
   if (res.status !== status) throw new Error(`${what} → ${res.status} ${JSON.stringify(res.body)}`)
   return res.body

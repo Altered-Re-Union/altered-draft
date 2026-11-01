@@ -330,9 +330,9 @@ const MIX_CONFIG = '{ source: { type: "multiset", sets: { CYCLONE: 3, EOLE: 3, F
 
 // Steps replayed by the Playwright suite. Rewritten by `npm run test:e2e:coverage -- --write`
 // (scripts/e2e-acceptance-coverage.mjs) from the tests' tags: do not edit this line by hand.
-const AUTO_STEPS = [];
+const AUTO_STEPS = ['ms-a-grid', 'ms-a-issues', 'ms-a-mix', 'ms-a-switch', 'ms-b-create', 'ms-c-boosters', 'ms-c-reveal', 'ms-d-cap', 'ms-d-guaranteed', 'ms-d-in-boosters', 'ms-e-faction', 'ms-e-form', 'ms-e-mix', 'ms-e-set', 'ms-f-api', 'ms-f-normalize', 'ms-g-bga', 'ms-h-locked', 'ms-i-mobile'];
 // Steps the suite covers with a narrower assertion than the acceptance steps (hand-maintained).
-const AUTO_PARTIAL = {};
+const AUTO_PARTIAL = { 'ms-c-reveal': 'which boosters show the pack photo, checked against the stored pool; the photo itself and the opening animation stay a human check', 'ms-e-faction': 'random uniques of an Axiom mix on the e2e fixtures (SKY ×1, ROC ×2, NEJ ×1) with the fake cards API; the seven-set config and the real faction through the community cards API stay manual', 'ms-i-mobile': 'no horizontal scroll on the form (disclosure open, random slider), the tournament page and the pool page, set name and stepper on one line; the reveal at 375 px stays a human check' };
 
 const GROUPS = [
   {
