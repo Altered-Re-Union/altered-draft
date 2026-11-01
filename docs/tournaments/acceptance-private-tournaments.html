@@ -333,9 +333,9 @@ curl -s -o /dev/null -w 'logout %{http_code}\\n' -X POST -H "Authorization: Bear
 
 // Steps replayed by the Playwright suite. Rewritten by `npm run test:e2e:coverage -- --write`
 // (scripts/e2e-acceptance-coverage.mjs) from the tests' tags: do not edit this line by hand.
-const AUTO_STEPS = [];
+const AUTO_STEPS = ['pv-a-radio', 'pv-b-create', 'pv-b-created-tab', 'pv-c-anon', 'pv-c-moderator', 'pv-c-organizer', 'pv-c-public-control', 'pv-c-stranger', 'pv-d-ongoing', 'pv-d-pool', 'pv-d-url', 'pv-e-owner', 'pv-e-stranger', 'pv-f-private', 'pv-f-public', 'pv-g-box', 'pv-g-copy', 'pv-g-copy-fallback', 'pv-g-detached', 'pv-g-native', 'pv-g-qr', 'pv-h-lobby-qr', 'pv-i-fr', 'pv-i-mobile'];
 // Steps the suite covers with a narrower assertion than the acceptance steps (hand-maintained).
-const AUTO_PARTIAL = {};
+const AUTO_PARTIAL = { 'pv-g-native': 'the “Share…” button and what it hands to a stubbed navigator.share (title and link); the real share sheet, Firefox without the button and the phone stay a human check', 'pv-g-qr': 'a local SVG, black modules on a white tile in both themes, no external QR request; scanning it with a phone stays a human check', 'pv-i-fr': 'the French Visibility group, Private pill and share box, no raw i18n key on the form, the tournament page and the hub; “no English text left” stays a human check', 'pv-i-mobile': 'at 375 px the Visibility options stacked, the share box without the QR code, no horizontal scroll on the form, the hub and the tournament page; the Lobby without its QR code stays a human check' };
 
 const GROUPS = [
   {
