@@ -42,7 +42,7 @@ test.beforeEach(async ({ db, fakes }) => {
   await fakes.reset()
 })
 
-test('form: the faction chips and how they interact', { tag: ['@l-form'] }, async ({ openAs }) => {
+test('form: the faction chips and how they interact', { tag: ['@l-form-r2'] }, async ({ openAs }) => {
   const page = await openForm(openAs)
   const radios = chips(page).getByRole('radio')
   await expect(radios).toHaveCount(7)
@@ -87,7 +87,7 @@ test('create "Axiom cup": stored config and summary', { tag: ['@l-create'] }, as
   await expectAxiomSummary(page.getByTestId('tournament-summary'))
   const { body } = await api(null).get('/api/tournaments')
   expect(body.tournaments.find(tn => tn.bgaTournamentId === '123470').config.uniques)
-    .toEqual({ inBoosters: 2, guaranteed: 2, evenFactions: false, faction: 'AX' })
+    .toEqual({ inBoosters: 2, guaranteed: 2, evenFactions: false, faction: 'AX', randomOneIn: null })
 })
 
 test('menu: the card carries the faction, in both themes', { tag: ['@l-menu'] }, async ({ openAs, seed }) => {
@@ -156,7 +156,7 @@ test('API: a faction without any unique is reset to null', { tag: ['@l-api-no-un
     config: { source: { type: 'set', setCode: 'CYCLONE' }, heroes: 'packs', uniques: { inBoosters: 0, guaranteed: 0, faction: 'BR' } },
   })
   expect(res.status).toBe(201)
-  expect(res.body.config.uniques).toEqual({ inBoosters: 0, guaranteed: 0, evenFactions: false, faction: null })
+  expect(res.body.config.uniques).toEqual({ inBoosters: 0, guaranteed: 0, evenFactions: false, faction: null, randomOneIn: null })
   expect([200, 204]).toContain((await api('alice').delete(`/api/tournaments/${res.body.id}`)).status)
 })
 

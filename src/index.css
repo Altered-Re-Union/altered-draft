@@ -206,3 +206,38 @@
   filter: brightness(1.05) contrast(1.05) saturate(0.8);
   mix-blend-mode: soft-light;
 }
+
+/* Unique card back shown while the unique's true face is being drawn (CardImage.jsx): a gold
+   sheen sweeps across the official card back, so the wait reads as "something rare is coming"
+   rather than as a broken image. Still (no sweep) when the user asks for reduced motion. */
+.unique-back {
+  position: relative;
+  overflow: hidden;
+  background: #0c3a4a url('/images/card-back.webp') center / cover no-repeat;
+}
+.unique-back--pending {
+  box-shadow: 0 0 0 1px hsl(42 90% 58% / 0.7), 0 0 18px hsl(42 90% 58% / 0.45);
+}
+.unique-back--pending::after {
+  content: '';
+  position: absolute;
+  inset: -50%;
+  background: linear-gradient(
+    115deg,
+    transparent 40%,
+    hsl(45 100% 70% / 0.15) 45%,
+    hsl(45 100% 80% / 0.65) 50%,
+    hsl(45 100% 70% / 0.15) 55%,
+    transparent 60%
+  );
+  animation: unique-back-sweep 1.8s ease-in-out infinite;
+  mix-blend-mode: screen;
+  pointer-events: none;
+}
+@keyframes unique-back-sweep {
+  from { transform: translateX(-60%); }
+  to { transform: translateX(60%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .unique-back--pending::after { animation: none; transform: none; opacity: 0.4; }
+}

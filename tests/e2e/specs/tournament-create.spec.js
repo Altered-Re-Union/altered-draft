@@ -183,7 +183,7 @@ test('a set without unique data disables the uniques', { tag: ['@b-nej'] }, asyn
   }
   await createAndOpen(page)
   const { body } = await api(null).get('/api/tournaments')
-  expect(body.tournaments[0].config.uniques).toEqual({ inBoosters: 0, guaranteed: 0, evenFactions: false, faction: null })
+  expect(body.tournaments[0].config.uniques).toEqual({ inBoosters: 0, guaranteed: 0, evenFactions: false, faction: null, randomOneIn: null })
 })
 
 test('even factions needs two uniques', { tag: ['@b-even'] }, async ({ openAs, api }) => {

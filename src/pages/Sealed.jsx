@@ -214,7 +214,7 @@ export default function Sealed() {
       {/* FULL POOL TAB — shared PoolGrid */}
       {tab === 'pool' && (
         <PoolGrid refs={allRefs} cardMap={cardMap} deck={deck} poolCounts={poolCounts}
-          onAdd={addToDeck} onRemove={removeFromDeck} loading={loading} />
+          onAdd={addToDeck} onRemove={removeFromDeck} onDeckChange={saveDeck} loading={loading} />
       )}
 
       {/* DECK TAB */}
@@ -231,7 +231,7 @@ export default function Sealed() {
           </div>
           {deckTotal === 0
             ? <div className="flex-1 flex items-center justify-center text-faint text-sm">{t('sealed.noDeckCardsYet')}</div>
-            : <div className="flex-1 overflow-hidden"><PoolGrid refs={deckRefs} cardMap={cardMap} deck={deck} poolCounts={poolCounts} onAdd={addToDeck} onRemove={removeFromDeck} loading={loading} /></div>}
+            : <div className="flex-1 overflow-hidden"><PoolGrid refs={deckRefs} cardMap={cardMap} deck={deck} poolCounts={poolCounts} onAdd={addToDeck} onRemove={removeFromDeck} onDeckChange={saveDeck} loading={loading} /></div>}
         </div>
       )}
 

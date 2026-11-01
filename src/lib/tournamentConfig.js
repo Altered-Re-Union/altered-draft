@@ -8,8 +8,10 @@ export const CONFIG_VERSION = 1
 export const SEALED_BOOSTERS = 7
 export const MAX_UNIQUES = 7
 export const HERO_MODES = ['packs', 'free']
-export const SOURCE_TYPES = ['set', 'faction']
+export const SOURCE_TYPES = ['set', 'faction', 'multiset']
 export const MAX_SET_WEIGHT = 3
+export const MAX_RANDOM_ONE_IN = 10
+export const DEFAULT_RANDOM_ONE_IN = 8
 
 /**
  * The set codes a config draws from, in `SETS` order (codes unknown to SETS after, in their
@@ -18,7 +20,7 @@ export const MAX_SET_WEIGHT = 3
  */
 export function configSetCodes(config) {
   const src = config.source
-  if (src.type !== 'faction') return [src.setCode]
+  if (src.type === 'set') return [src.setCode]
   const rank = code => {
     const i = SETS.findIndex(s => s.code === code)
     return i === -1 ? SETS.length : i
@@ -47,6 +49,7 @@ export function validateTournamentConfig(input) {
   const isFaction = src.type === 'faction'
   let set = null
   let factionSets = {}
+  let multiSets = null
   if (isFaction) {
     if (!FACTIONS.includes(src.faction)) errors.push('source.faction')
     const raw = src.sets && typeof src.sets === 'object' && !Array.isArray(src.sets) ? src.sets : null
@@ -61,6 +64,23 @@ export function validateTournamentConfig(input) {
       }
     }
     if (!setsOk || !Object.keys(factionSets).length) errors.push('source.sets')
+  } else if (src.type === 'multiset') {
+    const raw = src.sets && typeof src.sets === 'object' && !Array.isArray(src.sets) ? src.sets : null
+    let setsOk = !!raw
+    const counts = {}
+    if (raw) {
+      const visible = SETS.filter(s => !s.hidden)
+      if (Object.keys(raw).some(code => !visible.some(s => s.code === code))) setsOk = false
+      for (const { code } of visible) {
+        const n = toInt(raw[code], 0)
+        if (n === null || n < 0 || n > SEALED_BOOSTERS) setsOk = false
+        else if (n > 0) counts[code] = n
+      }
+    }
+    const codes = Object.keys(counts)
+    if (!setsOk || !codes.length || codes.reduce((t, k) => t + counts[k], 0) !== SEALED_BOOSTERS) errors.push('source.sets')
+    else if (codes.length === 1) set = SETS.find(s => s.code === codes[0]) // one set left: stored as `set`
+    else multiSets = counts
   } else if (src.type === 'set') {
     set = SETS.find(s => s.code === src.setCode && !s.hidden) ?? null
     if (!set) errors.push('source.setCode')
@@ -70,24 +90,38 @@ export function validateTournamentConfig(input) {
   if (!HERO_MODES.includes(c.heroes)) errors.push('heroes')
 
   const u = c.uniques && typeof c.uniques === 'object' ? c.uniques : {}
-  const inBoosters = toInt(u.inBoosters, 0)
+  // Random mode (spec §5.1, §13.2): each booster rolls its own unique. It replaces the exact
+  // in-booster count, whose client value is not even range-checked.
+  const randomOneIn = u.randomOneIn === undefined || u.randomOneIn === null ? null : toInt(u.randomOneIn, null)
+  const randomBad = u.randomOneIn !== undefined && u.randomOneIn !== null
+    && (typeof u.randomOneIn === 'boolean' || randomOneIn === null || randomOneIn < 1 || randomOneIn > MAX_RANDOM_ONE_IN)
+  if (randomBad) errors.push('uniques.randomOneIn')
+  const random = !randomBad && randomOneIn !== null
+  const rawInBoosters = toInt(u.inBoosters, 0)
+  const inBoosters = random ? 0 : rawInBoosters
   const guaranteed = toInt(u.guaranteed, 0)
-  if (inBoosters === null || inBoosters < 0 || inBoosters > MAX_UNIQUES) errors.push('uniques.inBoosters')
+  if (!random && (inBoosters === null || inBoosters < 0 || inBoosters > MAX_UNIQUES)) errors.push('uniques.inBoosters')
   if (guaranteed === null || guaranteed < 0 || guaranteed > MAX_UNIQUES) errors.push('uniques.guaranteed')
   // A faction source forces both (spec §5): the client's values are ignored, never an error.
   if (!isFaction) {
     if (u.evenFactions !== undefined && typeof u.evenFactions !== 'boolean') errors.push('uniques.evenFactions')
     if (u.faction !== undefined && u.faction !== null && !FACTIONS.includes(u.faction)) errors.push('uniques.faction')
   }
-  const wantsUniques = (inBoosters ?? 0) > 0 || (guaranteed ?? 0) > 0
+  const wantsUniques = (inBoosters ?? 0) > 0 || (guaranteed ?? 0) > 0 || random
   if (set && wantsUniques && !hasFactionRanges(set.code)) errors.push('uniques.unsupportedSet')
   if (isFaction && !errors.some(e => e.startsWith('source.')) && wantsUniques && !Object.keys(factionSets).some(hasFactionRanges)) errors.push('uniques.unsupportedSet')
+  if (multiSets && wantsUniques) {
+    const eligible = Object.keys(multiSets).filter(hasFactionRanges)
+    if (!eligible.length) errors.push('uniques.unsupportedSet')
+    else if (!random && inBoosters !== null && inBoosters > 3 * eligible.reduce((t, k) => t + multiSets[k], 0)) errors.push('uniques.inBoosters')
+  }
 
   if (c.excludeBanlist !== undefined && typeof c.excludeBanlist !== 'boolean') errors.push('excludeBanlist')
 
   if (errors.length) return { ok: false, errors, config: null }
   const uniqueTotal = inBoosters + guaranteed
-  const faction = isFaction ? (uniqueTotal > 0 ? src.faction : null) : uniqueTotal > 0 ? u.faction ?? null : null
+  const hasUniques = uniqueTotal > 0 || random
+  const faction = isFaction ? (hasUniques ? src.faction : null) : hasUniques ? u.faction ?? null : null
   return {
     ok: true,
     errors: [],
@@ -96,12 +130,14 @@ export function validateTournamentConfig(input) {
       format: 'sealed',
       source: isFaction
         ? { type: 'faction', faction: src.faction, sets: factionSets, boosters: SEALED_BOOSTERS }
-        : { type: 'set', setCode: set.code, boosters: SEALED_BOOSTERS },
+        : multiSets
+          ? { type: 'multiset', sets: multiSets, boosters: SEALED_BOOSTERS }
+          : { type: 'set', setCode: set.code, boosters: SEALED_BOOSTERS },
       heroes: c.heroes,
       // Even factions only means something from 2 uniques on and without a single faction;
       // a stale "true" would still change the draw (evenFactionTargets consumes the rng) and
       // mislead the stored config. Same for a faction left over with no unique at all.
-      uniques: { inBoosters, guaranteed, evenFactions: !!u.evenFactions && uniqueTotal >= 2 && !faction, faction },
+      uniques: { inBoosters, guaranteed, evenFactions: !!u.evenFactions && !random && !multiSets && uniqueTotal >= 2 && !faction, faction, randomOneIn: random ? randomOneIn : null },
       excludeBanlist: !!c.excludeBanlist,
     },
   }
@@ -118,6 +154,7 @@ export function configFromLegacyFormat(row) {
       inBoosters: row.unique_count ?? 0,
       guaranteed: row.guaranteed_uniques ?? 0,
       evenFactions: !!row.even_factions,
+      randomOneIn: null,
     },
     excludeBanlist: false,
   }

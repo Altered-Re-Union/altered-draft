@@ -4,6 +4,7 @@ import { FACTIONS, FACTION_NAMES, FACTION_COLORS, SET_ABBREV, SET_FULL_NAMES, SE
 import { FACTION_ICONS, RARITY_GEMS, SET_ICONS } from '../lib/assets.js'
 import { setsForCube } from '../lib/cubes.js'
 import { useLang } from '../lib/i18n/i18n.jsx'
+import CardImage from './CardImage.jsx'
 
 // Parse info from reference without any API fetch
 function parseRef(ref) {
@@ -258,11 +259,8 @@ export default function CubePreviewModal({ cube, onClose }) {
                           onMouseEnter={() => setHoverCard(c)}
                           onMouseLeave={() => setHoverCard(null)}>
                           <div className="aspect-[2/3] bg-surface3 overflow-hidden">
-                            {c.card?.imagePath ? (
-                              <img src={c.card.imagePath} alt={c.card.name}
-                                className="w-full h-full object-cover"
-                                loading="lazy"
-                                onError={e => { e.currentTarget.style.display = 'none' }} />
+                            {(c.card?.imagePath || c.card?.faceLang) ? (
+                              <CardImage card={c.card} className="w-full h-full object-cover" loading="lazy" />
                             ) : (
                               <div className="w-full h-full flex items-center justify-center p-1">
                                 <span className="text-xs text-faint text-center leading-tight">
@@ -309,9 +307,9 @@ export default function CubePreviewModal({ cube, onClose }) {
       </div>
 
       {/* Hover card image tooltip (grid mode) */}
-      {hoverCard?.card?.imagePath && viewMode === 'grid' && (
+      {(hoverCard?.card?.imagePath || hoverCard?.card?.faceLang) && viewMode === 'grid' && (
         <div className="fixed bottom-6 right-6 z-[60] w-48 rounded-xl overflow-hidden shadow-2xl border border-line pointer-events-none">
-          <img src={hoverCard.card.imagePath} alt={hoverCard.card.name} className="w-full" />
+          <CardImage card={hoverCard.card} className="w-full" backClassName="w-full aspect-[744/1039]" />
           <div className="bg-surface px-2 py-1.5">
             <p className="text-xs font-medium text-ink">{hoverCard.card.name}</p>
             <p className="text-xs text-faint">{FACTION_NAMES[hoverCard.faction]} · {t(RARITY_LABEL_KEY[hoverCard.rarity]) ?? hoverCard.rarity}</p>

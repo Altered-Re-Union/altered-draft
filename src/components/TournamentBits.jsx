@@ -28,8 +28,17 @@ export function formatDateTime(iso) {
 export function configSummaryParts(config, t, tc) {
   const u = config.uniques ?? {}
   const isFaction = config.source?.type === 'faction'
+  const isMulti = config.source?.type === 'multiset'
   let parts
-  if (isFaction) {
+  if (isMulti) {
+    const counts = config.source.sets ?? {}
+    const setsText = SETS.filter(s => counts[s.code] > 0)
+      .map(s => `${SET_ABBREV[s.code] ?? s.code}${counts[s.code] > 1 ? ` ×${counts[s.code]}` : ''}`).join(', ')
+    parts = [
+      { text: t('tournaments.summaryBoostersCount', { n: config.source.boosters ?? 7 }) },
+      { text: setsText },
+    ]
+  } else if (isFaction) {
     const f = config.source.faction
     const weights = config.source.sets ?? {}
     const visible = SETS.filter(s => !s.hidden)
@@ -45,12 +54,14 @@ export function configSummaryParts(config, t, tc) {
     const setName = SETS.find(s => s.code === config.source?.setCode)?.name ?? config.source?.setCode ?? ''
     parts = [{ text: t('tournaments.summaryBoosters', { n: config.source?.boosters ?? 7, set: setName }) }]
   }
-  if (u.inBoosters > 0) parts.push({ text: tc('tournaments.summaryUniquesIn', u.inBoosters) })
+  if (u.randomOneIn) {
+    parts.push({ text: u.randomOneIn === 1 ? t('tournaments.summaryUniquesEvery') : t('tournaments.summaryUniquesRandom', { n: u.randomOneIn }) })
+  } else if (u.inBoosters > 0) parts.push({ text: tc('tournaments.summaryUniquesIn', u.inBoosters) })
   if (u.guaranteed > 0) parts.push({ text: tc('tournaments.summaryUniquesOut', u.guaranteed) })
-  if (!isFaction && u.faction && (u.inBoosters + u.guaranteed) > 0) {
+  if (!isFaction && u.faction && (u.randomOneIn || (u.inBoosters + u.guaranteed) > 0)) {
     parts.push({ text: t('tournaments.summaryFaction', { faction: FACTION_NAMES[u.faction] ?? u.faction }), icon: FACTION_ICONS[u.faction] })
   }
-  if (u.evenFactions && (u.inBoosters + u.guaranteed) >= 2) parts.push({ text: t('tournaments.summaryEven') })
+  if (!u.randomOneIn && u.evenFactions && (u.inBoosters + u.guaranteed) >= 2) parts.push({ text: t('tournaments.summaryEven') })
   if (config.heroes === 'free') parts.push({ text: t('tournaments.summaryHeroesFree') })
   if (config.excludeBanlist) parts.push({ text: t('tournaments.summaryBanlist') })
   return parts

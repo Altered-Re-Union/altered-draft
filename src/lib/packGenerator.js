@@ -14,6 +14,20 @@ export function shuffle(arr, rng = Math.random) {
 }
 
 /**
+ * Set codes ordered by their position in `SETS`; codes unknown to `SETS` come after,
+ * in their original order (stable). Returns a new array.
+ * @param {string[]} codes
+ * @returns {string[]}
+ */
+export function sortCodesBySetOrder(codes) {
+  const rank = code => { const i = SETS.findIndex(s => s.code === code); return i === -1 ? SETS.length : i }
+  return codes
+    .map((code, order) => ({ code, order }))
+    .sort((a, b) => rank(a.code) - rank(b.code) || a.order - b.order)
+    .map(k => k.code)
+}
+
+/**
  * Split `n` cards between sets in proportion to `weights` ({ SET: weight }), exactly:
  * floor of each share, then the leftover cards go to the largest remainders. Remainder
  * ties are broken by shuffling the tied sets with `rng`. Keys are iterated in SETS order
@@ -22,11 +36,7 @@ export function shuffle(arr, rng = Math.random) {
  * @returns {{[set: string]: number}}
  */
 export function quotas(weights, n, rng = Math.random) {
-  const rank = code => { const i = SETS.findIndex(s => s.code === code); return i === -1 ? SETS.length : i }
-  const keys = Object.keys(weights)
-    .map((code, order) => ({ code, order }))
-    .sort((a, b) => rank(a.code) - rank(b.code) || a.order - b.order)
-    .map(k => k.code)
+  const keys = sortCodesBySetOrder(Object.keys(weights))
   const total = keys.reduce((sum, k) => sum + weights[k], 0)
   const rows = keys.map(code => {
     const exact = total > 0 ? (n * weights[code]) / total : 0
@@ -403,14 +413,68 @@ function generateOnePack(heroes, commons, rares, uniques, packIndex, randomUniqu
  * is itself deterministic.
  */
 function swapUniquesIntoRareSlots(packs, uniqueRefs, rng, rareStart) {
-  const slotPositions = []
-  for (let p = 0; p < packs.length; p++) {
-    for (let s = 0; s < 3; s++) slotPositions.push([p, rareStart + s])
-  }
-  const chosen = shuffle(slotPositions, rng).slice(0, uniqueRefs.length)
+  const chosen = pickRareSlots(packs, packs.map((_, i) => i), uniqueRefs.length, rng, rareStart)
   chosen.forEach(([packIdx, slotIdx], i) => {
     packs[packIdx][slotIdx] = uniqueRefs[i]
   })
+}
+
+/**
+ * Pick `n` distinct rare-slot positions `[packIdx, slotIdx]` among the boosters listed
+ * in `eligibleIdx` (3 rare slots each, from `rareStart`). Positions are listed in
+ * eligible order then slot order and shuffled with `rng`; with every pack eligible this
+ * is exactly the historical draw, so existing digests hold. Fewer than `n` come back
+ * when the eligible boosters don't have enough slots.
+ * @returns {[number, number][]}
+ */
+export function pickRareSlots(packs, eligibleIdx, n, rng, rareStart) {
+  const slotPositions = []
+  for (const p of eligibleIdx) {
+    for (let s = 0; s < 3; s++) slotPositions.push([p, rareStart + s])
+  }
+  return shuffle(slotPositions, rng).slice(0, n)
+}
+
+/** One `rng() < 1 / oneIn` roll per booster, in booster order. */
+export function rollBoosterHits(count, oneIn, rng) {
+  return Array.from({ length: count }, () => rng() < 1 / oneIn)
+}
+
+/**
+ * Cumulative weighted draw of one set code among the keys of `weights` with a weight
+ * above 0, in `SETS` order (unknown codes last, insertion order, like `quotas`).
+ */
+export function pickWeightedSet(weights, rng) {
+  const codes = sortCodesBySetOrder(Object.keys(weights).filter(c => weights[c] > 0))
+  const total = codes.reduce((sum, c) => sum + weights[c], 0)
+  const r = rng() * total
+  let acc = 0
+  for (const c of codes) {
+    acc += weights[c]
+    if (r < acc) return c
+  }
+  return codes[codes.length - 1]
+}
+
+/**
+ * Multi-set SEALED pool: for each set with `counts[code] > 0` and cards (SETS order,
+ * unknown codes after), `counts[code]` single-set boosters of normal composition (no
+ * unique slot), then all boosters shuffled together. Pure and seeded.
+ * @param {{[set: string]: object[]}} cardsBySet
+ * @param {() => number} rng
+ * @param {{counts: {[set: string]: number}, includeHeroes?: boolean}} options
+ * @returns {string[][]}
+ */
+export function generateMultisetSealedPool(cardsBySet, rng, { counts, includeHeroes = true }) {
+  const codes = sortCodesBySetOrder(Object.keys(counts).filter(c => counts[c] > 0 && cardsBySet[c]))
+  const packs = []
+  for (const code of codes) {
+    const { heroes, commons, rares } = splitPools(cardsBySet[code], includeHeroes)
+    for (let i = 0; i < counts[code]; i++) {
+      packs.push(generateOnePack(heroes, commons, rares, [], i, 0, rng))
+    }
+  }
+  return shuffle(packs, rng)
 }
 
 /**
@@ -453,12 +517,7 @@ export function generateTournamentSealedPool(cards, rng, options = {}) {
  */
 export function generateFactionSealedPool(cardsBySet, rng, options) {
   const { faction, weights, boosters = 7, uniqueRefs = [], includeHeroes = true } = options
-  const rank = code => { const i = SETS.findIndex(s => s.code === code); return i === -1 ? SETS.length : i }
-  const codes = Object.keys(weights)
-    .filter(c => weights[c] > 0 && cardsBySet[c])
-    .map((code, order) => ({ code, order }))
-    .sort((a, b) => rank(a.code) - rank(b.code) || a.order - b.order)
-    .map(k => k.code)
+  const codes = sortCodesBySetOrder(Object.keys(weights).filter(c => weights[c] > 0 && cardsBySet[c]))
   const pools = {}
   for (const code of codes) {
     pools[code] = splitPools(cardsBySet[code].filter(c => c.faction === faction), true)

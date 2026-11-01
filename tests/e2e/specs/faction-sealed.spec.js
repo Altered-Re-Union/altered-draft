@@ -11,6 +11,7 @@ import { factionTournamentBody, tournamentBody } from '../support/api.js'
 import { FAKES_URL, ROOT_DIR } from '../support/env.js'
 import { expectNoHorizontalScroll } from '../support/guards.js'
 import { openPoolPage } from '../support/pages.js'
+import { countBySet, storedPool } from '../support/pools.js'
 import { PERSONAS } from '../support/personas.js'
 import { t, tc } from '../support/i18n.js'
 
@@ -51,28 +52,14 @@ async function setWeights(page, targets) {
   }
 }
 
-// The faction pool of `who` on `tournamentId`, as stored.
-async function storedPool(db, tournamentId, who) {
-  const { rows } = await db.query('SELECT set_code, created_by, boosters, cards FROM sealed_pools WHERE tournament_ref = $1 AND sub = $2', [tournamentId, PERSONAS[who].sub])
-  expect(rows).toHaveLength(1)
-  return rows[0]
-}
-
-const setOf = ref => ref.split('_')[1]
-function countBySet(refs) {
-  const counts = {}
-  for (const ref of refs) counts[setOf(ref)] = (counts[setOf(ref)] ?? 0) + 1
-  return counts
-}
-
 test.beforeEach(async ({ db, fakes }) => {
   await db.resetDb()
   await fakes.reset()
 })
 
-test('form: the source switch, the faction pills and the weight steppers', { tag: ['@mf-a-switch'] }, async ({ openAs }) => {
+test('form: the source switch, the faction pills and the weight steppers', { tag: ['@mf-a-switch-r2'] }, async ({ openAs }) => {
   const page = await openForm(openAs)
-  await expect(sourceRadio(page, 'sourceOneSet')).toHaveAttribute('aria-checked', 'true')
+  await expect(sourceRadio(page, 'sourceSets')).toHaveAttribute('aria-checked', 'true')
   await expect(sourceRadio(page, 'sourceFactionMix')).toHaveAttribute('aria-checked', 'false')
   await page.getByRole('button', { name: 'Skybound Odyssey' }).click()
   await expect(page.getByRole('button', { name: 'Skybound Odyssey' })).toHaveAttribute('aria-pressed', 'true')
@@ -105,7 +92,7 @@ test('form: the source switch, the faction pills and the weight steppers', { tag
   await expect(weight(page, 'CYCLONE')).toContainText('×3')
   await expect(weightButton(page, 'CYCLONE', '+')).toBeDisabled()
 
-  await sourceRadio(page, 'sourceOneSet').click()
+  await sourceRadio(page, 'sourceSets').click()
   await expect(page.getByTestId(/^set-weight-/)).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Skybound Odyssey' })).toHaveAttribute('aria-pressed', 'true')
   await sourceRadio(page, 'sourceFactionMix').click()
@@ -159,7 +146,7 @@ test('create "Axiom mix": stored config and summary', { tag: ['@mf-b-create'] },
     format: 'sealed',
     source: { type: 'faction', faction: 'AX', sets: { CYCLONE: 1, EOLE: 2, FUGUE: 1 }, boosters: 7 },
     heroes: 'packs',
-    uniques: { inBoosters: 0, guaranteed: 1, evenFactions: false, faction: 'AX' },
+    uniques: { inBoosters: 0, guaranteed: 1, evenFactions: false, faction: 'AX', randomOneIn: null },
     excludeBanlist: false,
   })
   const summary = page.getByTestId('tournament-summary')
@@ -262,7 +249,7 @@ test('Neverending Journey alone: uniques disabled, stored with none', { tag: ['@
   await page.waitForURL(/\/tournament\/t\/[0-9a-f-]{36}$/)
   const { body } = await api(null).get(`/api/tournaments/${page.url().split('/').pop()}`)
   expect(body.config.source.sets).toEqual({ FUGUE: 1 })
-  expect(body.config.uniques).toEqual({ inBoosters: 0, guaranteed: 0, evenFactions: false, faction: null })
+  expect(body.config.uniques).toEqual({ inBoosters: 0, guaranteed: 0, evenFactions: false, faction: null, randomOneIn: null })
 })
 
 test('API: invalid sources are refused with their error code', { tag: ['@mf-e-api'] }, async ({ api }) => {
@@ -299,7 +286,7 @@ test('API: the faction and even factions of the uniques are forced', { tag: ['@m
   })
   expect(res.status).toBe(201)
   expect(res.body.config.source.sets).toEqual({ CYCLONE: 1, EOLE: 2 })
-  expect(res.body.config.uniques).toEqual({ inBoosters: 1, guaranteed: 1, evenFactions: false, faction: 'AX' })
+  expect(res.body.config.uniques).toEqual({ inBoosters: 1, guaranteed: 1, evenFactions: false, faction: 'AX', randomOneIn: null })
   expect([200, 204]).toContain((await api('alice').delete(`/api/tournaments/${res.body.id}`)).status)
 })
 
@@ -335,7 +322,7 @@ test('edit: the source, the faction and the weights are locked once a pool exist
   await page.goto(`/tournament/t/${id}/edit`)
   await expect(page.getByText(t('tournaments.lockedNotice'))).toBeVisible()
   await expect(sourceRadio(page, 'sourceFactionMix')).toHaveAttribute('aria-checked', 'true')
-  for (const key of ['sourceOneSet', 'sourceFactionMix']) await expect(sourceRadio(page, key)).toBeDisabled()
+  for (const key of ['sourceSets', 'sourceFactionMix']) await expect(sourceRadio(page, key)).toBeDisabled()
   await expect(factionPills(page).getByRole('radio', { name: 'Axiom', exact: true })).toHaveAttribute('aria-checked', 'true')
   for (const pill of await factionPills(page).getByRole('radio').all()) await expect(pill).toBeDisabled()
   for (const code of VISIBLE_SETS) {

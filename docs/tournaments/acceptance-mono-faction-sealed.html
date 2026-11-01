@@ -315,9 +315,9 @@ const PSQL = (sql) => pre(`${DB} -c "${sql}"`);
 
 // Steps replayed by the Playwright suite. Rewritten by `npm run test:e2e:coverage -- --write`
 // (scripts/e2e-acceptance-coverage.mjs) from the tests' tags: do not edit this line by hand.
-const AUTO_STEPS = ['mf-a-issues', 'mf-a-switch', 'mf-b-create', 'mf-c-pool', 'mf-d-nej', 'mf-d-nej-alone', 'mf-e-api', 'mf-e-forced', 'mf-f-bga', 'mf-g-locked', 'mf-h-mobile'];
+const AUTO_STEPS = ['mf-a-issues', 'mf-a-switch-r2', 'mf-b-create', 'mf-c-pool', 'mf-d-nej', 'mf-d-nej-alone', 'mf-e-api', 'mf-e-forced', 'mf-f-bga', 'mf-g-locked', 'mf-h-mobile'];
 // Steps the suite covers with a narrower assertion than the acceptance steps (hand-maintained).
-const AUTO_PARTIAL = { 'mf-a-switch': 'switch, pills, weights, shares and disabled buttons; the greyed look of an excluded row stays a human check', 'mf-c-pool': 'reveal and stored pool on the e2e fixtures (SKY ×1, ROC ×2, NEJ ×1); the psql line on the real card data (no Trial by Frost ref) stays manual', 'mf-h-mobile': 'no horizontal scroll on the form, tournament page and pool page, stepper and share on one line; truncated set names stay a human check' };
+const AUTO_PARTIAL = { 'mf-a-switch-r2': 'switch, pills, weights, shares and disabled buttons; the greyed look of an excluded row stays a human check', 'mf-c-pool': 'reveal and stored pool on the e2e fixtures (SKY ×1, ROC ×2, NEJ ×1); the psql line on the real card data (no Trial by Frost ref) stays manual', 'mf-h-mobile': 'no horizontal scroll on the form, tournament page and pool page, stepper and share on one line; truncated set names stay a human check' };
 
 const GROUPS = [
   {
@@ -342,18 +342,18 @@ const GROUPS = [
     letter: 'A', title: 'Form: the Cards source (/tournament/new)',
     intro: 'As alice, on a blank form. Nothing is created in this group.',
     steps: [
-      { id: 'mf-a-switch', who: 'alice', title: 'Source switch, faction pills, weight steppers',
-        html: `<ul><li>${url(WEB + '/tournament/new')}, Cards section: a two-way switch “One set” / “Mono-faction mix”, “One set” selected, the set grid below as before. Click Skybound Odyssey.</li>
+      { id: 'mf-a-switch-r2', who: 'alice', title: 'Source switch, faction pills, weight steppers',
+        html: `<ul><li>${url(WEB + '/tournament/new')}, Cards section: a two-way switch “Sets” / “Mono-faction mix”, “Sets” selected, the set grid below as before. Click Skybound Odyssey.</li>
 <li>Click “Mono-faction mix”: a Faction row with 6 pills (Axiom … Yzmir, with their icon, none selected), then “Sets and weights”: the 7 sets (no Beyond the Gates KS), each at <strong>×1</strong> with <strong>14 %</strong>.</li>
 <li>“−” on Trial by Frost: <strong>×0</strong>, the row greys out and reads “excluded”; the other six read <strong>17 %</strong>.</li>
 <li>“+” up to ×3: the “+” greys out at ×3; “−” greys out at ×0.</li>
-<li>Back to “One set”: Skybound Odyssey is still selected. Back to “Mono-faction mix”: the weights are as you left them.</li></ul>` },
+<li>Back to “Sets”: Skybound Odyssey is still selected. Back to “Mono-faction mix”: the weights are as you left them.</li></ul>` },
       { id: 'mf-a-shares', who: 'alice', title: 'Share column: the weights of “Axiom mix”',
         html: `<p>Set the weights of group B: Beyond the Gates ×1, Trial by Frost ×0, Whisper from the Maze ×2, Skybound Odyssey ×1, Seeds of Unity ×1, Roots of Corruption ×1, Neverending Journey ×1. Expected: Whisper from the Maze <strong>29 %</strong>, the five others at ×1 <strong>14 %</strong>, Trial by Frost “excluded” (Σ weights = 7).</p>` },
-      { id: 'mf-a-hints', who: 'alice', title: 'Hint and uniques of the tournament’s faction',
+      { id: 'mf-a-hints-r2', who: 'alice', title: 'Hint and uniques of the tournament’s faction',
         html: `<ul><li>Under the weights: the hint “Each booster: 1 hero, 9 commons and 3 rares of this faction (out-of-faction prints included), drawn from the included sets by weight: ×2 gives twice as many cards as ×1…”, which also says Neverending Journey has no unique data yet.</li>
 <li>Choose Axiom. Settings section, uniques: no faction pills and no “Spread the uniques evenly across factions” box; instead one line “Uniques of the tournament’s faction:” with the Axiom icon and name.</li>
-<li>Switch to Bravos: the line follows. Back to “One set”: the faction pills and the box are back (lot 1 behaviour).</li></ul>` },
+<li>Switch to Bravos: the line follows. Back to “Sets”: the faction pills and the box are back (lot 1 behaviour).</li></ul>` },
       { id: 'mf-a-issues', who: 'alice', title: 'Live issues: faction and sets',
         html: `<ul><li>Fill a valid name and a free link (${chip('https://boardgamearena.com/tournament?id=123489')}), then “Mono-faction mix” without choosing a faction. Expected: the bar stuck to the bottom lists “Choose the faction”, the create button is greyed out.</li>
 <li>Choose Axiom: that line leaves. Bring every stepper to ×0: the bar lists “Include at least one set”, button still greyed out.</li>
@@ -492,11 +492,11 @@ ${PSQL(`SELECT left(sub, 4) AS player, created_by, set_code IS NULL AS no_set_co
         html: `<p>“Axiom mix” › Edit. Expected: the locked notice (“Cards, settings and the BGA link are locked: pools already exist.”), the source switch, the faction pills and every weight stepper greyed out with the stored values (Axiom, BTG ×1, TBF ×0, WTM ×2…); name, description and dates editable.</p>` },
       { id: 'mf-g-rename', who: 'alice', title: 'Rename and dates still fine',
         html: `<p>Rename to ${chip('Axiom mix renamed')}, move the start one day later, save. Expected: saved, summary line unchanged, alice’s pool page title follows. Put the name ${chip('Axiom mix')} back.</p>` },
-      { id: 'mf-g-imposed', who: 'alice', title: 'Format imposed by pools already played: back to “One set”',
+      { id: 'mf-g-imposed-r2', who: 'alice', title: 'Format imposed by pools already played: back to “Sets”',
         html: `<p>carol plays a game of BGA tournament 474750, which nobody has declared (her prep pool is bound to it):</p>
 ${pre(`curl -s "${API}/api/tournament-bga-decklist?tournamentId=474750&tournamentName=BGA%20name&gameId=g-474750" -H "Authorization: Bearer $TOKEN_CAROL" | node -pe 'const j = JSON.parse(require("fs").readFileSync(0)); j["hydra:member"]?.map(m => m.name) ?? j'`)}
 <ul><li>As alice, ${url(WEB + '/tournament/new')}: “Mono-faction mix”, Axiom, some weights. Then paste the link ${chip('https://boardgamearena.com/tournament?id=474750')}.</li>
-<li>Expected: the “already being played” notice, the source switched back to “One set” with the default format’s set (Roots of Corruption) imposed, the switch and the whole Cards section greyed out.</li>
+<li>Expected: the “already being played” notice, the source switched back to “Sets” with the default format’s set (Roots of Corruption) imposed, the switch and the whole Cards section greyed out.</li>
 <li>Do not create.</li></ul>` },
       { id: 'mf-g-detach', who: 'bob', title: 'Detach deletes the faction pools',
         html: `<p>A throwaway tournament with a pool of alice’s:</p>

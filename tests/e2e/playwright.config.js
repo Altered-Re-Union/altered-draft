@@ -10,7 +10,8 @@ export default defineConfig({
   retries: 0,
   timeout: 30_000,
   expect: { timeout: 5_000 },
-  reporter: [['list'], ['html', { open: 'on-failure', outputFolder: `${ROOT_DIR}/playwright-report` }]],
+  // Never open the report in CI: on a failure it would serve it and hang the job.
+  reporter: [['list'], ['html', { open: process.env.CI ? 'never' : 'on-failure', outputFolder: `${ROOT_DIR}/playwright-report` }]],
   outputDir: `${ROOT_DIR}/test-results`,
   use: {
     baseURL: APP_URL,

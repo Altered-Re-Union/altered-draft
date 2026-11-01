@@ -17,7 +17,7 @@ describe('validateTournamentConfig', () => {
       v: 1, format: 'sealed',
       source: { type: 'set', setCode: 'CYCLONE', boosters: 7 },
       heroes: 'packs',
-      uniques: { inBoosters: 2, guaranteed: 0, evenFactions: false, faction: null },
+      uniques: { inBoosters: 2, guaranteed: 0, evenFactions: false, faction: null, randomOneIn: null },
       excludeBanlist: false,
     })
   })
@@ -57,7 +57,7 @@ describe('legacy format <-> config', () => {
       v: 1, format: 'sealed',
       source: { type: 'set', setCode: 'EOLE', boosters: 7 },
       heroes: 'free',
-      uniques: { inBoosters: 1, guaranteed: 1, evenFactions: false },
+      uniques: { inBoosters: 1, guaranteed: 1, evenFactions: false, randomOneIn: null },
       excludeBanlist: false,
     })
   })
@@ -98,7 +98,7 @@ describe('validateTournamentConfig faction', () => {
 
   it('drops evenFactions when a faction is set', () => {
     const r = validateTournamentConfig({ ...valid, uniques: { inBoosters: 2, guaranteed: 2, evenFactions: true, faction: 'YZ' } })
-    expect(r.config.uniques).toEqual({ inBoosters: 2, guaranteed: 2, evenFactions: false, faction: 'YZ' })
+    expect(r.config.uniques).toEqual({ inBoosters: 2, guaranteed: 2, evenFactions: false, faction: 'YZ', randomOneIn: null })
   })
 })
 
@@ -129,7 +129,7 @@ describe('validateTournamentConfig faction source', () => {
     const r = validateTournamentConfig(factionCfg({ source: { type: 'faction', faction: 'AX', sets: { CORE: '2', ALIZE: 0, BISE: 1 } }, uniques: { inBoosters: 1, guaranteed: 0, evenFactions: true, faction: 'BR' } }))
     expect(r.ok).toBe(true)
     expect(r.config.source).toEqual({ type: 'faction', faction: 'AX', sets: { CORE: 2, BISE: 1 }, boosters: 7 })
-    expect(r.config.uniques).toEqual({ inBoosters: 1, guaranteed: 0, evenFactions: false, faction: 'AX' })
+    expect(r.config.uniques).toEqual({ inBoosters: 1, guaranteed: 0, evenFactions: false, faction: 'AX', randomOneIn: null })
   })
   it('keeps the sets in SETS order whatever the input order', () => {
     expect(Object.keys(validateTournamentConfig(factionCfg({ source: { type: 'faction', faction: 'LY', sets: { EOLE: 1, CORE: 1 } } })).config.source.sets)).toEqual(['CORE', 'EOLE'])
@@ -146,7 +146,7 @@ describe('validateTournamentConfig faction source', () => {
     ['non-integer weight', { type: 'faction', faction: 'AX', sets: { CORE: 1.5 } }, 'source.sets'],
     ['all zero', { type: 'faction', faction: 'AX', sets: { CORE: 0, BISE: 0 } }, 'source.sets'],
     ['sets not an object', { type: 'faction', faction: 'AX', sets: ['CORE'] }, 'source.sets'],
-    ['unknown type', { type: 'multiset', faction: 'AX', sets: { CORE: 1 } }, 'source.type'],
+    ['unknown type', { type: 'cube', faction: 'AX', sets: { CORE: 1 } }, 'source.type'],
   ])('rejects %s', (_, source, code) => {
     const r = validateTournamentConfig(factionCfg({ source }))
     expect(r.ok).toBe(false); expect(r.errors).toContain(code)
@@ -170,6 +170,75 @@ describe('validateTournamentConfig faction source', () => {
   it('ignores the client uniques faction / evenFactions for a faction source, even malformed', () => {
     const r = validateTournamentConfig(factionCfg({ uniques: { inBoosters: 1, guaranteed: 0, faction: 'XX', evenFactions: 'yes' } }))
     expect(r.ok).toBe(true)
-    expect(r.config.uniques).toEqual({ inBoosters: 1, guaranteed: 0, evenFactions: false, faction: 'AX' })
+    expect(r.config.uniques).toEqual({ inBoosters: 1, guaranteed: 0, evenFactions: false, faction: 'AX', randomOneIn: null })
+  })
+})
+
+describe('validateTournamentConfig multiset source', () => {
+  const multi = sets => ({ format: 'sealed', source: { type: 'multiset', sets }, heroes: 'packs', uniques: { inBoosters: 0, guaranteed: 0 } })
+
+  it('accepts a split, drops zeros, coerces strings, keeps SETS order', () => {
+    const r = validateTournamentConfig(multi({ EOLE: '3', CYCLONE: 4, FUGUE: 0 }))
+    expect(r.ok).toBe(true)
+    expect(r.config.source).toEqual({ type: 'multiset', sets: { CYCLONE: 4, EOLE: 3 }, boosters: 7 })
+    expect(Object.keys(r.config.source.sets)).toEqual(['CYCLONE', 'EOLE'])
+  })
+  it('normalizes a multiset left with one set to a set source', () => {
+    for (const sets of [{ CYCLONE: 7 }, { CYCLONE: 7, EOLE: 0 }, { CYCLONE: '7' }]) {
+      expect(validateTournamentConfig(multi(sets)).config.source).toEqual({ type: 'set', setCode: 'CYCLONE', boosters: 7 })
+    }
+  })
+  it('refuses a total other than 7, a count out of range, a hidden or unknown set, an empty split', () => {
+    for (const sets of [{ CYCLONE: 4, EOLE: 2 }, { CYCLONE: 4, EOLE: 4 }, { CYCLONE: 8 }, { CYCLONE: -1, EOLE: 8 }, { CYCLONE: 2.5, EOLE: 4.5 }, { COREKS: 7 }, { NOPE: 7 }, {}, { CYCLONE: 0 }, 'CYCLONE', null]) {
+      expect(validateTournamentConfig(multi(sets)).errors, JSON.stringify(sets)).toEqual(['source.sets'])
+    }
+    expect(validateTournamentConfig({ ...multi({ CYCLONE: 4, EOLE: 3 }), source: { type: 'multiset', sets: { CYCLONE: 4, EOLE: 3 }, boosters: 6 } }).errors).toEqual(['source.boosters'])
+  })
+  it('configSetCodes and legacyColumnsFromConfig on a multiset', () => {
+    const { config } = validateTournamentConfig(multi({ EOLE: 3, CYCLONE: 4 }))
+    expect(configSetCodes(config)).toEqual(['CYCLONE', 'EOLE'])
+    expect(configSetCodes({ source: { type: 'multiset', sets: { FUGUE: 1, CORE: 6 } } })).toEqual(['CORE', 'FUGUE'])
+    expect(legacyColumnsFromConfig(config).set_code).toBeNull()
+  })
+})
+
+describe('validateTournamentConfig randomOneIn', () => {
+  const multi = sets => ({ format: 'sealed', source: { type: 'multiset', sets }, heroes: 'packs', uniques: { inBoosters: 0, guaranteed: 0 } })
+  const factionCfg = (over = {}) => ({
+    source: { type: 'faction', faction: 'AX', sets: { CORE: 1, BISE: 2, FUGUE: 1 } },
+    heroes: 'packs', uniques: { inBoosters: 1, guaranteed: 1 }, ...over,
+  })
+
+  it('accepts 1..10, coerces a string, forces inBoosters to 0 and evenFactions off', () => {
+    const r = validateTournamentConfig({ ...valid, uniques: { inBoosters: 3, guaranteed: 1, evenFactions: true, randomOneIn: '8' } })
+    expect(r.config.uniques).toEqual({ inBoosters: 0, guaranteed: 1, evenFactions: false, faction: null, randomOneIn: 8 })
+    expect(validateTournamentConfig({ ...valid, uniques: { inBoosters: 1, guaranteed: 0, randomOneIn: null } }).config.uniques.randomOneIn).toBeNull()
+  })
+  it('refuses 0, 11, 2.5 and a non-number', () => {
+    for (const randomOneIn of [0, 11, 2.5, 'x', true]) expect(validateTournamentConfig({ ...valid, uniques: { inBoosters: 0, guaranteed: 0, randomOneIn } }).errors).toEqual(['uniques.randomOneIn'])
+  })
+  it('keeps the uniques faction in random mode without any exact unique, forces it for a faction source', () => {
+    expect(validateTournamentConfig({ ...valid, uniques: { inBoosters: 0, guaranteed: 0, randomOneIn: 8, faction: 'AX' } }).config.uniques.faction).toBe('AX')
+    expect(validateTournamentConfig(factionCfg({ uniques: { inBoosters: 0, guaranteed: 0, randomOneIn: 4, faction: 'BR' } })).config.uniques).toEqual({ inBoosters: 0, guaranteed: 0, evenFactions: false, faction: 'AX', randomOneIn: 4 })
+  })
+  it('keeps random mode, guaranteed uniques and the faction on a set and on a multiset source', () => {
+    const uniques = { inBoosters: 3, guaranteed: 2, evenFactions: true, faction: 'AX', randomOneIn: 8 }
+    const expected = { inBoosters: 0, guaranteed: 2, evenFactions: false, faction: 'AX', randomOneIn: 8 }
+    expect(validateTournamentConfig({ ...valid, uniques }).config.uniques).toEqual(expected)
+    expect(validateTournamentConfig({ ...multi({ CYCLONE: 4, EOLE: 3 }), uniques }).config.uniques).toEqual(expected)
+  })
+  it('refuses random mode when no included set has unique data, accepts it next to one that has', () => {
+    expect(validateTournamentConfig({ ...valid, source: { type: 'set', setCode: 'FUGUE' }, uniques: { inBoosters: 0, guaranteed: 0, randomOneIn: 8 } }).errors).toEqual(['uniques.unsupportedSet'])
+    expect(validateTournamentConfig({ ...multi({ FUGUE: 7 }), uniques: { randomOneIn: 8 } }).errors).toEqual(['uniques.unsupportedSet'])
+    expect(validateTournamentConfig({ ...multi({ CYCLONE: 1, FUGUE: 6 }), uniques: { randomOneIn: 8 } }).ok).toBe(true)
+  })
+  it('caps exact in-booster uniques at 3 per booster of the sets with unique data', () => {
+    expect(validateTournamentConfig({ ...multi({ CYCLONE: 1, FUGUE: 6 }), uniques: { inBoosters: 4, guaranteed: 0 } }).errors).toEqual(['uniques.inBoosters'])
+    expect(validateTournamentConfig({ ...multi({ CYCLONE: 1, FUGUE: 6 }), uniques: { inBoosters: 3, guaranteed: 7 } }).ok).toBe(true)
+    expect(validateTournamentConfig({ ...multi({ CYCLONE: 1, FUGUE: 6 }), uniques: { inBoosters: 7, randomOneIn: 2 } }).ok).toBe(true) // ignored in random mode
+  })
+  it('forces even factions off for a multi-set split, keeps it for the normalized single set', () => {
+    expect(validateTournamentConfig({ ...multi({ CYCLONE: 4, EOLE: 3 }), uniques: { inBoosters: 2, guaranteed: 0, evenFactions: true } }).config.uniques.evenFactions).toBe(false)
+    expect(validateTournamentConfig({ ...multi({ CYCLONE: 7 }), uniques: { inBoosters: 2, guaranteed: 0, evenFactions: true } }).config.uniques.evenFactions).toBe(true)
   })
 })

@@ -3,6 +3,7 @@ import { FACTIONS, FACTION_NAMES, FACTION_COLORS } from '../lib/cardData.js'
 import { FACTION_ICONS } from '../lib/assets.js'
 import { cardSorter, useZoomOrigin } from './PoolGrid.jsx'
 import { useLang } from '../lib/i18n/i18n.jsx'
+import CardImage from './CardImage.jsx'
 
 // One pool card: art grows in place on hover (deckbuilder-style); clicking drafts one copy.
 function RotisserieCard({ ref_, card, count, onPick, disabled }) {
@@ -15,12 +16,9 @@ function RotisserieCard({ ref_, card, count, onPick, disabled }) {
         style={{ transformOrigin: origin }} title={card?.name ?? ref_}
         className={`aspect-[2/3] bg-surface2 overflow-hidden rounded-t-lg relative transition-transform duration-150 ease-out
           ${disabled ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer hover:scale-[2] hover:z-30 hover:shadow-xl hover:shadow-black/70'}`}>
-        {card?.imagePath ? (
-          <img src={card.imagePath} alt={card.name} className="w-full h-full object-cover" loading="lazy"
-            onError={e => { e.currentTarget.style.display = 'none' }} />
-        ) : (
+        <CardImage card={card} className="w-full h-full object-cover" loading="lazy" fallback={
           <div className="w-full h-full flex items-center justify-center text-faint text-xs px-2 text-center break-all">{card?.name ?? ref_}</div>
-        )}
+        } />
         {count > 1 && (
           <div className="absolute top-1 left-1 bg-surface/90 text-ink2 font-bold text-xs px-1.5 py-0.5 rounded border border-line">×{count}</div>
         )}

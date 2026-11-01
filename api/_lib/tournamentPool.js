@@ -260,6 +260,7 @@ export function poolResponse(poolRow, cardCounts, boosters = null, gamesPlayed =
     id: poolRow.id,
     kind: poolRow.kind,
     setCode: poolRow.set_code,
+    sourceType: poolRow.config?.source?.type ?? 'set',
     tournamentId: poolRow.tournament_id,
     tournamentName: poolRow.tournament_name,
     boundAt: poolRow.bound_at,

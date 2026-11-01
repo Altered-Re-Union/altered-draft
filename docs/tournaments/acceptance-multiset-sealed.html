@@ -1,0 +1,934 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Multi-set Sealed Acceptance</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #f6f5f2;
+  --surface: #ffffff;
+  --surface-2: #f0eee9;
+  --border: #e3e0d8;
+  --text: #1d1b16;
+  --muted: #6b675d;
+  --accent: #4f46e5;
+  --accent-soft: #eceafe;
+  --ok: #15803d;
+  --ok-soft: #e3f4e8;
+  --ko: #c2410c;
+  --ko-soft: #fdebe1;
+  --skip: #7c7768;
+  --skip-soft: #ecebe6;
+  --shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 16px rgba(0,0,0,.04);
+  --radius: 14px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141310;
+    --surface: #1c1b17;
+    --surface-2: #25231e;
+    --border: #34312a;
+    --text: #ece9e1;
+    --muted: #9c978a;
+    --accent: #8b85ff;
+    --accent-soft: #26244a;
+    --ok: #4ade80;
+    --ok-soft: #173322;
+    --ko: #fb923c;
+    --ko-soft: #3a2316;
+    --skip: #a8a394;
+    --skip-soft: #2a2823;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 4px 16px rgba(0,0,0,.25);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #141310;
+  --surface: #1c1b17;
+  --surface-2: #25231e;
+  --border: #34312a;
+  --text: #ece9e1;
+  --muted: #9c978a;
+  --accent: #8b85ff;
+  --accent-soft: #26244a;
+  --ok: #4ade80;
+  --ok-soft: #173322;
+  --ko: #fb923c;
+  --ko-soft: #3a2316;
+  --skip: #a8a394;
+  --skip-soft: #2a2823;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 4px 16px rgba(0,0,0,.25);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.55 Inter, system-ui, sans-serif;
+}
+code, .mono { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: .86em; }
+a { color: var(--accent); }
+.wrap { max-width: 920px; margin: 0 auto; padding: 0 16px 120px; }
+
+header.top {
+  position: sticky; top: 0; z-index: 10;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border);
+}
+header.top .inner { max-width: 920px; margin: 0 auto; padding: 12px 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+header.top h1 { font-size: 17px; margin: 0; font-weight: 700; letter-spacing: -.01em; flex: 1 1 auto; }
+.progress { flex: 1 1 220px; display: flex; align-items: center; gap: 10px; }
+.bar { flex: 1; height: 8px; border-radius: 99px; background: var(--surface-2); overflow: hidden; display: flex; }
+.bar span { height: 100%; transition: width .3s ease; }
+.bar .b-ok { background: var(--ok); }
+.bar .b-ko { background: var(--ko); }
+.bar .b-skip { background: var(--skip); }
+.count { font-size: 13px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.filters { display: flex; gap: 4px; background: var(--surface-2); padding: 3px; border-radius: 10px; }
+.filters button { border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 13px; padding: 4px 10px; border-radius: 8px; cursor: pointer; }
+.filters button.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+.tabs button { font-weight: 600; }
+.badge { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; margin-left: 4px; border-radius: 99px; background: var(--ko); color: #fff; font-size: 11px; font-weight: 700; }
+.new-tag { display: inline-block; font-size: 11px; font-weight: 700; padding: 0 6px; border-radius: 99px; background: var(--accent); color: #fff; vertical-align: 2px; }
+.new-tag.v11 { background: #6d5bd0; }
+.new-tag.auto { background: #2f7d4f; }
+.icon-btn { border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 10px; padding: 5px 9px; cursor: pointer; font: inherit; font-size: 13px; }
+
+.hero { padding: 36px 0 8px; }
+.hero h2 { font-size: 28px; line-height: 1.2; margin: 0 0 8px; letter-spacing: -.02em; }
+.hero p { color: var(--muted); margin: 0; max-width: 680px; }
+
+.cast { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; margin: 24px 0 8px; }
+.persona { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; box-shadow: var(--shadow); min-width: 0; }
+.persona .tag { display: inline-block; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; padding: 2px 8px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); margin-bottom: 6px; }
+.persona .org { font-weight: 600; }
+.persona .meta { color: var(--muted); font-size: 13px; }
+
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; max-width: 100%;
+  border: 1px dashed var(--border); background: var(--surface-2); color: var(--text);
+  border-radius: 8px; padding: 1px 8px; font-family: "JetBrains Mono", monospace; font-size: 12.5px;
+  cursor: pointer; word-break: break-all; text-align: left;
+}
+.chip:hover { border-color: var(--accent); }
+.chip.copied { border-color: var(--ok); color: var(--ok); }
+
+section.group { margin-top: 36px; }
+section.group > h3 { display: flex; align-items: baseline; gap: 10px; font-size: 19px; margin: 0 0 4px; letter-spacing: -.01em; }
+section.group > h3 .letter { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 8px; background: var(--text); color: var(--bg); font-size: 14px; flex: none; }
+section.group > h3 .gcount { margin-left: auto; font-size: 13px; color: var(--muted); font-weight: 500; }
+section.group > .intro { color: var(--muted); margin: 0 0 14px 38px; font-size: 14px; }
+section.group > h3 { cursor: pointer; user-select: none; border-radius: 8px; }
+section.group > h3:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+section.group > h3 .chev { flex: none; align-self: center; color: var(--muted); font-size: 12px; transition: transform .2s; }
+section.group.collapsed > h3 .chev { transform: rotate(-90deg); }
+section.group.collapsed > :not(h3) { display: none; }
+.fold { display: flex; gap: 6px; justify-content: flex-end; margin: 24px 0 -16px; }
+.fold button { border: 1px solid var(--border); background: var(--surface); color: var(--muted); font: inherit; font-size: 13px; padding: 4px 10px; border-radius: 8px; cursor: pointer; }
+.fold button:hover { color: var(--text); }
+
+.step {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  margin-bottom: 10px; box-shadow: var(--shadow); overflow: hidden;
+  transition: border-color .2s, opacity .2s;
+}
+.step[data-status="ok"] { border-color: color-mix(in srgb, var(--ok) 40%, var(--border)); }
+.step[data-status="ok"] .s-title { color: var(--muted); }
+.step[data-status="ko"] { border-color: var(--ko); }
+.step[data-status="skip"] { opacity: .65; }
+.s-head { display: flex; gap: 12px; padding: 14px 16px; align-items: flex-start; }
+.s-num { flex: none; font-size: 12px; font-weight: 600; color: var(--muted); padding-top: 3px; width: 30px; font-variant-numeric: tabular-nums; }
+.s-body { flex: 1; min-width: 0; }
+.s-title { font-weight: 600; margin: 0 0 4px; }
+.s-who { font-size: 13px; color: var(--muted); margin-bottom: 6px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.s-body ul { margin: 6px 0 0; padding-left: 18px; }
+.s-body li { margin: 2px 0; }
+.s-body li::marker { color: var(--muted); }
+.s-body .note { font-size: 13px; color: var(--muted); margin-top: 6px; }
+.s-body pre { background: var(--surface-2); border-radius: 10px; padding: 10px 12px; overflow-x: auto; font-size: 12.5px; margin: 8px 0 0; white-space: pre-wrap; word-break: break-word; position: relative; }
+.s-body pre .copy-pre { position: absolute; top: 6px; right: 6px; }
+
+.status { display: flex; gap: 4px; flex: none; }
+.status button {
+  width: 34px; height: 34px; border-radius: 10px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--muted); cursor: pointer; display: grid; place-items: center;
+  transition: background .15s, color .15s, border-color .15s, transform .1s;
+}
+.status button:active { transform: scale(.94); }
+.status button svg { width: 17px; height: 17px; }
+.status button.on[data-v="ok"] { background: var(--ok-soft); color: var(--ok); border-color: var(--ok); }
+.status button.on[data-v="ko"] { background: var(--ko-soft); color: var(--ko); border-color: var(--ko); }
+.status button.on[data-v="skip"] { background: var(--skip-soft); color: var(--skip); border-color: var(--skip); }
+
+.issue { display: none; border-top: 1px dashed var(--ko); background: color-mix(in srgb, var(--ko-soft) 55%, var(--surface)); padding: 12px 16px 14px 58px; }
+.step[data-status="ko"] .issue, .step.has-note .issue { display: block; }
+.issue label { font-size: 12px; font-weight: 600; color: var(--ko); text-transform: uppercase; letter-spacing: .04em; }
+.issue textarea {
+  width: 100%; min-height: 84px; margin-top: 6px; resize: vertical;
+  border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px;
+  background: var(--surface); color: var(--text); font: inherit; font-size: 14px;
+}
+.issue textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.drop { margin-top: 8px; border: 1.5px dashed var(--border); border-radius: 10px; padding: 10px; font-size: 13px; color: var(--muted); text-align: center; cursor: pointer; }
+.drop.over { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.thumbs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.thumb { position: relative; width: 112px; height: 76px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); background: var(--surface-2); }
+.thumb img { width: 100%; height: 100%; object-fit: cover; cursor: zoom-in; }
+.thumb button { position: absolute; top: 3px; right: 3px; width: 22px; height: 22px; border-radius: 6px; border: 0; background: rgba(0,0,0,.6); color: #fff; cursor: pointer; font-size: 13px; line-height: 1; }
+.thumb .fname { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,.55); color: #fff; font-size: 9.5px; padding: 1px 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: "JetBrains Mono", monospace; }
+
+.callout { background: var(--accent-soft); border-radius: var(--radius); padding: 14px 16px; margin: 14px 0; font-size: 14px; }
+.callout strong { color: var(--accent); }
+details.callout summary { cursor: pointer; font-weight: 600; }
+
+.recap { margin-top: 48px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+.recap-head { display: flex; gap: 10px; align-items: center; padding: 14px 16px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.recap-head h3 { margin: 0; font-size: 17px; flex: 1; }
+.btn { border: 0; background: var(--accent); color: #fff; font: inherit; font-weight: 600; font-size: 14px; padding: 8px 14px; border-radius: 10px; cursor: pointer; }
+.btn.secondary { background: var(--surface-2); color: var(--text); }
+.btn:disabled { opacity: .5; cursor: default; }
+.recap pre { margin: 0; padding: 16px; font-size: 12.5px; white-space: pre-wrap; word-break: break-word; max-height: 460px; overflow: auto; }
+.empty { padding: 20px 16px; color: var(--muted); font-size: 14px; }
+
+.toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(20px); opacity: 0; background: var(--text); color: var(--bg); padding: 8px 14px; border-radius: 10px; font-size: 13px; transition: .2s; pointer-events: none; z-index: 50; }
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.lightbox { position: fixed; inset: 0; background: rgba(0,0,0,.8); display: none; place-items: center; z-index: 40; padding: 16px; cursor: zoom-out; }
+.lightbox.show { display: grid; }
+.lightbox img { max-width: 100%; max-height: 100%; border-radius: 8px; }
+.hidden { display: none !important; }
+
+@media (max-width: 600px) {
+  .s-head { flex-wrap: wrap; }
+  .s-num { width: auto; }
+  .status { width: 100%; justify-content: flex-end; order: 3; }
+  .issue { padding-left: 16px; }
+  section.group > .intro { margin-left: 0; }
+  .hero h2 { font-size: 23px; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="inner">
+    <h1>Acceptance — multi-set sealed and random uniques · V3</h1>
+    <div class="progress">
+      <div class="bar"><span class="b-ok"></span><span class="b-ko"></span><span class="b-skip"></span></div>
+      <span class="count" id="count">0 / 0</span>
+    </div>
+    <div class="filters tabs" id="tabs">
+      <button data-tab="steps" class="active">Steps</button>
+      <button data-tab="recap">Recap to paste <span class="badge hidden" id="tabBadge"></span></button>
+    </div>
+    <div class="filters" id="filters">
+      <button data-f="all" class="active">All</button>
+      <button data-f="todo">To do</button>
+      <button data-f="ko">Problems</button>
+      <button data-f="manual">Manual only</button>
+    </div>
+    <button class="icon-btn" id="themeBtn" title="Theme">◐</button>
+  </div>
+</header>
+
+<main class="wrap">
+ <div id="viewSteps">
+  <div class="hero">
+    <h2>Multi-set sealed and random uniques — V3</h2>
+    <p>A declared sealed tournament whose 7 classic single-set boosters are <strong>split over several sets</strong> (e.g. 3 Skybound Odyssey, 3 Roots of Corruption, 1 Neverending Journey), and a <strong>random number of uniques</strong> (each booster rolls “1 in N”) available with every source: one set, multi-set, mono-faction. Runs on <code>make dev</code> (API :8080, Vite :5173) + altered-dev-environment, with the lot 1 setup: accounts, bob moderator, carol (see group 0 of <code>docs/tournaments/acceptance-user-tournaments.html</code>).</p>
+    <p>Spec: <code>docs/tournaments/user-tournaments-spec.md</code> §13 · doc: <code>docs/tournaments/README.md</code> §14. Do the groups in order: C, D, G and H reuse “SKY ROC NEJ mix” created in B, and H edits the tournament of F.</p>
+    <p>Tick ✓ or ✗ on each step. The ✗ button opens a text field where you can paste screenshots (Ctrl+V). Copy the recap from the tab at the top. The state is kept in this browser (IndexedDB), apart from the lot 1 and V2 pages’.</p>
+    <p>Steps marked <span class="new-tag auto">auto</span> are replayed by the Playwright suite (<code>make e2e</code>, <code>tests/e2e</code>) on its own card fixtures: no need to run them by hand. An “auto (partial)” badge keeps a manual part: hover it to see which. The “Manual only” filter shows the steps without a badge and the partial ones.</p>
+  </div>
+
+  <div class="cast" id="cast"></div>
+
+  <div class="fold"><button type="button" id="foldAll">Collapse all</button><button type="button" id="unfoldAll">Expand all</button></div>
+  <div id="groups"></div>
+
+  <p style="margin-top:32px;text-align:center">
+    <button class="btn" data-goto="recap">See the recap to paste →</button>
+  </p>
+ </div>
+
+ <div id="viewRecap" class="hidden">
+  <div class="hero">
+    <h2>Recap to paste</h2>
+    <p>Paste it as is in the chat. If you attached screenshots, download them first: the recap gives their path in <code>~/Downloads</code>.</p>
+  </div>
+  <div class="recap" style="margin-top:20px">
+    <div class="recap-head">
+      <h3>Recap to paste</h3>
+      <button class="btn secondary" id="dlImages">Download the screenshots</button>
+      <button class="btn" id="copyRecap">Copy</button>
+    </div>
+    <pre id="recapText"></pre>
+  </div>
+
+  <p style="margin-top:24px;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap">
+    <button class="icon-btn" data-goto="steps">← Back to the steps</button>
+    <button class="icon-btn" id="resetAll">Reset everything</button>
+  </p>
+ </div>
+</main>
+
+<div class="toast" id="toast"></div>
+<div class="lightbox" id="lightbox"><img alt=""></div>
+
+<script>
+const WEB = 'http://localhost:5173';
+const API = 'http://localhost:8080';
+const KC = 'http://auth.altered.local.gd:18080';
+const PWD = 'TestPassword1234';
+const BGA_ID = '123490';
+const BGA_URL = 'https://boardgamearena.com/tournament?id=123490';
+const ALICE_SUB = '11111111-1111-1111-1111-111111111111';
+
+const PERSONAS = {
+  alice: { tag: 'Organizer', org: 'alice (sub 1111…)', email: 'alice', meta: 'Creates “SKY ROC NEJ mix” and the E and F tournaments. Not a moderator.' },
+  carol: { tag: 'Player', org: 'carol (created by make dev)', email: 'carol@example.test', meta: 'Account without a pool on “SKY ROC NEJ mix”: used for the BGA path (G).' },
+  anon:  { tag: 'Logged out', org: 'private window', email: '—', meta: 'No Re:Union session.' },
+};
+
+const chip = (txt) => `<button class="chip" data-copy="${txt.replace(/"/g,'&quot;')}">${txt}</button>`;
+const who = (k) => k === 'anon' ? '<span>Logged out (private window)</span>' : (k ? `${chip(PERSONAS[k].email)} ${chip(PWD)} <span>${PERSONAS[k].meta}</span>` : '');
+const url = (u) => chip(u);
+const pre = (cmd) => {
+  const users = [...new Set([...cmd.matchAll(/\$TOKEN_([A-Z]+)/g)].map(m => m[1]))].filter(u => !cmd.includes('export TOKEN_' + u))
+  const full = [...users.map(u => TOKEN(u.toLowerCase())), cmd].join('\n')
+  return `<pre><button class="chip copy-pre" data-copy-pre>copy</button>${full.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</pre>`
+}
+const LOGIN = { carol: 'carol@example.test' }
+const TOKEN = (u) => `export TOKEN_${u.toUpperCase()}=$(curl -s -X POST "${KC}/realms/players/protocol/openid-connect/token" -d grant_type=password -d client_id=altered-draft -d client_secret=dev-altered-draft-secret -d username=${LOGIN[u] ?? u} -d password=${PWD} -d 'scope=openid profile' | node -pe 'JSON.parse(require("fs").readFileSync(0)).access_token'); [ -n "$TOKEN_${u.toUpperCase()}" ] && [ "$TOKEN_${u.toUpperCase()}" != undefined ] && echo "TOKEN_${u.toUpperCase()} ok" || echo "TOKEN_${u.toUpperCase()} EMPTY: credentials refused by Keycloak"`;
+const DECKS = (tok, filter) => pre(`curl -s -H "Authorization: Bearer $TOKEN_${tok}" -H 'Accept: application/json' "http://localhost:8001/api/decks?itemsPerPage=200" | node -pe 'const j = JSON.parse(require("fs").readFileSync(0)); const items = j["hydra:member"] ?? j.member ?? j; items.filter(d => /${filter}/.test(d.name) && Date.parse(d.createdAt) > Date.now() - 10 * 60 * 1000).map(d => d.id + "  " + d.name).join("\\n") || "no deck"'`);
+// Every command runs from any directory: the compose file and make/npm are reached through REPO.
+const REPO = '~/Perso/altered-reunion/altered-draft';
+const DB = `docker compose -f ${REPO}/docker-compose.yml exec -T postgres psql -U altered-draft -d altered-draft`;
+// Unaligned, tuples only, ' | ' between columns: the output is exactly the Expected lines.
+const PSQL = (sql) => pre(`${DB} -At -F ' | ' -c "${sql}"`);
+
+// Helpers that only shorten this file: every step still prints its whole command.
+// The keys printed for a stored config, in a fixed order (Postgres jsonb does not keep the insertion order).
+// One array for both objects: source reads type, setCode, faction, sets, boosters; uniques reads inBoosters, guaranteed, evenFactions, faction, randomOneIn.
+const KEYS = '["type","setCode","inBoosters","guaranteed","evenFactions","faction","sets","boosters","CORE","ALIZE","BISE","CYCLONE","DUSTER","EOLE","FUGUE","randomOneIn"]';
+const CONFIG = (bga) => pre(`curl -s "${API}/api/tournaments?bgaId=${bga}" | node -pe 'const K = ${KEYS}; JSON.parse(require("fs").readFileSync(0)).tournaments.map(t => [t.name, JSON.stringify(t.config.source, K), JSON.stringify(t.config.uniques, K), t.config.heroes].join("\\n")).join("\\n")'`);
+// Creates a tournament as alice through the API, prints the stored source and uniques, then opens alice's pool.
+const CREATE = (name, bga, config) => pre(`T=$TOKEN_ALICE node -e '(async () => { const K = ${KEYS}; const h = { Authorization: "Bearer " + process.env.T, "Content-Type": "application/json" }; const r = await fetch("${API}/api/tournaments", { method: "POST", headers: h, body: JSON.stringify({ name: "${name}", bgaUrl: "https://boardgamearena.com/tournament?id=${bga}", startsAt: new Date(Date.now() + 864e5).toISOString(), config: ${config} }) }); const tn = await r.json(); console.log(r.status, tn.id ?? JSON.stringify(tn)); if (!tn.id) return; console.log(JSON.stringify(tn.config.source, K)); console.log(JSON.stringify(tn.config.uniques, K)); const p = await fetch("${API}/api/tournaments/" + tn.id + "/pool", { headers: h }); console.log("alice pool", p.status) })()'`);
+const FROM = `FROM sealed_pools p JOIN tournaments t ON t.id = p.tournament_ref`;
+const W = (bga) => `t.bga_tournament_id = '${bga}' AND p.sub = '${ALICE_SUB}'`;
+// The last slot of every booster of alice's pool (slot 13: the last rare), with the booster's set (its hero, slot 1).
+const LAST = (bga) => `${DB} -At -c "SELECT bi, split_part(b->>0, '_', 2) AS booster_set, b->>12 AS last_slot, b->>12 ~ '_U_[0-9]+$' AS is_unique, split_part(b->>12, '_', 2) = split_part(b->>0, '_', 2) AS same_set ${FROM}, jsonb_array_elements(p.boosters) WITH ORDINALITY AS bb(b, bi) WHERE ${W(bga)} ORDER BY bi" -c "SELECT count(*) AS uniques_in_pool ${FROM}, jsonb_object_keys(p.cards) k WHERE ${W(bga)} AND k ~ '_U_[0-9]+$'"`;
+const LOGOUT_ALICE = `ADMIN=$(curl -s -X POST "${KC}/realms/master/protocol/openid-connect/token" -d grant_type=password -d client_id=admin-cli -d username=admin -d password=admin | node -pe 'JSON.parse(require("fs").readFileSync(0)).access_token')
+curl -s -o /dev/null -w 'logout %{http_code}\\n' -X POST -H "Authorization: Bearer $ADMIN" "${KC}/admin/realms/players/users/${ALICE_SUB}/logout"`;
+const MIX_CONFIG = '{ source: { type: "multiset", sets: { CYCLONE: 3, EOLE: 3, FUGUE: 1 } }, heroes: "packs", uniques: { inBoosters: 2, guaranteed: 1 } }';
+
+// Steps replayed by the Playwright suite. Rewritten by `npm run test:e2e:coverage -- --write`
+// (scripts/e2e-acceptance-coverage.mjs) from the tests' tags: do not edit this line by hand.
+const AUTO_STEPS = ['ms-a-grid', 'ms-a-issues', 'ms-a-mix', 'ms-a-switch', 'ms-b-create', 'ms-c-boosters', 'ms-c-reveal', 'ms-d-cap', 'ms-d-guaranteed', 'ms-d-in-boosters', 'ms-e-faction', 'ms-e-form', 'ms-e-mix', 'ms-e-set', 'ms-f-api', 'ms-f-normalize', 'ms-g-bga', 'ms-h-locked', 'ms-i-mobile'];
+// Steps the suite covers with a narrower assertion than the acceptance steps (hand-maintained).
+const AUTO_PARTIAL = { 'ms-c-reveal': 'which boosters show the pack photo, checked against the stored pool; the photo itself and the opening animation stay a human check', 'ms-e-faction': 'random uniques of an Axiom mix on the e2e fixtures (SKY ×1, ROC ×2, NEJ ×1) with the fake cards API; the seven-set config and the real faction through the community cards API stay manual', 'ms-i-mobile': 'no horizontal scroll on the form (disclosure open, random slider), the tournament page and the pool page, set name and stepper on one line; the reveal at 375 px stays a human check' };
+
+const GROUPS = [
+  {
+    letter: '0', title: 'Setup',
+    intro: 'Same local stack as lot 1 and V2. Browser: Chrome or Firefox (Safari rejects Secure cookies on http://localhost).',
+    steps: [
+      { id: 'ms-0-lot1', title: 'Lot 1 setup done once',
+        html: `<p>This page reuses the lot 1 stack and accounts. If this machine never ran it, do group 0 of <code>docs/tournaments/acceptance-user-tournaments.html</code> first: altered-dev-environment (setup-dev-env-r2), bob moderator through <code>TOURNAMENT_MODERATORS</code> (setup-moderator), carol (setup-carol-r2). Nothing to run here.</p>` },
+      { id: 'ms-0-branch', title: 'The branch and its dependencies',
+        html: `${pre(`cd ${REPO} && git fetch && git switch feat/multiset-sealed && git pull && make install`)}<p>Once the PR is merged, use <code>main</code> instead of the branch.</p>` },
+      { id: 'ms-0-dev', title: 'Start the stack (no migration)',
+        html: `<p>No schema change in V3: <code>sealed_pools.set_code</code> is nullable since V2, and a multi-set pool stores <code>NULL</code> there.</p>${pre(`cd ${REPO} && make dev`)}<p>Check, in another terminal:</p>${pre(`${DB} -At -c "SELECT is_nullable FROM information_schema.columns WHERE table_name = 'sealed_pools' AND column_name = 'set_code'"`)}<p>Expected: <code>YES</code>.</p>` },
+      { id: 'ms-0-tests', title: 'Automated suites green',
+        html: `${pre(`cd ${REPO} && npm test && npm run test:integration`)}<p>Expected: everything green (Docker needed for the second). The golden digests (the two lot 1 / V2 ones unchanged, the new multi-set and random ones), the rng order and the 400 codes of every refusal are only covered there.</p>` },
+      { id: 'ms-0-e2e', title: 'Playwright suite green, the three acceptance pages read',
+        html: `${pre(`cd ${REPO} && make e2e && npm run test:e2e:coverage`)}<p>Expected: the suite passes; the coverage report lists the three acceptance pages (<code>acceptance-user-tournaments.html</code>, <code>acceptance-mono-faction-sealed.html</code>, <code>acceptance-multiset-sealed.html</code>) and exits without error. The steps of this page it replays carry the <span class="new-tag auto">auto</span> badge.</p>` },
+      { id: 'ms-0-clean', title: 'Start without the tournaments of this page, alice under the cap',
+        html: `<p>This page uses the BGA ids 123490 to 123499 (123499: the throwaway tournament of ms-e-summary).</p>${PSQL(`SELECT count(*) FROM tournaments WHERE bga_tournament_id ~ '^1234(9[0-9])$'`)}<p>Expected: <code>0</code>. To start over on them only:</p>${PSQL(`DELETE FROM sealed_pools WHERE tournament_id ~ '^1234(9[0-9])$' OR tournament_ref IN (SELECT id FROM tournaments WHERE bga_tournament_id ~ '^1234(9[0-9])$'); DELETE FROM tournaments WHERE bga_tournament_id ~ '^1234(9[0-9])$'`)}
+<p>alice has up to 5 open tournaments of this page at once, and an organizer has 10 at most. Her open tournaments now:</p>${pre(`${DB} -At -c "SELECT count(*) FROM tournaments WHERE organizer_sub = '${ALICE_SUB}' AND detached_at IS NULL AND cancelled_at IS NULL AND ended_at IS NULL AND (ends_at IS NULL OR ends_at > now())"`)}<p>Expected: <code>5</code> or less. Otherwise cancel her older ones (lot 1 and V2 runs; a cancelled tournament keeps its pools):</p>${PSQL(`UPDATE tournaments SET cancelled_at = now() WHERE organizer_sub = '${ALICE_SUB}' AND NOT bga_tournament_id ~ '^1234(9[0-9])$' AND detached_at IS NULL AND cancelled_at IS NULL AND ended_at IS NULL`)}` },
+    ],
+  },
+  {
+    letter: 'A', title: 'Form: the Sets tab (/tournament/new)',
+    intro: 'As alice, on a blank form. Nothing is created in this group.',
+    steps: [
+      { id: 'ms-a-grid', who: 'alice', title: 'The grid: one click = the 7 boosters of a set',
+        html: `<ul><li>${url(WEB + '/tournament/new')}, Cards section: a two-way switch “Sets” / “Mono-faction mix”, <strong>“Sets”</strong> selected; the hint “Each player receives 7 boosters. Pick a set, or mix several below.”; the set grid; below it a closed accordion header, framed like a tile: “Mix several sets”, under it “Split the 7 boosters across several sets”, a chevron pointing down on the right, and no counter. Hovering it outlines it in gold.</li>
+<li>Click Skybound Odyssey: ✓ on its tile, still no counter.</li>
+<li>Click it again: no set selected (no ✓, no badge).</li></ul>` },
+      { id: 'ms-a-mix', who: 'alice', title: 'The “Mix several sets” disclosure: steppers, counter, badges',
+        html: `<ul><li>Click the “Mix several sets” header: it opens (the chevron turns up, the steppers panel attached below the header in the same frame), with the hint “Boosters of each set, 7 in total. Each booster holds only cards of its set.”, one stepper per set (7 rows, no Beyond the Gates KS), all at <strong>0</strong>, and the counter <strong>“0 / 7”</strong> on the right of the header, next to the chevron.</li>
+<li>Click the Skybound Odyssey tile in the grid: its stepper reads <strong>7</strong>, the counter <strong>“7 / 7”</strong> (green), every “+” is greyed out.</li>
+<li>“−” three times on Skybound Odyssey: <strong>“4 / 7”</strong>, the “+” are active again, the tile shows a <strong>×4</strong> badge instead of the ✓.</li>
+<li>“+” three times on Roots of Corruption: <strong>“7 / 7”</strong>, its tile shows <strong>×3</strong>, every “+” greyed out again.</li></ul>` },
+      { id: 'ms-a-issues', who: 'alice', title: 'Live issues of the split',
+        html: `<ul><li>Fill a valid name and a free link (${chip('https://boardgamearena.com/tournament?id=123497')}), start tomorrow. In the disclosure, bring every set to 0, then Skybound Odyssey to 4 only. Expected: the bar stuck to the bottom lists <strong>“The boosters must add up to 7 (4 now).”</strong>, the create button is greyed out.</li>
+<li>Click the line in the bar: the page scrolls back to the Cards section.</li>
+<li>“+” three times on Roots of Corruption: the bar is empty, the button active.</li>
+<li>Bring both back to 0: the bar lists <strong>“Choose a set.”</strong>, button greyed out. Do not create.</li></ul>` },
+      { id: 'ms-a-switch', who: 'alice', title: 'Sets ↔ Mono-faction mix keeps each tab’s values',
+        html: `<ul><li>Sets tab, disclosure open: Skybound Odyssey 4, Roots of Corruption 3 (“7 / 7”).</li>
+<li>Click “Mono-faction mix”: choose Axiom, Whisper from the Maze ×2.</li>
+<li>Back to “Sets”: the disclosure is still open with Skybound Odyssey 4, Roots of Corruption 3, “7 / 7”, the ×4 and ×3 badges on the grid.</li>
+<li>Back to “Mono-faction mix”: Axiom and Whisper from the Maze ×2 are still there. Do not create.</li></ul>` },
+      { id: 'ms-a-draft', who: 'alice', title: 'The form draft keeps the split and the random mode across a reconnect',
+        html: `<p>The draft is only parked when the session expires and “Reconnect” is clicked (the lot 1 b-session-expired flow); a plain reload does not keep it.</p>
+<ul><li>As alice, ${url(WEB + '/tournament/new')}: name ${chip('Draft multiset')}, link ${chip('https://boardgamearena.com/tournament?id=123496')}, start tomorrow; Sets tab, “Mix several sets”: Skybound Odyssey 3, Roots of Corruption 3, Neverending Journey 1 (“7 / 7”). Settings: “Random, like real packs”, slider on <strong>“1 booster in 4 (25 %)”</strong>. <strong>Do not submit.</strong></li>
+<li>End alice's session on the Keycloak side, either: ${url(KC + '/admin')} (admin / admin) › realm <strong>players</strong> › Users › alice › Sessions › “Sign out”; or the command below.</li></ul>
+${pre(LOGOUT_ALICE)}
+<p>Expected: <code>logout 204</code>.</p>
+<ul><li>Click “Create the tournament”. Expected: in the bottom bar, the “Your Re:Union session has expired…” message and a “Reconnect” button.</li>
+<li>Click “Reconnect”, log in again as alice.</li>
+<li>Expected: back on the form, the Sets tab with the disclosure open, Skybound Odyssey 3, Roots of Corruption 3, Neverending Journey 1, “7 / 7”; “Random, like real packs” selected, slider on “1 booster in 4 (25 %)”; name and link as before.</li>
+<li>Do not create: leave the form (or close the tab).</li></ul>` },
+    ],
+  },
+  {
+    letter: 'B', title: 'Creating “SKY ROC NEJ mix”',
+    intro: 'As alice. BGA id 123490. Skybound Odyssey ×3, Roots of Corruption ×3, Neverending Journey ×1, heroes in packs, uniques exact 2 in boosters / 1 guaranteed, all factions. Groups C, D, G and H reuse it.',
+    steps: [
+      { id: 'ms-b-create', who: 'alice', title: 'Create “SKY ROC NEJ mix”: stored config',
+        html: `<ul><li>${url(WEB + '/tournament/new')}: name ${chip('SKY ROC NEJ mix')}, link ${chip(BGA_URL)}, start tomorrow.</li>
+<li>Cards: Sets tab, “Mix several sets”: Skybound Odyssey 3, Roots of Corruption 3, Neverending Journey 1 (“7 / 7”). In the uniques block: the hint “Boosters of Neverending Journey never hold a unique: no unique data yet.”</li>
+<li>Settings: heroes “In packs”, uniques “Exact number”, <strong>2</strong> inside boosters, <strong>1</strong> guaranteed, faction “All factions”. No “Spread the uniques evenly across factions” box (several sets). Create. Expected: redirect to <code>/tournament/t/&lt;id&gt;</code>.</li></ul>
+${CONFIG('123490')}
+<p>Expected:</p><pre>SKY ROC NEJ mix
+{"type":"multiset","sets":{"CYCLONE":3,"EOLE":3,"FUGUE":1},"boosters":7}
+{"inBoosters":2,"guaranteed":1,"evenFactions":false,"faction":null,"randomOneIn":null}
+packs</pre>` },
+      { id: 'ms-b-summary', who: 'alice', title: 'Summary line on the tournament page and the menu card',
+        html: `<ul><li>Tournament page: “7 boosters · SKY ×3, ROC ×3, NEJ · 2 uniques in boosters · 1 guaranteed unique”.</li>
+<li>${url(WEB + '/tournament?tab=upcoming')}: the “SKY ROC NEJ mix” card shows the same line.</li>
+<li>Same two places at 375 px (DevTools): the line wraps without horizontal scroll.</li></ul>` },
+    ],
+  },
+  {
+    letter: 'C', title: 'alice’s pool on “SKY ROC NEJ mix”',
+    intro: 'Seven classic single-set boosters (1 hero + 9 commons + 3 rares of one set), 3 Skybound Odyssey, 3 Roots of Corruption, 1 Neverending Journey, in a shuffled order, plus the guaranteed unique.',
+    steps: [
+      { id: 'ms-c-reveal', who: 'alice', title: 'Open the pool: the ROC boosters show their pack photo',
+        html: `<ul><li>On “SKY ROC NEJ mix”, “Open my pool”: spinner, then <code>/tournament/t/&lt;id&gt;/pool</code> and the reveal, “Booster 1 / 8” … “Booster 8 / 8”.</li>
+<li>The Roots of Corruption boosters open on the <strong>Roots of Corruption pack photo</strong> first; the Skybound Odyssey and Neverending Journey boosters go <strong>straight to the cards</strong>. Note which booster numbers show the photo.</li>
+<li>“Booster 8 / 8” is “✦ Your guaranteed unique”, without a photo.</li></ul>
+<p>The set of each booster, in reveal order:</p>
+${pre(`${DB} -At -c "SELECT bi, split_part(b->>0, '_', 2) AS booster_set ${FROM}, jsonb_array_elements(p.boosters) WITH ORDINALITY AS bb(b, bi) WHERE ${W('123490')} ORDER BY bi"`)}
+<p>Expected: 7 lines; the <code>EOLE</code> lines are exactly the boosters that showed the photo (3 of them), the 3 <code>CYCLONE</code> and the <code>FUGUE</code> one did not. The order is shuffled with the pool: it changes from one player’s pool to another’s.</p>` },
+      { id: 'ms-c-boosters', title: 'Stored pool: 7 set-pure boosters of 13, 3 / 3 / 1',
+        html: `${pre(`${DB} -At -c "SELECT p.set_code IS NULL AS no_set_code, jsonb_array_length(p.boosters) AS boosters, (SELECT string_agg(DISTINCT jsonb_array_length(b)::text, ',') FROM jsonb_array_elements(p.boosters) b) AS booster_sizes ${FROM} WHERE ${W('123490')}" -c "SELECT split_part(b->>0, '_', 2) AS booster_set, count(*) AS boosters ${FROM}, jsonb_array_elements(p.boosters) b WHERE ${W('123490')} GROUP BY 1 ORDER BY 1" -c "SELECT count(*) FILTER (WHERE x.sets = 1) AS set_pure, count(*) FILTER (WHERE x.distinct_refs = jsonb_array_length(x.b)) AS no_duplicate, count(*) AS boosters FROM (SELECT b, (SELECT count(DISTINCT split_part(r, '_', 2)) FROM jsonb_array_elements_text(b) r) AS sets, (SELECT count(DISTINCT r) FROM jsonb_array_elements_text(b) r) AS distinct_refs ${FROM}, jsonb_array_elements(p.boosters) b WHERE ${W('123490')}) x"`)}
+<p>Expected, three blocks:</p><pre>t|7|13
+CYCLONE|3
+EOLE|3
+FUGUE|1
+7|7|7</pre><p class="note">No set code; 7 boosters, all of 13 cards; 3 Skybound Odyssey, 3 Roots of Corruption, 1 Neverending Journey (the set of slot 1); every booster holds cards of one set only (its uniques included) and no ref twice.</p>` },
+      { id: 'ms-c-heroes', title: 'Slot 1 is a hero of the booster’s set',
+        html: `<p>Card type of slot 1 of each booster through the community cards API (7 requests).</p>
+${pre(`${DB} -At -c "SELECT b->>0 ${FROM}, jsonb_array_elements(p.boosters) b WHERE ${W('123490')}" | node -e 'const refs = require("fs").readFileSync(0, "utf8").split(/\\s+/).filter(Boolean); (async () => { for (const r of refs) { const j = await (await fetch("https://cards.alteredcore.org/api/cards?reference=" + r)).json(); const c = (j.member ?? j["hydra:member"] ?? [])[0]; console.log(r.split("_")[1], r, c?.cardType?.reference ?? "not found") } })()'`)}
+<p>Expected: 7 lines ending with <code>HERO</code>: 3 <code>CYCLONE</code>, 3 <code>EOLE</code>, 1 <code>FUGUE</code>. Since ms-c-boosters found every booster set-pure, each hero is of its booster’s set.</p>` },
+      { id: 'ms-c-deck', who: 'alice', title: 'Pool page and deck: like a single-set pool',
+        html: `<ul><li>Full Pool tab, group by set: 3 groups (Skybound Odyssey, Roots of Corruption, Neverending Journey).</li>
+<li>“Make random deck”, back on the tournament page: step 3 checked, “Deck: SKY ROC NEJ mix · 30 cards” (or more).</li></ul>
+${DECKS('ALICE', 'SKY ROC NEJ mix')}
+<p>Expected: one line (the deck created in the last 10 minutes).</p>` },
+    ],
+  },
+  {
+    letter: 'D', title: 'Exact uniques in a multi-set',
+    intro: '“SKY ROC NEJ mix” asks 2 uniques in boosters and 1 guaranteed. A unique inside a booster is of that booster’s set; Neverending Journey has no unique data, so its booster never holds one.',
+    steps: [
+      { id: 'ms-d-in-boosters', title: 'The 2 in-booster uniques: in a SKY or ROC booster, of its set',
+        html: `${pre(`${DB} -At -c "SELECT bi, split_part(b->>0, '_', 2) AS booster_set, pos, ref, split_part(ref, '_', 2) = split_part(b->>0, '_', 2) AS same_set ${FROM}, jsonb_array_elements(p.boosters) WITH ORDINALITY AS bb(b, bi), jsonb_array_elements_text(b) WITH ORDINALITY AS c(ref, pos) WHERE ${W('123490')} AND ref ~ '_U_[0-9]+$' ORDER BY bi, pos" -c "SELECT count(*) FILTER (WHERE ref ~ '_U_[0-9]+$') AS uniques_in_boosters, count(*) FILTER (WHERE NOT ref ~ '_U_[0-9]+$') AS rares ${FROM}, jsonb_array_elements(p.boosters) b, jsonb_array_elements_text(b) WITH ORDINALITY AS c(ref, pos) WHERE ${W('123490')} AND pos BETWEEN 11 AND 13"`)}
+<p>Expected: exactly 2 lines <code>&lt;booster&gt;|CYCLONE or EOLE|11, 12 or 13|ALT_&lt;same set&gt;_…_U_&lt;serial&gt;|t</code> (a rare slot, never the <code>FUGUE</code> booster, the unique of its booster’s set), then <code>2|19</code> (2 uniques in rare slots, 19 rares left).</p>` },
+      { id: 'ms-d-guaranteed', title: 'The guaranteed unique: outside the boosters, SKY or ROC',
+        html: `${pre(`${DB} -At -c "SELECT k ${FROM}, jsonb_object_keys(p.cards) k WHERE ${W('123490')} AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(p.boosters) b WHERE b ? k)" -c "SELECT count(*) AS uniques_in_pool ${FROM}, jsonb_object_keys(p.cards) k WHERE ${W('123490')} AND k ~ '_U_[0-9]+$'"`)}
+<p>Expected: one ref <code>ALT_CYCLONE_…_U_&lt;serial&gt;</code> or <code>ALT_EOLE_…_U_&lt;serial&gt;</code> (never <code>FUGUE</code>; its set is drawn by weight, SKY and ROC 3 each), then <code>3</code> (three distinct uniques in the pool).</p>` },
+      { id: 'ms-d-cap', who: 'alice', title: 'Form: in-booster uniques capped by the boosters with unique data',
+        html: `<ul><li>${url(WEB + '/tournament/new')}: name ${chip('Cap mix')}, link ${chip('https://boardgamearena.com/tournament?id=123498')}, start tomorrow. Sets tab: click Skybound Odyssey (7 boosters). Settings: “Exact number”, <strong>4</strong> uniques inside boosters.</li>
+<li>“Mix several sets”: Skybound Odyssey down to 1, Neverending Journey up to 6 (“7 / 7”). Expected: the hint “Boosters of Neverending Journey never hold a unique: no unique data yet.” in the uniques block, and the bar lists <strong>“Too many uniques in boosters for the sets with unique data (3 max).”</strong>, button greyed out.</li>
+<li>“−” once on the in-booster stepper: <strong>3</strong>, the bar is empty, and the “+” of that stepper is greyed out (3 per eligible booster, one Skybound Odyssey booster).</li>
+<li>Do not create.</li></ul>` },
+    ],
+  },
+  {
+    letter: 'E', title: 'Random uniques (the three sources)',
+    intro: 'A random tournament rolls each booster on its own: at “every booster” (1 in 1) the counts are exact, so these steps use it. Any other value is checked on the stored config and the summary only.',
+    steps: [
+      { id: 'ms-e-form', who: 'alice', title: 'Form: the exact / random switch and the slider',
+        html: `<ul><li>${url(WEB + '/tournament/new')}, Sets tab: Skybound Odyssey. Settings, uniques: a two-way switch “Exact number” / “Random, like real packs”, “Exact number” selected. Set <strong>2</strong> uniques inside boosters.</li>
+<li>Click “Random, like real packs”: the in-booster stepper is gone; instead “Chance of a unique per booster” with <strong>“1 booster in 8 (12.5 %)”</strong>, a slider labelled “1 in 10” on the left and “every booster” on the right, and the hint “Each booster rolls on its own: 0 to 7 uniques in a pool's boosters.”. The “Spread the uniques evenly across factions” box is gone; the guaranteed stepper and the faction pills are still there.</li>
+<li>Slider fully left: “1 booster in 10 (10 %)”. Fully right: “every booster (100 %)”. One notch from the right: “1 booster in 2 (50 %)”.</li>
+<li>Back to “Exact number”: the stepper reads 2 again and the even-factions box is back. Back to “Random, like real packs”: the slider is where you left it. Do not create.</li></ul>` },
+      { id: 'ms-e-set', who: 'alice', title: '“Random SKY” (one set, every booster, 1 guaranteed): 8 uniques',
+        html: `<ul><li>${url(WEB + '/tournament/new')}: name ${chip('Random SKY')}, link ${chip('https://boardgamearena.com/tournament?id=123491')}, start tomorrow. Sets tab: Skybound Odyssey. Settings: heroes “In packs”, “Random, like real packs”, slider fully right (“every booster (100 %)”), <strong>1</strong> guaranteed, “All factions”. Create.</li></ul>
+${CONFIG('123491')}
+<p>Expected:</p><pre>Random SKY
+{"type":"set","setCode":"CYCLONE","boosters":7}
+{"inBoosters":0,"guaranteed":1,"evenFactions":false,"faction":null,"randomOneIn":1}
+packs</pre>
+<ul><li>“Open my pool”: in the reveal, the last card of each of the 7 boosters is a unique; “Booster 8 / 8” holds the guaranteed one.</li></ul>
+${pre(LAST('123491'))}
+<p>Expected: 7 lines <code>&lt;n&gt;|CYCLONE|ALT_CYCLONE_…_U_&lt;serial&gt;|t|t</code>, then <code>8</code> (7 in the boosters + 1 guaranteed, all distinct).</p>` },
+      { id: 'ms-e-mix', title: 'Random on “SKY ×3, ROC ×3, NEJ ×1”: 6 uniques, none in the NEJ booster',
+        html: `<p>Created through the API (the form gives the same). The request also sends <code>inBoosters: 5</code> and <code>evenFactions: true</code>: random mode forces them to 0 and false, without an error.</p>
+${CREATE('Random SKY ROC NEJ mix', '123492', '{ source: { type: "multiset", sets: { CYCLONE: 3, EOLE: 3, FUGUE: 1 } }, heroes: "packs", uniques: { randomOneIn: 1, inBoosters: 5, evenFactions: true, guaranteed: 0 } }')}
+<p>Expected:</p><pre>201 &lt;id&gt;
+{"type":"multiset","sets":{"CYCLONE":3,"EOLE":3,"FUGUE":1},"boosters":7}
+{"inBoosters":0,"guaranteed":0,"evenFactions":false,"faction":null,"randomOneIn":1}
+alice pool 200</pre>
+${pre(LAST('123492'))}
+<p>Expected: 7 lines; the 3 <code>CYCLONE</code> and 3 <code>EOLE</code> ones end with <code>|t|t</code> (a unique of the booster’s set in slot 13), the <code>FUGUE</code> one ends with <code>|f|t</code> (a plain Neverending Journey rare: its roll hit but has no unique data); then <code>6</code>.</p>` },
+      { id: 'ms-e-faction', title: 'Random on an Axiom mono-faction mix: 7 Axiom uniques, none from NEJ',
+        html: `${CREATE('Random Axiom mix', '123493', '{ source: { type: "faction", faction: "AX", sets: { CORE: 1, ALIZE: 1, BISE: 1, CYCLONE: 1, DUSTER: 1, EOLE: 1, FUGUE: 1 } }, heroes: "packs", uniques: { randomOneIn: 1, guaranteed: 0 } }')}
+<p>Expected:</p><pre>201 &lt;id&gt;
+{"type":"faction","faction":"AX","sets":{"CORE":1,"ALIZE":1,"BISE":1,"CYCLONE":1,"DUSTER":1,"EOLE":1,"FUGUE":1},"boosters":7}
+{"inBoosters":0,"guaranteed":0,"evenFactions":false,"faction":"AX","randomOneIn":1}
+alice pool 200</pre>
+${pre(LAST('123493'))}
+<p>Expected: 7 lines with <code>is_unique</code> = <code>t</code> (the <code>same_set</code> column means nothing here: a mono-faction booster mixes sets), then <code>7</code>. Real faction and set of these uniques through the community cards API:</p>
+${pre(`${DB} -At -c "SELECT k ${FROM}, jsonb_object_keys(p.cards) k WHERE ${W('123493')} AND k ~ '_U_[0-9]+$'" | node -e 'const refs = require("fs").readFileSync(0, "utf8").split(/\\s+/).filter(Boolean); (async () => { const factions = {}; const sets = {}; for (const r of refs) { const j = await (await fetch("https://cards.alteredcore.org/api/cards?reference=" + r)).json(); const c = (j.member ?? j["hydra:member"] ?? [])[0]; const f = c?.faction?.code ?? "not found"; factions[f] = (factions[f] ?? 0) + 1; const s = r.split("_")[1]; sets[s] = (sets[s] ?? 0) + 1 } console.log(refs.length + " uniques", JSON.stringify(factions), JSON.stringify(sets)) })()'`)}
+<p>Expected: <code>7 uniques {"AX":7} {…}</code>, the last object counting the sets of the uniques, with no <code>FUGUE</code> key (each unique’s set is drawn by weight over the sets with unique data).</p>` },
+      { id: 'ms-e-summary', who: 'alice', title: 'Summary of a random tournament',
+        html: `<ul><li>${url(WEB + '/tournament?tab=upcoming')}: “Random SKY” reads “7 boosters · Skybound Odyssey · a unique in every booster · 1 guaranteed unique”; “Random SKY ROC NEJ mix” “7 boosters · SKY ×3, ROC ×3, NEJ · a unique in every booster”; “Random Axiom mix” “7 boosters · <em>[Axiom icon]</em> Axiom mono-faction · all sets · a unique in every booster”. Same lines on each tournament page. No “even factions” part.</li></ul>
+<p>A throwaway tournament at 1 in 4 (no pool), on BGA id 123499:</p>
+${pre(`T=$TOKEN_ALICE node -e '(async () => { const h = { Authorization: "Bearer " + process.env.T, "Content-Type": "application/json" }; const r = await fetch("${API}/api/tournaments", { method: "POST", headers: h, body: JSON.stringify({ name: "Random one in four", bgaUrl: "https://boardgamearena.com/tournament?id=123499", startsAt: new Date(Date.now() + 864e5).toISOString(), config: { source: { type: "multiset", sets: { CYCLONE: 7 } }, heroes: "packs", uniques: { randomOneIn: 4, guaranteed: 0 } } }) }); const tn = await r.json(); console.log(r.status, tn.id ? "${WEB}/tournament/t/" + tn.id : JSON.stringify(tn)) })()'`)}
+<ul><li>Expected: <code>201 ${WEB}/tournament/t/&lt;id&gt;</code>. Open that link: “7 boosters · Skybound Odyssey · 1 unique in 4 boosters”.</li>
+<li>Then delete it:</li></ul>
+${pre(`T=$TOKEN_ALICE node -e '(async () => { const h = { Authorization: "Bearer " + process.env.T }; const l = await (await fetch("${API}/api/tournaments?bgaId=123499")).json(); const tn = l.tournaments[0]; if (!tn) return console.log("no tournament on 123499"); const d = await fetch("${API}/api/tournaments/" + tn.id, { method: "DELETE", headers: h }); console.log("delete", tn.name, d.status) })()'`)}
+<p>Expected: <code>delete Random one in four 200</code> (or 204).</p>` },
+    ],
+  },
+  {
+    letter: 'F', title: 'API guards and normalization (curl)',
+    intro: 'Nothing here creates a tournament except ms-f-normalize, kept for group H.',
+    steps: [
+      { id: 'ms-f-api', title: 'Invalid splits and random values refused with their error code',
+        html: `${pre(`T=$TOKEN_ALICE node -e '(async () => { const h = { Authorization: "Bearer " + process.env.T, "Content-Type": "application/json" }; const body = (sets, uniques) => ({ name: "Guard multiset", bgaUrl: "https://boardgamearena.com/tournament?id=123494", startsAt: new Date(Date.now() + 864e5).toISOString(), config: { source: { type: "multiset", sets }, heroes: "packs", uniques } }); const none = { inBoosters: 0, guaranteed: 0 }; const mix = { CYCLONE: 3, EOLE: 3, FUGUE: 1 }; const cases = [["sum 6", body({ CYCLONE: 3, EOLE: 3 }, none)], ["8 in one set", body({ CYCLONE: 8 }, none)], ["COREKS", body({ COREKS: 4, CYCLONE: 3 }, none)], ["randomOneIn 0", body(mix, { randomOneIn: 0, guaranteed: 0 })], ["randomOneIn 11", body(mix, { randomOneIn: 11, guaranteed: 0 })], ["NEJ alone, random", body({ FUGUE: 7 }, { randomOneIn: 8, guaranteed: 0 })], ["cap: SKY 1, NEJ 6, 4 in", body({ CYCLONE: 1, FUGUE: 6 }, { inBoosters: 4, guaranteed: 0 })]]; for (const [label, b] of cases) { const r = await fetch("${API}/api/tournaments", { method: "POST", headers: h, body: JSON.stringify(b) }); const j = await r.json(); console.log(label.padEnd(24), r.status, JSON.stringify(j.config ?? j)) } })()'`)}
+<p>Expected, one line each:</p><pre>sum 6                    400 ["source.sets"]
+8 in one set             400 ["source.sets"]
+COREKS                   400 ["source.sets"]
+randomOneIn 0            400 ["uniques.randomOneIn"]
+randomOneIn 11           400 ["uniques.randomOneIn"]
+NEJ alone, random        400 ["uniques.unsupportedSet"]
+cap: SKY 1, NEJ 6, 4 in  400 ["uniques.inBoosters"]</pre>
+<p class="note">“NEJ alone” is a multiset of one set, stored as <code>set</code>: no set with unique data. The cap is 3 per booster whose set has unique data (one Skybound Odyssey booster: 3).</p>` },
+      { id: 'ms-f-normalize', title: 'A multiset of one set is stored as a set',
+        html: `${CREATE('Normalized SKY', '123495', '{ source: { type: "multiset", sets: { CYCLONE: 7, EOLE: 0 } }, heroes: "packs", uniques: { inBoosters: 1, guaranteed: 0 } }')}
+<p>Expected:</p><pre>201 &lt;id&gt;
+{"type":"set","setCode":"CYCLONE","boosters":7}
+{"inBoosters":1,"guaranteed":0,"evenFactions":false,"faction":null,"randomOneIn":null}
+alice pool 200</pre>
+<p class="note">The set at 0 is dropped, then the one set left makes a <code>set</code> source: the tournament is the same as one created from the grid. The pool opened here is not used; group H edits another tournament.</p>
+${PSQL(`SELECT p.set_code, jsonb_array_length(p.boosters) AS boosters ${FROM} WHERE ${W('123495')}`)}
+<p>Expected: <code>CYCLONE | 7</code> (a set code, unlike a multi-set pool).</p>` },
+    ],
+  },
+  {
+    letter: 'G', title: 'BGA path (curl, carol)',
+    intro: 'carol has no pool on “SKY ROC NEJ mix”: her first BGA call creates one. BGA contracts unchanged.',
+    steps: [
+      { id: 'ms-g-bga', title: 'The BGA call creates a multi-set pool and a deck taken from it',
+        html: `${pre(`T=$TOKEN_CAROL node -e '(async () => { const h = { Authorization: "Bearer " + process.env.T }; const b = await (await fetch("${API}/api/tournament-bga-decklist?tournamentId=123490&tournamentName=BGA%20name&gameId=g-123490", { headers: h })).json(); const m = b["hydra:member"]?.[0]; if (!m) return console.log("no deck", JSON.stringify(b)); const d = await (await fetch("http://localhost:8001/api/decks/" + m.id, { headers: { ...h, Accept: "application/json" } })).json(); const pool = await (await fetch("${API}/api/tournament-pool-counts?tournamentId=123490", { headers: h })).json(); const cards = (d.deckCards ?? d.cards ?? []).map(c => [String(c.cardReference ?? c.reference ?? "").toUpperCase(), Math.max(1, parseInt(c.quantity ?? 1, 10) || 1)]); const outside = cards.filter(([r, q]) => (pool.cards[r] ?? 0) < q).map(([r]) => r); console.log(m.name, "|", m.faction?.reference, "|", cards.reduce((n, [, q]) => n + q, 0), "cards | outside the pool:", outside.join(" ") || "none") })()'`)}
+<p>Expected: <code>Random SKY ROC NEJ mix | &lt;faction&gt; | N cards | outside the pool: none</code> with N ≥ 30 (every copy of the deck is in carol’s pool).</p>
+${PSQL(`SELECT left(sub, 4) AS player, created_by, set_code IS NULL AS no_set_code, jsonb_array_length(boosters) AS boosters, tournament_name FROM sealed_pools WHERE tournament_id = '123490' ORDER BY created_by`)}
+<p>Expected, carol’s row (the first 4 characters of her id) then alice’s:</p><pre>&lt;carol&gt; | bga | t | 7 | SKY ROC NEJ mix
+1111 | page | t | 7 | SKY ROC NEJ mix</pre>` },
+    ],
+  },
+  {
+    letter: 'H', title: 'Edit',
+    steps: [
+      { id: 'ms-h-locked', who: 'alice', title: 'Config locked once a pool exists',
+        html: `<p>“SKY ROC NEJ mix” › Edit. Expected: the locked notice (“Cards, settings and the BGA link are locked: pools already exist.”); the Sets tab with the “Mix several sets” disclosure <strong>open by itself</strong>, Skybound Odyssey 3, Roots of Corruption 3, Neverending Journey 1, “7 / 7”, every stepper greyed out; the grid (×3, ×3, ×1 badges), the Sets / Mono-faction switch, the disclosure header and the uniques switch greyed out. Name, description and dates stay editable. Leave without saving.</p>` },
+      { id: 'ms-h-unlocked', who: 'alice', title: 'Edit before any pool: the split changes, the summary follows',
+        html: `<p>Delete the pool opened in ms-f-normalize, so “Normalized SKY” (BGA id 123495) has none:</p>
+${PSQL(`DELETE FROM sealed_pools WHERE tournament_id = '123495'`)}
+<p>Expected: <code>DELETE 1</code>.</p>
+<ul><li>${url(WEB + '/tournament?tab=upcoming')} › “Normalized SKY” › Edit: no locked notice, Sets tab, Skybound Odyssey ✓, the disclosure closed.</li>
+<li>Open “Mix several sets” (“7 / 7”, Skybound Odyssey 7): Skybound Odyssey “−” four times, Roots of Corruption “+” four times (“7 / 7”). Save. Expected: the tournament page reads “7 boosters · SKY ×3, ROC ×4 · 1 unique in boosters”.</li></ul>
+${CONFIG('123495')}
+<p>Expected:</p><pre>Normalized SKY
+{"type":"multiset","sets":{"CYCLONE":3,"EOLE":4},"boosters":7}
+{"inBoosters":1,"guaranteed":0,"evenFactions":false,"faction":null,"randomOneIn":null}
+packs</pre>
+<ul><li>Edit again: the disclosure is open by itself on 3 / 4. Click the Roots of Corruption tile in the grid (all 7 boosters), save. Expected: “7 boosters · Roots of Corruption · 1 unique in boosters”.</li></ul>
+${CONFIG('123495')}
+<p>Expected:</p><pre>Normalized SKY
+{"type":"set","setCode":"EOLE","boosters":7}
+{"inBoosters":1,"guaranteed":0,"evenFactions":false,"faction":null,"randomOneIn":null}
+packs</pre>` },
+    ],
+  },
+  {
+    letter: 'I', title: 'Cross-cutting: FR, theme, mobile, console',
+    steps: [
+      { id: 'ms-i-fr', title: 'French interface',
+        html: `<p>UI language FR, then the form (tab “Extensions”, “Mélanger plusieurs extensions”, the counter, the issues, the “Nombre exact” / “Aléatoire, comme de vrais boosters” switch, the slider text “1 booster sur 8 (12,5 %)”), the “SKY ROC NEJ mix” page and its menu card, the pool page. Expected: no English text left, no raw key (<code>tournaments.…</code>); the summary reads “7 boosters · SKY ×3, ROC ×3, NEJ · 2 uniques dans les boosters · 1 unique garantie”, and “une unique dans chaque booster” on “Random SKY ROC NEJ mix”. With 4 boosters in the split, the bar reads “Les boosters doivent faire 7 au total (4 pour l’instant).”.</p>` },
+      { id: 'ms-i-theme', title: 'Light and dark theme',
+        html: `<p>Toggle ☀/☾ on the form (Sets tab with the disclosure open and the ×n badges, the uniques switch in random mode with the slider), the tournament page and the pool page (a ROC booster’s pack photo). Expected: readable badges, counter (green at 7 / 7), steppers, switch and slider in both themes.</p>` },
+      { id: 'ms-i-mobile', title: 'Mobile width: disclosure and slider without horizontal scroll',
+        html: `<p>DevTools at 375 px: the form with the disclosure open (each set name, stepper on one line), the random slider with its two end labels, the tournament page, the pool page and its reveal. No horizontal scroll.</p>` },
+      { id: 'ms-i-console', title: 'Console without errors',
+        html: `<p>Over the whole journey, no JS error and no 500 request in Network (form, tournament page, pool page, menu).</p>` },
+    ],
+  },
+  {
+    letter: 'K', title: 'Before going to production',
+    intro: 'Preprod deploys from main, so this runs after the merge (V2’s PR #25 first, then this one).',
+    steps: [
+      { id: 'ms-k-preprod', title: 'Preprod: the three random tournaments, one pool each',
+        html: `<ul><li>${url('https://altered-draft-preprod.altered.re/tournament/new')}, three tournaments on throwaway BGA links, each at “every booster (100 %)”:
+<ul><li>one set, Skybound Odyssey, 1 guaranteed: ${chip('https://boardgamearena.com/tournament?id=999491')};</li>
+<li>Sets tab mix Skybound Odyssey 3, Roots of Corruption 3, Neverending Journey 1: ${chip('https://boardgamearena.com/tournament?id=999492')};</li>
+<li>Mono-faction mix, Axiom, every set at ×1: ${chip('https://boardgamearena.com/tournament?id=999493')}.</li></ul></li>
+<li>On each, “Open my pool”. Expected: the last card of every booster is a unique, except in the Neverending Journey booster of the mix; the Roots of Corruption boosters of the mix show their pack photo; the mono-faction boosters none; the summary lines of ms-e-summary.</li>
+<li>Clean-up: a moderator detaches each one (pools deleted), then Delete.</li></ul>` },
+    ],
+  },
+];
+
+
+
+/* ---------- state (IndexedDB, in-memory fallback) ---------- */
+// Same IndexedDB database as the lot 1 page, its own key: the two runs never mix.
+const DB_NAME = 'tournois-recette', STORE = 'kv', KEY = 'state-v3-multiset';
+let state = { steps: {} };
+let dbp = null;
+function openDb() {
+  if (dbp) return dbp;
+  dbp = new Promise((res) => {
+    try {
+      const r = indexedDB.open(DB_NAME, 1);
+      r.onupgradeneeded = () => r.result.createObjectStore(STORE);
+      r.onsuccess = () => res(r.result);
+      r.onerror = () => res(null);
+    } catch (e) { res(null); }
+  });
+  return dbp;
+}
+async function load() {
+  const db = await openDb();
+  if (!db) return;
+  await new Promise((res) => {
+    try {
+      const t = db.transaction(STORE).objectStore(STORE).get(KEY);
+      t.onsuccess = () => { if (t.result) state = t.result; res(); };
+      t.onerror = () => res();
+    } catch (e) { res(); }
+  });
+}
+let saveTimer = null;
+function save() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(async () => {
+    const db = await openDb();
+    if (!db) return;
+    try { db.transaction(STORE, 'readwrite').objectStore(STORE).put(state, KEY); } catch (e) {}
+  }, 250);
+}
+const st = (id) => (state.steps[id] ||= { status: null, note: '', images: [] });
+
+/* ---------- render ---------- */
+const ICONS = {
+  ok: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+  ko: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+  skip: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 6l7 6-7 6M13 6l7 6-7 6"/></svg>',
+};
+const allSteps = GROUPS.flatMap((g) => g.steps.map((s, i) => ({ ...s, group: g, num: `${g.letter}${i + 1}` })));
+
+function renderCast() {
+  document.getElementById('cast').innerHTML = Object.values(PERSONAS).map((p) => `
+    <div class="persona"><span class="tag">${p.tag}</span>
+      <div class="org">${p.org}</div>
+      <div style="margin:4px 0">${chip(p.email)}</div>
+      <div class="meta">${p.meta}</div></div>`).join('');
+}
+
+const FOLD_KEY = 'tournois-recette-v3-multiset-collapsed';
+let collapsed = new Set();
+try { collapsed = new Set(JSON.parse(localStorage.getItem(FOLD_KEY) || '[]')); } catch (e) {}
+function saveFold() { try { localStorage.setItem(FOLD_KEY, JSON.stringify([...collapsed])); } catch (e) {} }
+function setFold(letter, isCollapsed) {
+  isCollapsed ? collapsed.add(letter) : collapsed.delete(letter);
+  const sec = document.querySelector(`section.group[data-g="${letter}"]`);
+  if (sec) {
+    sec.classList.toggle('collapsed', isCollapsed);
+    sec.querySelector('h3').setAttribute('aria-expanded', String(!isCollapsed));
+  }
+}
+document.addEventListener('click', (e) => {
+  const h = e.target.closest('section.group > h3');
+  if (h) { const l = h.parentElement.dataset.g; setFold(l, !collapsed.has(l)); saveFold(); return; }
+  if (e.target.id === 'foldAll' || e.target.id === 'unfoldAll') {
+    GROUPS.forEach((g) => setFold(g.letter, e.target.id === 'foldAll')); saveFold();
+  }
+});
+document.addEventListener('keydown', (e) => {
+  const h = e.target.closest && e.target.closest('section.group > h3');
+  if (h && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); h.click(); }
+});
+
+function renderGroups() {
+  document.getElementById('groups').innerHTML = GROUPS.map((g) => `
+    <section class="group${collapsed.has(g.letter) ? ' collapsed' : ''}" data-g="${g.letter}">
+      <h3 tabindex="0" role="button" aria-expanded="${!collapsed.has(g.letter)}"><span class="letter">${g.letter}</span>${g.title}<span class="gcount" data-gcount="${g.letter}"></span><span class="chev" aria-hidden="true">▼</span></h3>
+      ${g.intro ? `<p class="intro">${g.intro}</p>` : ''}
+      ${g.steps.map((s, i) => stepHtml(s, `${g.letter}${i + 1}`)).join('')}
+    </section>`).join('');
+  allSteps.forEach((s) => paintStep(s.id));
+}
+
+function stepHtml(s, num) {
+  return `<article class="step" data-id="${s.id}">
+    <div class="s-head">
+      <div class="s-num">${num}</div>
+      <div class="s-body">
+        <p class="s-title">${s.v11 ? '<span class="new-tag v11">v1.1</span> ' : s.v2 ? '<span class="new-tag">new</span> ' : ''}${s.title}${AUTO_STEPS.includes(s.id) ? ` <span class="new-tag auto" title="${AUTO_PARTIAL[s.id] ? 'Partial: ' + AUTO_PARTIAL[s.id] : 'Replayed by the Playwright suite'}">auto${AUTO_PARTIAL[s.id] ? ' (partial)' : ''}</span>` : ''}</p>
+        ${s.who ? `<div class="s-who">${who(s.who)}</div>` : ''}
+        ${s.html || ''}
+      </div>
+      <div class="status">
+        <button data-v="ok" title="OK">${ICONS.ok}</button>
+        <button data-v="ko" title="Problem">${ICONS.ko}</button>
+        <button data-v="skip" title="Skip">${ICONS.skip}</button>
+      </div>
+    </div>
+    <div class="issue">
+      <label>What is wrong</label>
+      <textarea placeholder="What you saw, what you expected… (Ctrl+V to paste a screenshot)"></textarea>
+      <div class="drop">Drop or paste a screenshot here, or <u>click to choose one</u></div>
+      <input type="file" accept="image/*" multiple hidden>
+      <div class="thumbs"></div>
+    </div>
+  </article>`;
+}
+
+function imgName(id, i) { return `multiset-acceptance-${id}-${i + 1}.png`; }
+
+function paintStep(id) {
+  const el = document.querySelector(`.step[data-id="${id}"]`);
+  if (!el) return;
+  const s = st(id);
+  el.dataset.status = s.status || '';
+  el.classList.toggle('has-note', !!(s.note || s.images.length));
+  el.querySelectorAll('.status button').forEach((b) => b.classList.toggle('on', b.dataset.v === s.status));
+  const ta = el.querySelector('textarea');
+  if (document.activeElement !== ta) ta.value = s.note;
+  el.querySelector('.thumbs').innerHTML = s.images.map((src, i) => `
+    <div class="thumb"><img src="${src}" data-i="${i}" alt=""><button data-del="${i}" title="Remove">×</button><span class="fname">${imgName(id, i)}</span></div>`).join('');
+}
+
+function refreshMeta() {
+  const total = allSteps.length;
+  const c = { ok: 0, ko: 0, skip: 0 };
+  allSteps.forEach((s) => { const v = st(s.id).status; if (v) c[v]++; });
+  const done = c.ok + c.ko + c.skip;
+  document.getElementById('count').textContent = `${done} / ${total}` + (c.ko ? ` · ${c.ko} ✗` : '');
+  document.querySelector('.b-ok').style.width = (c.ok / total * 100) + '%';
+  document.querySelector('.b-ko').style.width = (c.ko / total * 100) + '%';
+  document.querySelector('.b-skip').style.width = (c.skip / total * 100) + '%';
+  GROUPS.forEach((g) => {
+    const d = g.steps.filter((s) => st(s.id).status).length;
+    document.querySelector(`[data-gcount="${g.letter}"]`).textContent = `${d}/${g.steps.length}`;
+  });
+  applyFilter();
+  renderRecap();
+}
+
+let filter = 'all';
+function applyFilter() {
+  document.querySelectorAll('.step').forEach((el) => {
+    const v = st(el.dataset.id).status;
+    const show = filter === 'all' || (filter === 'todo' && !v) || (filter === 'ko' && v === 'ko')
+      || (filter === 'manual' && (!AUTO_STEPS.includes(el.dataset.id) || el.dataset.id in AUTO_PARTIAL));
+    el.classList.toggle('hidden', !show);
+  });
+  document.querySelectorAll('section.group').forEach((g) => {
+    g.classList.toggle('hidden', !g.querySelector('.step:not(.hidden)'));
+  });
+}
+
+function stripHtml(h) {
+  const d = document.createElement('div');
+  d.innerHTML = h;
+  d.querySelectorAll('.copy-pre').forEach((b) => b.remove());
+  return d.textContent.replace(/\s+/g, ' ').trim();
+}
+
+function renderRecap() {
+  const ko = allSteps.filter((s) => st(s.id).status === 'ko' || (st(s.id).status !== 'ok' && (st(s.id).note || st(s.id).images.length)));
+  const c = { ok: 0, ko: 0, skip: 0, todo: 0 };
+  allSteps.forEach((s) => { c[st(s.id).status || 'todo']++; });
+  let out = `Multi-set sealed and random uniques acceptance, V3\n`;
+  out += `Result: ${c.ok} OK · ${c.ko} problem(s) · ${c.skip} skipped · ${c.todo} not done\n`;
+  const skipped = allSteps.filter((s) => st(s.id).status === 'skip').map((s) => s.num);
+  if (skipped.length) out += `Skipped: ${skipped.join(', ')}\n`;
+  if (!ko.length) {
+    out += `\nNo problem reported.`;
+  } else {
+    ko.forEach((s) => {
+      const x = st(s.id);
+      out += `\n— ${s.num} · ${s.group.title} · ${s.title}\n`;
+      if (s.who) out += `  Account: ${PERSONAS[s.who].email} (${PERSONAS[s.who].tag})\n`;
+      out += `  Expected: ${stripHtml(s.html || '').slice(0, 400)}\n`;
+      out += `  Seen: ${x.note ? x.note.replace(/\n/g, '\n    ') : '(no note)'}\n`;
+      if (x.images.length) out += `  Screenshots: ${x.images.map((_, i) => '~/Downloads/' + imgName(s.id, i)).join(', ')}\n`;
+    });
+  }
+  document.getElementById('recapText').textContent = out;
+  const badge = document.getElementById('tabBadge');
+  badge.textContent = ko.length;
+  badge.classList.toggle('hidden', ko.length === 0);
+  const n = allSteps.reduce((a, s) => a + st(s.id).images.length, 0);
+  const b = document.getElementById('dlImages');
+  b.disabled = n === 0;
+  b.textContent = n ? `Download the screenshots (${n})` : 'Download the screenshots';
+}
+
+/* ---------- interactions ---------- */
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), 1400);
+}
+async function copy(text) {
+  try { await navigator.clipboard.writeText(text); }
+  catch (e) {
+    const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); } catch (_) {} ta.remove();
+  }
+}
+
+function addImages(id, files) {
+  [...files].filter((f) => f.type.startsWith('image/')).forEach((f) => {
+    const r = new FileReader();
+    r.onload = () => { st(id).images.push(r.result); paintStep(id); save(); refreshMeta(); };
+    r.readAsDataURL(f);
+  });
+}
+
+document.addEventListener('click', async (e) => {
+  const c = e.target.closest('.chip');
+  if (c) {
+    let text = c.dataset.copy;
+    if (c.hasAttribute('data-copy-pre')) {
+      const pre = c.closest('pre').cloneNode(true); pre.querySelector('.copy-pre').remove(); text = pre.textContent.trim();
+    }
+    await copy(text);
+    c.classList.add('copied'); setTimeout(() => c.classList.remove('copied'), 900);
+    toast('Copied');
+    return;
+  }
+  const sb = e.target.closest('.status button');
+  if (sb) {
+    const id = sb.closest('.step').dataset.id;
+    const s = st(id);
+    s.status = s.status === sb.dataset.v ? null : sb.dataset.v;
+    paintStep(id); save(); refreshMeta();
+    if (s.status === 'ko') sb.closest('.step').querySelector('textarea').focus();
+    return;
+  }
+  const del = e.target.closest('[data-del]');
+  if (del) {
+    const id = del.closest('.step').dataset.id;
+    st(id).images.splice(+del.dataset.del, 1); paintStep(id); save(); refreshMeta();
+    return;
+  }
+  const img = e.target.closest('.thumb img');
+  if (img) {
+    const lb = document.getElementById('lightbox'); lb.querySelector('img').src = img.src; lb.classList.add('show');
+    return;
+  }
+  if (e.target.closest('#lightbox')) { document.getElementById('lightbox').classList.remove('show'); return; }
+  const drop = e.target.closest('.drop');
+  if (drop) { drop.parentElement.querySelector('input[type=file]').click(); return; }
+  const tab = e.target.closest('#tabs button, [data-goto]');
+  if (tab) { showTab(tab.dataset.tab || tab.dataset.goto); return; }
+  const f = e.target.closest('#filters button');
+  if (f) {
+    filter = f.dataset.f;
+    document.querySelectorAll('#filters button').forEach((b) => b.classList.toggle('active', b === f));
+    applyFilter();
+  }
+});
+
+document.addEventListener('input', (e) => {
+  if (e.target.matches('.issue textarea')) {
+    const id = e.target.closest('.step').dataset.id;
+    st(id).note = e.target.value; save(); renderRecap();
+  }
+});
+document.addEventListener('change', (e) => {
+  if (e.target.matches('.issue input[type=file]')) {
+    addImages(e.target.closest('.step').dataset.id, e.target.files); e.target.value = '';
+  }
+});
+document.addEventListener('paste', (e) => {
+  const stepEl = e.target.closest && e.target.closest('.step');
+  if (!stepEl) return;
+  const files = [...(e.clipboardData?.items || [])].filter((i) => i.type.startsWith('image/')).map((i) => i.getAsFile());
+  if (files.length) { e.preventDefault(); addImages(stepEl.dataset.id, files); toast('Screenshot added'); }
+});
+['dragover', 'dragleave', 'drop'].forEach((ev) => document.addEventListener(ev, (e) => {
+  const d = e.target.closest && e.target.closest('.drop');
+  if (!d) return;
+  e.preventDefault();
+  d.classList.toggle('over', ev === 'dragover');
+  if (ev === 'drop') addImages(d.closest('.step').dataset.id, e.dataTransfer.files);
+}));
+
+document.getElementById('copyRecap').addEventListener('click', async () => {
+  await copy(document.getElementById('recapText').textContent); toast('Recap copied');
+});
+document.getElementById('dlImages').addEventListener('click', () => {
+  let delay = 0;
+  allSteps.forEach((s) => st(s.id).images.forEach((src, i) => {
+    setTimeout(() => {
+      const a = document.createElement('a'); a.href = src; a.download = imgName(s.id, i); document.body.appendChild(a); a.click(); a.remove();
+    }, delay);
+    delay += 250;
+  }));
+  toast('Downloading to ~/Downloads');
+});
+document.getElementById('resetAll').addEventListener('click', () => {
+  if (!confirm('Clear every tick, note and screenshot?')) return;
+  state = { steps: {} }; save(); renderGroups(); refreshMeta();
+});
+
+function showTab(name) {
+  const recap = name === 'recap';
+  document.getElementById('viewSteps').classList.toggle('hidden', recap);
+  document.getElementById('viewRecap').classList.toggle('hidden', !recap);
+  document.getElementById('filters').classList.toggle('hidden', recap);
+  document.querySelectorAll('#tabs button').forEach((b) => b.classList.toggle('active', b.dataset.tab === name));
+  try { history.replaceState(null, '', recap ? '#recap' : '#'); } catch (e) {}
+  window.scrollTo({ top: 0 });
+}
+
+const themeBtn = document.getElementById('themeBtn');
+function setTheme(t) {
+  if (t) document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme;
+  try { t ? localStorage.setItem('tournois-recette-theme', t) : localStorage.removeItem('tournois-recette-theme'); } catch (e) {}
+}
+try { const t = localStorage.getItem('tournois-recette-theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+themeBtn.addEventListener('click', () => {
+  const cur = document.documentElement.dataset.theme
+    || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  setTheme(cur === 'dark' ? 'light' : 'dark');
+});
+
+(async () => {
+  renderCast();
+  await load();
+  renderGroups();
+  refreshMeta();
+  if (location.hash === '#recap') showTab('recap');
+})();
+</script>
+</body>
+</html>
