@@ -338,9 +338,11 @@ describe('buildPool random uniques', () => {
   // call's first draw IS the guaranteed unique: only the gate keeps the serials distinct.
   it('never hands out the same serial twice when two draws hit the same set', async () => {
     vi.resetModules()
+    let pick
     vi.doMock('./uniqueFactionRanges.js', async importOriginal => {
       const real = await importOriginal()
-      return { ...real, pickDeterministicUniques: (code, _rng, opts) => real.pickDeterministicUniques(code, mulberry32(7), opts) }
+      pick = vi.fn((code, _rng, opts) => real.pickDeterministicUniques(code, mulberry32(7), opts))
+      return { ...real, pickDeterministicUniques: pick }
     })
     try {
       const { buildPool: build } = await import('./poolBuilder.js')
@@ -354,6 +356,7 @@ describe('buildPool random uniques', () => {
         expect(uniques).toHaveLength(8)
         for (const r of uniques) expect(cards[r]).toBe(1)
       }
+      expect(pick).toHaveBeenCalled()
     } finally {
       vi.doUnmock('./uniqueFactionRanges.js')
       vi.resetModules()

@@ -221,6 +221,12 @@ describe('validateTournamentConfig randomOneIn', () => {
     expect(validateTournamentConfig({ ...valid, uniques: { inBoosters: 0, guaranteed: 0, randomOneIn: 8, faction: 'AX' } }).config.uniques.faction).toBe('AX')
     expect(validateTournamentConfig(factionCfg({ uniques: { inBoosters: 0, guaranteed: 0, randomOneIn: 4, faction: 'BR' } })).config.uniques).toEqual({ inBoosters: 0, guaranteed: 0, evenFactions: false, faction: 'AX', randomOneIn: 4 })
   })
+  it('keeps random mode, guaranteed uniques and the faction on a set and on a multiset source', () => {
+    const uniques = { inBoosters: 3, guaranteed: 2, evenFactions: true, faction: 'AX', randomOneIn: 8 }
+    const expected = { inBoosters: 0, guaranteed: 2, evenFactions: false, faction: 'AX', randomOneIn: 8 }
+    expect(validateTournamentConfig({ ...valid, uniques }).config.uniques).toEqual(expected)
+    expect(validateTournamentConfig({ ...multi({ CYCLONE: 4, EOLE: 3 }), uniques }).config.uniques).toEqual(expected)
+  })
   it('refuses random mode when no included set has unique data, accepts it next to one that has', () => {
     expect(validateTournamentConfig({ ...valid, source: { type: 'set', setCode: 'FUGUE' }, uniques: { inBoosters: 0, guaranteed: 0, randomOneIn: 8 } }).errors).toEqual(['uniques.unsupportedSet'])
     expect(validateTournamentConfig({ ...multi({ FUGUE: 7 }), uniques: { randomOneIn: 8 } }).errors).toEqual(['uniques.unsupportedSet'])
