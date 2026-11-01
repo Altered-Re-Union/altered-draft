@@ -21,4 +21,16 @@ describe('configSummaryParts', () => {
     const parts = configSummaryParts({ source: { type: 'set', setCode: 'CYCLONE', boosters: 7 }, uniques: {}, heroes: 'packs' }, t, tc)
     expect(parts[0].text).toBe('tournaments.summaryBoosters {"n":7,"set":"Skybound Odyssey"}')
   })
+  const multi = (sets, uniques = {}) => ({ v: 1, format: 'sealed', source: { type: 'multiset', sets, boosters: 7 }, heroes: 'packs', uniques: { inBoosters: 0, guaranteed: 0, evenFactions: false, faction: null, randomOneIn: null, ...uniques }, excludeBanlist: false })
+  it('lists a multi-set split by abbreviation with ×n above 1', () => {
+    const parts = configSummaryParts(multi({ EOLE: 3, CYCLONE: 3, FUGUE: 1 }), t, tc)
+    expect(parts[0]).toEqual({ text: 'tournaments.summaryBoostersCount {"n":7}' })
+    expect(parts[1]).toEqual({ text: 'SKY ×3, ROC ×3, NEJ' })
+  })
+  it('says one unique in N boosters in random mode, every booster at 1, and drops the even part', () => {
+    expect(configSummaryParts(multi({ CYCLONE: 7 }, { randomOneIn: 8, guaranteed: 1, evenFactions: true }), t, tc).map(p => p.text))
+      .toEqual(['tournaments.summaryBoostersCount {"n":7}', 'SKY ×7', 'tournaments.summaryUniquesRandom {"n":8}', 'tournaments.summaryUniquesOut 1'])
+    expect(configSummaryParts({ source: { type: 'set', setCode: 'CYCLONE', boosters: 7 }, uniques: { randomOneIn: 1 }, heroes: 'packs' }, t, tc).map(p => p.text))
+      .toEqual(['tournaments.summaryBoosters {"n":7,"set":"Skybound Odyssey"}', 'tournaments.summaryUniquesEvery'])
+  })
 })

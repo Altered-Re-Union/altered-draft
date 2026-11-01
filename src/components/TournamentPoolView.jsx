@@ -46,7 +46,6 @@ export default function TournamentPoolView({ title, load, reset, backTo = null }
   const { t } = useLang()
   const [pool, setPool] = useState(null)
   const [cardMap, setCardMap] = useState({})
-  const [mixedSets, setMixedSets] = useState(false) // mono-faction pools mix several sets
   const [deck, setDeck] = useState({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -81,7 +80,6 @@ export default function TournamentPoolView({ title, load, reset, backTo = null }
       if (!setCodes.length && data.setCode) setCodes.push(data.setCode)
       const sets = await Promise.all(setCodes.map(s => fetchSet(s).catch(() => [])))
       for (const c of sets.flat()) map[c.reference] = c
-      setMixedSets(setCodes.length > 1)
       const uniqueRefs = refs.filter(r => isUniqueRef(r) && !map[r])
       if (uniqueRefs.length) {
         const uCards = await fetchUniques(uniqueRefs)
@@ -280,7 +278,7 @@ export default function TournamentPoolView({ title, load, reset, backTo = null }
         <PackReveal
           packs={revealPacks}
           hasBonus={bonusUniques.length > 0}
-          noCover={mixedSets}
+          sourceType={pool?.sourceType ?? 'set'}
           cardMap={cardMap}
           deck={deck}
           poolCounts={pool?.cards}

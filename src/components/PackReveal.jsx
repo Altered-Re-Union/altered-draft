@@ -16,6 +16,12 @@ function preloadImages(refs, cardMap, onDone) {
   return () => { cancelled = true; imgs.forEach(img => { img.onload = img.onerror = null }) }
 }
 
+// The one set every ref of a booster belongs to, or null when it mixes sets (no single pack photo fits).
+function singleSetOf(refs) {
+  const sets = new Set(refs.map(setCodeFromRef))
+  return sets.size === 1 ? [...sets][0] : null
+}
+
 /**
  * First-open reveal for a tournament sealed pool: a full-screen overlay that walks the
  * player pack by pack — the 7 boosters plus an 8th "booster" holding the guaranteed unique
@@ -31,7 +37,7 @@ function preloadImages(refs, cardMap, onDone) {
  * @param {string[][]} packs - packs to reveal in order; when `hasBonus`, the LAST one is the
  *   guaranteed-unique "8th booster".
  */
-export default function PackReveal({ packs, hasBonus = false, noCover = false, cardMap, deck, poolCounts, onAdd, onRemove, onClose }) {
+export default function PackReveal({ packs, hasBonus = false, sourceType = 'set', cardMap, deck, poolCounts, onAdd, onRemove, onClose }) {
   const [index, setIndex] = useState(0)
   const [ready, setReady] = useState(false)
   const packsRef = useRef(packs)
@@ -82,7 +88,7 @@ export default function PackReveal({ packs, hasBonus = false, noCover = false, c
   // straight-to-cards when the set has no pack photo yet (see BOOSTER_COVERS in assets.js).
   // The pack print itself is per-language (the box literally says "ENGLISH"/"FRANÇAIS"), so
   // it follows the UI language rather than the (currently EN-only) card data language.
-  const coverImage = (isBonusPack || noCover) ? null : boosterCoverFor(setCodeFromRef(currentPack[0]), lang)
+  const coverImage = (isBonusPack || sourceType === 'faction') ? null : boosterCoverFor(singleSetOf(currentPack), lang)
   // label/sublabel surface the same "Booster N/total" heading shown below — the always-open
   // full-screen zoom otherwise covers it, per PackReveal's own "Pack heading" block.
   const zoomCover = coverImage ? {
