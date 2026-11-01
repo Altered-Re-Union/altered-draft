@@ -42,7 +42,7 @@ test.beforeEach(async ({ db, fakes }) => {
   await fakes.reset()
 })
 
-test('form: the faction chips and how they interact', { tag: ['@l-form'] }, async ({ openAs }) => {
+test('form: the faction chips and how they interact', { tag: ['@l-form-r2'] }, async ({ openAs }) => {
   const page = await openForm(openAs)
   const radios = chips(page).getByRole('radio')
   await expect(radios).toHaveCount(7)
