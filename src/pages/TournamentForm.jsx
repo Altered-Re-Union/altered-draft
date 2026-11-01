@@ -90,7 +90,8 @@ export default function TournamentForm() {
   const [startsAt, setStartsAt] = useState(defaultStart)
   const [endsAt, setEndsAt] = useState('')
   const [sourceType, setSourceType] = useState('set')
-  const [setCode, setSetCode] = useState(null)
+  const [setCounts, setSetCounts] = useState({}) // Sets tab: { CODE: boosters }, n > 0 only
+  const [mixOpen, setMixOpen] = useState(false)
   const [faction, setFaction] = useState(null)
   const [setWeights, setSetWeights] = useState(() => setWeightsFrom())
   const [heroes, setHeroes] = useState('packs')
@@ -127,14 +128,17 @@ export default function TournamentForm() {
   const applyDraft = (d, { withConfig }) => {
     setName(d.name ?? ''); setDescription(d.description ?? ''); setStartsAt(d.startsAt ?? ''); setEndsAt(d.endsAt ?? '')
     if (withConfig) {
-      setBgaUrl(d.bgaUrl ?? ''); if (d.setCode !== undefined) setSetCode(d.setCode)
+      setBgaUrl(d.bgaUrl ?? '')
+      // An older draft carries `setCode` (V2): one set is 7 boosters of it.
+      if (d.setCounts) setSetCounts(d.setCounts); else if (d.setCode) setSetCounts({ [d.setCode]: 7 })
+      if (d.mixOpen !== undefined) setMixOpen(!!d.mixOpen)
       if (d.sourceType) setSourceType(d.sourceType); if (d.faction !== undefined) setFaction(d.faction); if (d.setWeights) setSetWeights(d.setWeights)
       if (d.heroes) setHeroes(d.heroes); if (d.uniques) setUniques(d.uniques); setExcludeBanlist(!!d.excludeBanlist)
     }
   }
   function reconnect() {
     try {
-      sessionStorage.setItem(draftKey, JSON.stringify({ name, description, bgaUrl, startsAt, endsAt, sourceType, setCode, faction, setWeights, heroes, uniques, excludeBanlist }))
+      sessionStorage.setItem(draftKey, JSON.stringify({ name, description, bgaUrl, startsAt, endsAt, sourceType, setCounts, mixOpen, faction, setWeights, heroes, uniques, excludeBanlist }))
     } catch { /* storage unavailable: the reconnect still works, the draft is lost */ }
     login(isEdit ? `/tournament/t/${id}/edit` : '/tournament/new')
   }
@@ -164,7 +168,9 @@ export default function TournamentForm() {
         setStartsAt(toLocalInput(tn.startsAt)); setEndsAt(toLocalInput(tn.endsAt))
         const src = tn.config.source
         setSourceType(src.type === 'faction' ? 'faction' : 'set')
-        if (src.type === 'faction') { setFaction(src.faction); setSetWeights(setWeightsFrom(src.sets)) } else setSetCode(src.setCode)
+        if (src.type === 'faction') { setFaction(src.faction); setSetWeights(setWeightsFrom(src.sets)) }
+        else if (src.type === 'multiset') { setSetCounts(src.sets); setMixOpen(true) }
+        else setSetCounts({ [src.setCode]: 7 })
         setHeroes(tn.config.heroes)
         // A faction source stores its own faction as the uniques faction (forced server-side):
         // keep it out of the shared uniques state, or switching to "One set" would preselect it.
@@ -214,21 +220,22 @@ export default function TournamentForm() {
   useEffect(() => {
     if (!imposed) return
     const c = legacy.config
-    setSourceType('set'); setSetCode(c.source.setCode); setHeroes(c.heroes); setUniques({ ...c.uniques, faction: c.uniques.faction ?? null }); setExcludeBanlist(!!c.excludeBanlist)
+    setSourceType('set'); setSetCounts({ [c.source.setCode]: 7 }); setHeroes(c.heroes); setUniques({ ...c.uniques, faction: c.uniques.faction ?? null }); setExcludeBanlist(!!c.excludeBanlist)
   }, [imposed, legacy])
   const mixedBgaIds = new Set([...legacyByBgaId].filter(([, l]) => l.mixed).map(([bgaId]) => bgaId))
   const configFrozen = locked || imposed
 
   const bgaParsed = useMemo(() => parseBgaTournamentUrl(bgaUrl), [bgaUrl])
   const isFaction = sourceType === 'faction'
+  const chosen = Object.keys(setCounts)
   const uniqueSupport = isFaction
     ? Object.entries(setWeights).some(([c, w]) => w > 0 && hasFactionRanges(c))
-    : !setCode || hasFactionRanges(setCode)
+    : !chosen.length || chosen.some(hasFactionRanges)
   const tz = useMemo(() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone } catch { return 'UTC' } }, [])
 
   const config = {
     v: 1, format: 'sealed',
-    source: isFaction ? { type: 'faction', faction, sets: setWeights, boosters: 7 } : { type: 'set', setCode, boosters: 7 },
+    source: isFaction ? { type: 'faction', faction, sets: setWeights, boosters: 7 } : { type: 'multiset', sets: setCounts, boosters: 7 },
     heroes,
     uniques: !uniqueSupport ? { inBoosters: 0, guaranteed: 0, evenFactions: false, faction: null }
       : isFaction ? { ...uniques, faction, evenFactions: false } : uniques,
@@ -393,7 +400,8 @@ export default function TournamentForm() {
           {imposed && <p className="text-sm text-accent-ink" role="status">{tc('tournaments.legacyImposed', legacy.pools)}</p>}
           <TournamentCardsSource
             sourceType={sourceType} onSourceType={v => { setSourceType(v); setServerError('') }}
-            setCode={setCode} onSetCode={edit('setCode', setSetCode)}
+            setCounts={setCounts} onSetCounts={edit('sets', setSetCounts)}
+            mixOpen={mixOpen} onMixOpen={setMixOpen}
             faction={faction} onFaction={edit('faction', setFaction)}
             weights={setWeights} onWeights={edit('sets', setSetWeights)}
             disabled={configFrozen || saving} />

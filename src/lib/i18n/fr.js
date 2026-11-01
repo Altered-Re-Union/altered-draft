@@ -528,7 +528,6 @@ export default {
     mixSetsHint: 'Boosters de chaque extension, 7 au total. Chaque booster ne contient que des cartes de son extension.',
     mixSetsCounter: '{{n}} / 7',
     sourceLabel: 'Source des cartes',
-    sourceOneSet: 'Une extension',
     sourceSets: 'Extensions',
     sourceFactionMix: 'Mix mono-faction',
     factionLabel: 'Faction',
