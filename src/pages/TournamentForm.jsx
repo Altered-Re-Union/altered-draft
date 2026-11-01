@@ -4,6 +4,7 @@ import { useAuth } from '../auth/AuthProvider.jsx'
 import { useLang } from '../lib/i18n/i18n.jsx'
 import { parseBgaTournamentUrl } from '../lib/bgaUrl.js'
 import { tournamentFormIssues } from '../lib/tournamentForm.js'
+import { VISIBILITIES } from '../lib/tournamentRules.js'
 import { validateTournamentConfig, DEFAULT_RANDOM_ONE_IN } from '../lib/tournamentConfig.js'
 import { hasFactionRanges } from '../lib/uniqueFactionRanges.js'
 import { SETS } from '../lib/cardData.js'
@@ -43,11 +44,11 @@ function defaultStart() {
 // of the screen: the reason the button is disabled is always in view, whatever the scroll.
 // Each listed problem jumps to its field. Inline messages appear once a field was touched.
 const FIELD_DOM_ID = {
-  name: 'tn-name', description: 'tn-desc', bgaUrl: 'tn-bga', startsAt: 'tn-start', endsAt: 'tn-end',
+  name: 'tn-name', description: 'tn-desc', visibility: 'tn-visibility', bgaUrl: 'tn-bga', startsAt: 'tn-start', endsAt: 'tn-end',
   faction: 'tn-cards', sets: 'tn-cards', uniques: 'tn-settings',
 }
 const FIELD_LABEL_KEY = {
-  name: 'tournaments.nameLabel', description: 'tournaments.descriptionLabel', bgaUrl: 'tournaments.bgaUrlLabel',
+  name: 'tournaments.nameLabel', description: 'tournaments.descriptionLabel', visibility: 'tournaments.visibilityLabel', bgaUrl: 'tournaments.bgaUrlLabel',
   startsAt: 'tournaments.startsAtLabel', endsAt: 'tournaments.endsAtLabel',
   faction: 'tournaments.sectionCards', sets: 'tournaments.sectionCards', uniques: 'tournaments.tournamentUniquesTitle',
 }
@@ -58,6 +59,7 @@ function issueMessage({ field, code }, t, { isFaction = false, boosterTotal = 0,
   switch (field) {
     case 'name': return t('tournaments.errName')
     case 'description': return t('tournaments.errDescription')
+    case 'visibility': return t('tournaments.errVisibility')
     case 'bgaUrl': return code === 'taken' ? t('tournaments.errBgaTaken') : code === 'mixed_formats' ? t('tournaments.errBgaMixed') : t('tournaments.errBgaUrl')
     case 'startsAt': return code === 'must_be_before_end' ? t('tournaments.errStartsAtBeforeEnd') : t('tournaments.errStartsAt')
     case 'endsAt': return t('tournaments.errEndsAt')
@@ -93,6 +95,7 @@ export default function TournamentForm() {
   const [bgaUrl, setBgaUrl] = useState('')
   const [startsAt, setStartsAt] = useState(defaultStart)
   const [endsAt, setEndsAt] = useState('')
+  const [visibility, setVisibility] = useState('public')
   const [sourceType, setSourceType] = useState('set')
   const [setCounts, setSetCounts] = useState({}) // Sets tab: { CODE: boosters }, n > 0 only
   const [mixOpen, setMixOpen] = useState(false)
@@ -132,7 +135,7 @@ export default function TournamentForm() {
     } catch { return null }
   }
   const applyDraft = (d, { withConfig }) => {
-    setName(d.name ?? ''); setDescription(d.description ?? ''); setStartsAt(d.startsAt ?? ''); setEndsAt(d.endsAt ?? '')
+    setName(d.name ?? ''); setDescription(d.description ?? ''); setVisibility(d.visibility ?? 'public'); setStartsAt(d.startsAt ?? ''); setEndsAt(d.endsAt ?? '')
     if (withConfig) {
       setBgaUrl(d.bgaUrl ?? '')
       // An older draft carries `setCode` (V2): one set is 7 boosters of it.
@@ -145,7 +148,7 @@ export default function TournamentForm() {
   }
   function reconnect() {
     try {
-      sessionStorage.setItem(draftKey, JSON.stringify({ name, description, bgaUrl, startsAt, endsAt, sourceType, setCounts, mixOpen, faction, setWeights, heroes, uniques, lastOneIn, excludeBanlist }))
+      sessionStorage.setItem(draftKey, JSON.stringify({ name, description, visibility, bgaUrl, startsAt, endsAt, sourceType, setCounts, mixOpen, faction, setWeights, heroes, uniques, lastOneIn, excludeBanlist }))
     } catch { /* storage unavailable: the reconnect still works, the draft is lost */ }
     login(isEdit ? `/tournament/t/${id}/edit` : '/tournament/new')
   }
@@ -171,7 +174,7 @@ export default function TournamentForm() {
           navigate(`/tournament/t/${id}`, { replace: true })
           return
         }
-        setName(tn.name); setDescription(tn.description); setBgaUrl(tn.bgaUrl)
+        setName(tn.name); setDescription(tn.description); setVisibility(tn.visibility ?? 'public'); setBgaUrl(tn.bgaUrl)
         setStartsAt(toLocalInput(tn.startsAt)); setEndsAt(toLocalInput(tn.endsAt))
         const src = tn.config.source
         setSourceType(src.type === 'faction' ? 'faction' : 'set')
@@ -210,7 +213,7 @@ export default function TournamentForm() {
           if (cancelled) return
           setTakenBgaIds(prev => {
             const next = new Map(prev)
-            if (holder) next.set(bgaParsedId, holder.id)
+            if (holder) next.set(bgaParsedId, holder.id ?? 'private')
             else next.delete(bgaParsedId)
             return next
           })
@@ -260,7 +263,7 @@ export default function TournamentForm() {
       : isFaction ? { ...uniques, faction, evenFactions: false } : uniques,
     excludeBanlist,
   }
-  const body = { name, description, bgaUrl, startsAt: fromLocalInput(startsAt), endsAt: fromLocalInput(endsAt) }
+  const body = { name, description, visibility, bgaUrl, startsAt: fromLocalInput(startsAt), endsAt: fromLocalInput(endsAt) }
   const issues = tournamentFormIssues({ body, config, isCreate: !isEdit, locked, takenBgaIds, ownId: id ?? null, mixedBgaIds, lastDateEdited })
   const fieldIssue = field => (touched.has(field) ? issues.find(i => i.field === field) : null)
   const blocked = issues.length > 0 || saving || loading || !!loadError
@@ -386,6 +389,22 @@ export default function TournamentForm() {
               rows={4} maxLength={2000} className={`${inputCls(fieldIssue('description'))} resize-y`} />
             <ErrorLine field="description" />
           </div>
+          <fieldset id="tn-visibility" tabIndex={-1} className="focus:outline-none">
+            <legend className="block text-sm text-muted mb-1">{t('tournaments.visibilityLabel')}</legend>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {VISIBILITIES.map(v => (
+                <label key={v} className={`flex items-start gap-2 rounded-lg border p-3 cursor-pointer transition-colors ${
+                  visibility === v ? 'border-accent bg-surface2' : 'border-line hover:border-accent/60'}`}>
+                  <input type="radio" name="visibility" value={v} checked={visibility === v} data-testid={`visibility-${v}`}
+                    aria-describedby={`tn-visibility-${v}-hint`} onChange={() => edit('visibility', setVisibility)(v)} className="accent-accent mt-0.5" />
+                  <span>
+                    <span className="text-sm font-medium">{t(v === 'public' ? 'tournaments.visibilityPublic' : 'tournaments.visibilityPrivate')}</span>
+                    <span id={`tn-visibility-${v}-hint`} className="block text-xs text-faint">{t(v === 'public' ? 'tournaments.visibilityPublicHint' : 'tournaments.visibilityPrivateHint')}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
           <div>
             <label className="block text-sm text-muted mb-1" htmlFor="tn-bga">{t('tournaments.bgaUrlLabel')}</label>
             <input id="tn-bga" value={bgaUrl} onChange={e => edit('bgaUrl', setBgaUrl)(e.target.value)} onBlur={() => touch('bgaUrl')} disabled={locked}
