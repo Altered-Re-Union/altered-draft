@@ -752,6 +752,7 @@ isDraft, isPublic, user, deckCards[], stats, formatErrors, legalityDetail }`.
 | `api/_lib/tournamentPool.js` | `loadPool` / `loadPoolCounts` (stored, or `regeneratePool` for legacy rows, §4), `ensureDeck` + `deckStillExists` (§6), `poolResponse` (response shape), server-side decks-api calls. |
 | `api/tournaments/index.js`, `api/tournaments/[id].js`, `api/tournaments/[id]/pool.js` | Declared tournaments: public list / create, detail / edit / actions / delete, the player's get-or-create pool (§14.3). |
 | `scripts/freeze-sealed-pools.mjs` | One-shot storage of legacy pools (`make db-freeze-pools`). |
+| `scripts/replace-banned-cards.mjs` | Swaps a newly banned card out of the stored pools of the open ban-list tournaments (dry run by default, `--apply` writes; `make db-replace-banned-cards`). Same set, rarity group and real faction, same booster slot, seeded by the pool; saved decks are only listed. |
 | `api/tournament-normal-pool.js` | GET get-or-create normal pool; POST reset (+ best-effort deck delete). |
 | `api/tournament-prep-pool.js` | GET get-or-create pending tournament pool. No reset. |
 | `api/tournament-bound-pools.js` | GET list of bound pools (summaries + games played + the declared tournament block) + the pending prep pool, if any. |
@@ -777,7 +778,7 @@ isDraft, isPublic, user, deckCards[], stats, formatErrors, legalityDetail }`.
 | `src/pages/Home.jsx` | The "Sealed set 6" entry block. |
 | `src/App.jsx` | Route table. |
 | `src/lib/i18n/en.js`, `fr.js` | `home.*`, `tournamentPages.*`, `tournaments.*` (declared tournaments), `tournamentPoolView.*`, `packReveal.*`, `deckValidity.*`. |
-| `src/lib/banlist.js` | Equinox ban list. Applied to a declared tournament's pools only when its organizer ticks `excludeBanlist`; never to the current-format pools. decks-api allows banned cards in sealed either way (pool membership is the only gate). |
+| `src/lib/banlist.js` | Equinox ban list. Applied to a declared tournament's pools only when its organizer ticks `excludeBanlist`; never to the current-format pools. decks-api allows banned cards in sealed either way (pool membership is the only gate). A new entry only reaches the pools generated afterwards: `scripts/replace-banned-cards.mjs` fixes the stored ones. |
 | `src/lib/packGenerator.test.js`, `poolBuilder.test.js`, `tournamentConfig.test.js`, `tournamentRules.test.js`, `bgaUrl.test.js`, `tournamentForm.test.js`, `api/_lib/auth.test.js` | Unit tests (determinism, config, rules, link parsing, form issues, moderator check). |
 | `tests/integration/tournaments.test.js` | Store + handlers against a real Postgres (`npm run test:integration`). |
 | `ROADMAP.md` "Set 6 preview" | The design record (long, partly superseded; history in §13). |

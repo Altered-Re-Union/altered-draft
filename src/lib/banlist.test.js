@@ -8,6 +8,13 @@ describe('isBanned', () => {
     expect(isBanned('ALT_CORE_B_BR_06_R2')).toBe(true)
   })
 
+  it('bans Lyra Festival at every printing, its Muna R2 included', () => {
+    expect(isBanned('ALT_CORE_B_LY_29_C')).toBe(true)
+    expect(isBanned('ALT_CORE_B_LY_29_R1')).toBe(true)
+    expect(isBanned('ALT_CORE_B_LY_29_R2')).toBe(true)
+    expect(isBanned('ALT_COREKS_B_LY_29_R1')).toBe(true)
+  })
+
   it('maps the Kickstarter reprint (COREKS) onto the same ban as CORE', () => {
     expect(isBanned('ALT_COREKS_B_BR_06_R1')).toBe(true)
   })
