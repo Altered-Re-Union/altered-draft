@@ -67,7 +67,7 @@ ENV_DEFAULTS := \
 	KEYCLOAK_CLIENT_SECRET=dev-altered-draft-secret \
 	DECKS_API_URL=http://localhost:8001
 
-.PHONY: dev down dev-summary dev-env dev-env-down check-node install env keycloak-client keycloak-users db-up db-migrate db-freeze-pools db-down db-reset db-shell api web test e2e e2e-ui e2e-down
+.PHONY: dev down dev-summary dev-env dev-env-down check-node install env keycloak-client keycloak-users db-up db-migrate db-freeze-pools db-replace-banned-cards db-down db-reset db-shell api web test e2e e2e-ui e2e-down
 
 dev: check-node install env dev-env db-up db-migrate keycloak-client keycloak-users
 	@trap 'trap - INT TERM EXIT; kill 0' INT TERM EXIT; \
@@ -145,6 +145,10 @@ db-migrate:
 # Same env as `make api`, so `make db-freeze-pools DB_PORT=…` hits the overridden DB.
 db-freeze-pools: check-node env
 	env $(API_ENV) $(NODE) --env-file=.env scripts/freeze-sealed-pools.mjs
+
+# Dry run by default; `make db-replace-banned-cards ARGS=--apply` writes.
+db-replace-banned-cards: check-node env
+	env $(API_ENV) $(NODE) --env-file=.env scripts/replace-banned-cards.mjs $(ARGS)
 
 db-down:
 	@$(COMPOSE) down

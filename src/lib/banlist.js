@@ -18,6 +18,7 @@ const BANNED_FAMILIES = new Set([
   'ALT_BISE_B_AX_58',
   'ALT_CORE_B_OR_27',
   'ALT_CYCLONE_B_AX_81',
+  'ALT_CORE_B_LY_29', // Lyra Festival (C and R1 are Lyra, R2 is Muna)
 ])
 
 // Cards whose UNIQUES ONLY are suspended — the base printing stays legal. Moonlight
