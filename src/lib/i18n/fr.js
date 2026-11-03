@@ -404,7 +404,7 @@ export default {
     addRandomUniquesDesc: 'Environ 1 booster sur 6 reçoit une vraie carte unique (stats aléatoires, tirée en direct) dans son dernier emplacement, comme l’ouverture de vrais boosters.',
     addRandomUniquesWarning: 'Attention : les uniques sont tirées en direct, donc générer les boosters peut prendre jusqu’à une minute (plus si plus de boosters sont nécessaires).',
     excludeBanlist: 'Exclure les cartes suspendues (liste de bannissement)',
-    excludeBanlistDesc: 'Retire la liste de bannissement compétitive Equinox de la pool, donc les cartes suspendues n’apparaissent jamais dans vos boosters. Désactivé par défaut.',
+    excludeBanlistDesc: 'Retire de la pool les versions suspendues par Equinox en compétitif (liste altered.re), donc elles n’apparaissent jamais dans vos boosters. Leurs autres versions et leurs uniques restent. Désactivé par défaut.',
     pickTimer: 'Minuteur de pioche',
     timePerPick: 'Temps par pioche :',
   },

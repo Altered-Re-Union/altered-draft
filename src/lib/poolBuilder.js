@@ -13,7 +13,7 @@ import { setCodeFromRef } from './assets.js'
 
 /**
  * The one filter every pickDeterministicUniques call of this module goes through: rejects a
- * banned family (when the ban list is on) and any ref already drawn for this pool, so two
+ * banned unique (when the ban list is on) and any ref already drawn for this pool, so two
  * calls on the same uniques stream never hand out the same serial. The caller adds every
  * drawn ref to `drawn`. An always-true predicate consumes no extra rng (goldens pin it).
  */

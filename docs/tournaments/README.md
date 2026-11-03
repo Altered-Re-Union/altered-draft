@@ -416,7 +416,7 @@ seedStr = sub | set_code | unique_count | even_factions | heroes_in_pool | guara
 
 ```mermaid
 flowchart TD
-  A[seedStr from sub + config + nonce] --> U[pickDeterministicUniques<br/>set, rng for uniques, uniqueCount = inBoosters + guaranteed,<br/>banned families skipped when excludeBanlist]
+  A[seedStr from sub + config + nonce] --> U[pickDeterministicUniques<br/>set, rng for uniques, uniqueCount = inBoosters + guaranteed,<br/>banned uniques skipped when excludeBanlist]
   U --> U1[first inBoosters refs → booster uniques]
   U --> U2[rest → outside uniques]
   A --> S[fetchSet setCode<br/>B printings only, tokens excluded<br/>filterBanned when excludeBanlist]
@@ -463,8 +463,8 @@ Details that matter:
   such families per faction). Otherwise `evenFactions: true` round-robins target factions
   (the config drops it below 2 uniques and whenever a faction is set). Dedupes within one call (so booster and outside
   uniques never overlap); an optional `isAllowed(ref)` predicate redraws refused refs. Every
-  call of `poolBuilder.js` passes the same per-pool gate (`uniqueGate`): banned families when
-  the ban list is on, and every ref already drawn for this pool, so two calls on the same
+  call of `poolBuilder.js` passes the same per-pool gate (`uniqueGate`): banned uniques (Moonlight
+  Jellyfish) when the ban list is on, and every ref already drawn for this pool, so two calls on the same
   uniques stream never hand out the same serial.
   Sets covered: CORE, COREKS, ALIZE, BISE, CYCLONE, DUSTER, EOLE. **FUGUE has no table**: a
   declared tournament can't ask for uniques on it (config validation), and `buildPool`
@@ -475,8 +475,8 @@ Details that matter:
   "unique refs in `cards` that are in no booster".
 - `loadPoolCounts` is the flat-counts-only variant used by validation callers.
 - **Ban list**: `excludeBanlist` (declared tournaments only; the current format leaves it
-  off) removes banned cards from the set before generation and banned families from the
-  unique draws.
+  off) removes the suspended printings from the set before generation and the banned uniques
+  (Moonlight Jellyfish) from the unique draws.
 - Card rendering resolves uniques live per ref (`fetchUniques` → `cards.alteredcore.org`,
   image = the base `_R1` art on the CDN).
 
@@ -778,7 +778,7 @@ isDraft, isPublic, user, deckCards[], stats, formatErrors, legalityDetail }`.
 | `src/pages/Home.jsx` | The "Sealed set 6" entry block. |
 | `src/App.jsx` | Route table. |
 | `src/lib/i18n/en.js`, `fr.js` | `home.*`, `tournamentPages.*`, `tournaments.*` (declared tournaments), `tournamentPoolView.*`, `packReveal.*`, `deckValidity.*`. |
-| `src/lib/banlist.js` | Equinox ban list. Applied to a declared tournament's pools only when its organizer ticks `excludeBanlist`; never to the current-format pools. decks-api allows banned cards in sealed either way (pool membership is the only gate). A new entry only reaches the pools generated afterwards: `scripts/replace-banned-cards.mjs` fixes the stored ones. |
+| `src/lib/banlist.js` | Equinox ban list: the exact suspended printings of https://altered.re/pages/current-suspensions-errata-bans (a card's C / R1 / R2 are suspended one by one; KS and alt-art / promo prints follow their printing; a suspended card's uniques stay legal), plus the Moonlight Jellyfish uniques. Applied to a declared tournament's pools only when its organizer ticks `excludeBanlist`; never to the current-format pools. decks-api allows banned cards in sealed either way (pool membership is the only gate). A new entry only reaches the pools generated afterwards: `scripts/replace-banned-cards.mjs` fixes the stored ones. |
 | `src/lib/packGenerator.test.js`, `poolBuilder.test.js`, `tournamentConfig.test.js`, `tournamentRules.test.js`, `bgaUrl.test.js`, `tournamentForm.test.js`, `api/_lib/auth.test.js` | Unit tests (determinism, config, rules, link parsing, form issues, moderator check). |
 | `tests/integration/tournaments.test.js` | Store + handlers against a real Postgres (`npm run test:integration`). |
 | `ROADMAP.md` "Set 6 preview" | The design record (long, partly superseded; history in §13). |
