@@ -511,6 +511,7 @@ export default {
     summaryFaction: '{{faction}} uniques',
     summaryHeroesFree: 'free hero choice',
     summaryBanlist: 'ban list excluded',
+    summaryBanlistLegacy: 'ban list excluded (whole cards, list before Nov 4 2026)',
     youHavePool: 'Your pool is ready',
     yourDeck: 'Deck: {{name}} · {{n}} cards',
     connectToPrepare: 'Connect to prepare your pool',

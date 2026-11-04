@@ -7,7 +7,9 @@
 // Each banned card becomes one random card of the SAME set, the SAME rarity group
 // (common → common, R1/R2 → R1 or R2) and the SAME real faction (the card object's
 // `mainFaction`, so an R2 is replaced by a rare of its out-of-faction faction), never a
-// hero, never another banned card. It takes the banned card's place in its booster, and
+// hero, never another banned card. "Banned" = the ban-list version of the pool's
+// tournament (banlist.js `banlistVersionOf`), so the replacement follows the same rules
+// as the tournament's other pools. It takes the banned card's place in its booster, and
 // `cards` is recounted. The draw is seeded by the pool id and the slot, so the dry run
 // prints exactly what --apply writes and a re-run is reproducible.
 //
@@ -21,7 +23,7 @@
 import { fileURLToPath } from 'node:url'
 import { query, getPool } from '../src/lib/db.js'
 import { fetchSet } from '../src/lib/cardData.js'
-import { isBanned } from '../src/lib/banlist.js'
+import { isBanned, banlistVersionOf } from '../src/lib/banlist.js'
 import { seededRng } from '../src/lib/prng.js'
 import { setCodeFromRef } from '../src/lib/assets.js'
 
@@ -96,7 +98,7 @@ export function planReplacements(pool, cardsBySet, { banned = isBanned } = {}) {
 // Same "open" definition as tournamentStore's OPEN_SQL (upcoming or ongoing).
 const POOLS_SQL = `
   SELECT p.id, p.sub, p.cards, p.boosters, p.deck_id, p.deck_name,
-         t.id AS t_id, t.name AS t_name, t.starts_at AS t_starts_at
+         t.id AS t_id, t.name AS t_name, t.starts_at AS t_starts_at, t.config AS t_config
     FROM sealed_pools p
     JOIN tournaments t ON t.id = p.tournament_ref
    WHERE t.config->>'excludeBanlist' = 'true'
@@ -105,11 +107,16 @@ const POOLS_SQL = `
      AND p.cards IS NOT NULL
    ORDER BY t.starts_at, t.id, p.created_at, p.id`
 
-export async function replaceBannedCards({ apply = false, fetchCards = fetchSet, banned = isBanned, log = console.log } = {}) {
-  const { rows } = await query(POOLS_SQL)
-  const affected = rows.filter(r => Object.keys(r.cards ?? {}).some(banned))
+const bannedUnder = config => {
+  const version = banlistVersionOf(config)
+  return ref => isBanned(ref, version)
+}
 
-  const sets = [...new Set(affected.flatMap(r => Object.keys(r.cards).filter(banned).map(setCodeFromRef)))]
+export async function replaceBannedCards({ apply = false, fetchCards = fetchSet, log = console.log } = {}) {
+  const { rows } = await query(POOLS_SQL)
+  const affected = rows.filter(r => Object.keys(r.cards ?? {}).some(bannedUnder(r.t_config)))
+
+  const sets = [...new Set(affected.flatMap(r => Object.keys(r.cards).filter(bannedUnder(r.t_config)).map(setCodeFromRef)))]
   const cardsBySet = Object.fromEntries(await Promise.all(sets.map(async s => [s, await fetchCards(s)])))
   const nameOf = ref => cardsBySet[setCodeFromRef(ref)]?.find(c => c.reference === ref)?.name ?? '?'
 
@@ -120,9 +127,9 @@ export async function replaceBannedCards({ apply = false, fetchCards = fetchSet,
   for (const row of affected) {
     if (row.t_id !== tournament) {
       tournament = row.t_id
-      log(`\nTournament "${row.t_name}" (${row.t_id}, starts ${new Date(row.t_starts_at).toISOString()})`)
+      log(`\nTournament "${row.t_name}" (${row.t_id}, starts ${new Date(row.t_starts_at).toISOString()}, ban list ${banlistVersionOf(row.t_config)})`)
     }
-    const plan = planReplacements(row, cardsBySet, { banned })
+    const plan = planReplacements(row, cardsBySet, { banned: bannedUnder(row.t_config) })
     log(`  pool ${row.id} (sub ${row.sub})`)
     for (const r of plan.replacements) {
       const where = r.booster == null ? 'outside the boosters' : `booster ${r.booster + 1}, slot ${r.slot + 1}`

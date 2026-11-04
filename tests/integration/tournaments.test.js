@@ -563,6 +563,23 @@ describe('replace-banned-cards', () => {
 
     expect(await replaceBannedCards({ apply: true, fetchCards, log })).toMatchObject({ pools: 0, replaced: 0 })
   })
+
+  it('replaces under the ban-list version of each tournament', async () => {
+    // Lyra Festival R1's only same-faction rare candidate is Dr. Frankenstein's Lyra R2:
+    // banned by the legacy list (whole card), legal in v2.
+    const LYRA_R1 = 'ALT_CORE_B_LY_29_R1'
+    const FRANK_R2 = 'ALT_CORE_B_AX_17_R2'
+    const fetch = vi.fn(async () => [card(LYRA_R1, 'LY', 'R1'), card(FRANK_R2, 'LY', 'R2')])
+    const legacy = await mkTournament({ config: { ...CONFIG, excludeBanlist: true } })
+    const current = await mkTournament({ config: { ...CONFIG, excludeBanlist: true, banlist: 'v2' } })
+    await insertPool('dave', legacy.id, [[LYRA_R1]])
+    await insertPool('erin', current.id, [[LYRA_R1]])
+
+    const result = await replaceBannedCards({ apply: true, fetchCards: fetch, log: vi.fn() })
+    expect(result).toMatchObject({ pools: 1, replaced: 1, unresolved: 1 })
+    expect(await boostersOf('dave')).toEqual([[LYRA_R1]])
+    expect(await boostersOf('erin')).toEqual([[FRANK_R2]])
+  })
 })
 
 describe('final review fixes', () => {

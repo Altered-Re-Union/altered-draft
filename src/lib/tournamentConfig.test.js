@@ -22,6 +22,13 @@ describe('validateTournamentConfig', () => {
     })
   })
 
+  it('stamps the current ban-list version when the ban list is on, whatever the client sent', () => {
+    expect(validateTournamentConfig(valid).config.banlist).toBe('v2')
+    expect(validateTournamentConfig({ ...valid, banlist: 'v1' }).config.banlist).toBe('v2')
+    expect(validateTournamentConfig({ ...valid, banlist: 'nope' }).ok).toBe(true)
+    expect('banlist' in validateTournamentConfig({ ...valid, excludeBanlist: false, banlist: 'v1' }).config).toBe(false)
+  })
+
   it('accepts a missing format/boosters (defaults) but rejects other values', () => {
     expect(validateTournamentConfig({ ...valid, format: undefined, source: { type: 'set', setCode: 'EOLE' } }).ok).toBe(true)
     expect(validateTournamentConfig({ ...valid, format: 'draft' }).errors).toContain('format')

@@ -66,6 +66,23 @@ describe('buildPool', () => {
     expect(seen.has('ALT_CORE_B_BR_06_C')).toBe(false)
   })
 
+  it('draws under the ban-list version of the config: legacy (no field) = whole cards, v2 = exact printings', async () => {
+    // Baba Yaga Yzmir common: banned by v1 (whole card), legal in v2 (only its Ordis R2 is suspended).
+    const babaYaga = { reference: 'ALT_CORE_B_YZ_11_C', name: 'Baba Yaga', faction: 'YZ', rarity: 'C', cardType: 'CHARACTER' }
+    const withBaba = async () => [...fakeSet(), babaYaga]
+    const seen = async over => {
+      const refs = new Set()
+      for (let i = 0; i < 20; i++) {
+        const { cards } = await buildPool('alice', { config: config({ excludeBanlist: true, ...over }), nonce: `n${i}` }, { fetchCards: withBaba })
+        Object.keys(cards).forEach(r => refs.add(r))
+      }
+      return refs
+    }
+    expect((await seen({})).has('ALT_CORE_B_YZ_11_C')).toBe(false)
+    expect((await seen({ banlist: 'v1' })).has('ALT_CORE_B_YZ_11_C')).toBe(false)
+    expect((await seen({ banlist: 'v2' })).has('ALT_CORE_B_YZ_11_C')).toBe(true)
+  })
+
   it('throws when the set has no cards', async () => {
     await expect(buildPool('alice', { config: config(), nonce: 'n1' }, { fetchCards: async () => [] })).rejects.toThrow(/no cards/)
   })

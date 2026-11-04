@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isBanned, filterBanned } from './banlist.js'
+import { isBanned, filterBanned, banlistVersionOf, CURRENT_BANLIST, LEGACY_BANLIST } from './banlist.js'
 
 describe('isBanned', () => {
   it('bans only the suspended printings of a card, not its other printings', () => {
@@ -68,5 +68,35 @@ describe('filterBanned', () => {
       null,
     ]
     expect(filterBanned(cards)).toEqual([{ reference: 'ALT_CORE_B_BR_07_C' }])
+  })
+})
+
+describe('ban list versions', () => {
+  it('v1 (legacy, whole cards) bans every printing of a listed card and its uniques', () => {
+    for (const ref of ['ALT_CORE_B_YZ_11_C', 'ALT_CORE_B_YZ_11_R1', 'ALT_CORE_B_YZ_11_R2', 'ALT_CORE_B_YZ_11_U_77', 'ALT_COREKS_B_AX_17_C', 'ALT_CORE_B_LY_29_R2']) {
+      expect(isBanned(ref, 'v1')).toBe(true)
+    }
+    expect(isBanned('ALT_CORE_B_YZ_05_U_1', 'v1')).toBe(true)
+    expect(isBanned('ALT_CORE_B_YZ_05_C', 'v1')).toBe(false)
+    expect(isBanned('ALT_CORE_B_BR_07_C', 'v1')).toBe(false)
+  })
+
+  it('the default is the current version (v2, exact printings)', () => {
+    expect(CURRENT_BANLIST).toBe('v2')
+    expect(isBanned('ALT_CORE_B_YZ_11_C')).toBe(false)
+    expect(isBanned('ALT_CORE_B_YZ_11_C', 'v2')).toBe(false)
+    expect(filterBanned([{ reference: 'ALT_CORE_B_YZ_11_C' }], 'v1')).toEqual([])
+  })
+
+  it('a config without a known version uses the legacy list', () => {
+    expect(LEGACY_BANLIST).toBe('v1')
+    expect(banlistVersionOf({ excludeBanlist: true })).toBe('v1')
+    expect(banlistVersionOf({ excludeBanlist: true, banlist: 'v2' })).toBe('v2')
+    expect(banlistVersionOf({ excludeBanlist: true, banlist: 'nope' })).toBe('v1')
+    expect(banlistVersionOf(null)).toBe('v1')
+  })
+
+  it('refuses an unknown version', () => {
+    expect(() => isBanned('ALT_CORE_B_YZ_11_C', 'v9')).toThrow(/unknown ban list version/)
   })
 })

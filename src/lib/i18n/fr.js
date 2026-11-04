@@ -507,6 +507,7 @@ export default {
     summaryFaction: 'uniques {{faction}}',
     summaryHeroesFree: 'héros au choix',
     summaryBanlist: 'cartes suspendues exclues',
+    summaryBanlistLegacy: 'cartes suspendues exclues (cartes entières, liste d’avant le 04/11/2026)',
     youHavePool: 'Votre pool est prêt',
     yourDeck: 'Deck : {{name}} · {{n}} cartes',
     connectToPrepare: 'Connectez-vous pour préparer votre pool',
