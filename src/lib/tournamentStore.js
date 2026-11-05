@@ -20,6 +20,20 @@ const ADOPT_LEGACY = (src) => `adopted AS (
        RETURNING 1
      )`
 
+// A declaration that takes a BGA id (creation, or a link change onto another id) is a NEW
+// tournament for the players: the hub hides made on that id before (an earlier declaration
+// deleted or detached, or the legacy event it adopts) are dropped, so it never shows up
+// already hidden. Every sub-statement of a WITH reads the same snapshot, taken before the
+// INSERT / UPDATE: the subquery sees the id the tournament had BEFORE (none on creation),
+// so an edit that keeps its id resets nothing.
+const RESET_HIDES = (src) => `unhidden AS (
+       DELETE FROM hidden_tournaments h
+       USING ${src}
+       WHERE h.bga_tournament_id = ${src}.bga_tournament_id
+         AND ${src}.bga_tournament_id IS DISTINCT FROM (SELECT bga_tournament_id FROM tournaments WHERE id = ${src}.id)
+       RETURNING 1
+     )`
+
 export async function createTournament({ name, description, bgaUrl, bgaTournamentId, startsAt, endsAt, organizerSub, organizerName, config }) {
   try {
     const { rows } = await query(
@@ -28,7 +42,7 @@ export async function createTournament({ name, description, bgaUrl, bgaTournamen
            (name, description, bga_url, bga_tournament_id, starts_at, ends_at, organizer_sub, organizer_name, config)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
          RETURNING *
-       ), ${ADOPT_LEGACY('t')}
+       ), ${ADOPT_LEGACY('t')}, ${RESET_HIDES('t')}
        SELECT t.*, (SELECT count(*)::int FROM adopted) AS adopted_pools FROM t`,
       [name, description ?? '', bgaUrl, bgaTournamentId, startsAt, endsAt ?? null, organizerSub, organizerName, JSON.stringify(config)],
     )
@@ -112,10 +126,11 @@ export async function updateTournament(id, fields, { requireUnlocked = false } =
     params.push(key === 'config' ? JSON.stringify(fields[key]) : fields[key])
     sets.push(`${column} = $${params.length}`)
   }
-  // A link change also adopts the legacy pools of the new BGA id (see ADOPT_LEGACY).
+  // A link change also adopts the legacy pools of the new BGA id (see ADOPT_LEGACY) and
+  // drops the hub hides made on it (see RESET_HIDES; nothing when the id is unchanged).
   const adopt = Object.prototype.hasOwnProperty.call(fields, 'bgaTournamentId')
   const sql = adopt
-    ? `WITH u AS (UPDATE tournaments SET ${sets.join(', ')} WHERE id = $1 RETURNING *), ${ADOPT_LEGACY('u')}
+    ? `WITH u AS (UPDATE tournaments SET ${sets.join(', ')} WHERE id = $1 RETURNING *), ${ADOPT_LEGACY('u')}, ${RESET_HIDES('u')}
        SELECT u.*, (SELECT count(*)::int FROM adopted) AS adopted_pools FROM u`
     : `UPDATE tournaments SET ${sets.join(', ')} WHERE id = $1 RETURNING *`
 
@@ -212,4 +227,27 @@ export function toTournamentJson(row, extras = {}) {
     updatedAt: iso(row.updated_at),
     ...extras,
   }
+}
+
+/** Hides (or shows again) a BGA tournament in one player's hub lists. Display only. */
+export async function setTournamentHidden(sub, bgaTournamentId, hidden) {
+  if (hidden) {
+    await query(
+      'INSERT INTO hidden_tournaments (sub, bga_tournament_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+      [sub, bgaTournamentId],
+    )
+  } else {
+    await query('DELETE FROM hidden_tournaments WHERE sub = $1 AND bga_tournament_id = $2', [sub, bgaTournamentId])
+  }
+}
+
+/** The subset of `bgaIds` the player hid, as a Set. */
+export async function hiddenBgaTournamentIds(sub, bgaIds) {
+  const ids = bgaIds.filter(Boolean)
+  if (!ids.length) return new Set()
+  const { rows } = await query(
+    'SELECT bga_tournament_id FROM hidden_tournaments WHERE sub = $1 AND bga_tournament_id = ANY($2)',
+    [sub, ids],
+  )
+  return new Set(rows.map(r => r.bga_tournament_id))
 }

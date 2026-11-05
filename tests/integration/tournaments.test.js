@@ -11,6 +11,7 @@ import {
 import {
   createTournament, getTournament, getTournamentByBgaId, listTournaments, countOpenTournaments,
   updateTournament, countPoolsForTournament, deleteTournamentIfNoPools, toTournamentJson,
+  detachTournament, setTournamentHidden, hiddenBgaTournamentIds,
 } from '../../src/lib/tournamentStore.js'
 
 const CONFIG = {
@@ -69,6 +70,7 @@ import tournamentsIndex from '../../api/tournaments/index.js'
 import tournamentsItem from '../../api/tournaments/[id].js'
 import tournamentPoolFor from '../../api/tournaments/[id]/pool.js'
 import boundPools from '../../api/tournament-bound-pools.js'
+import tournamentVisibility from '../../api/tournament-visibility.js'
 import { freezeSealedPools } from '../../scripts/freeze-sealed-pools.mjs'
 import { replaceBannedCards } from '../../scripts/replace-banned-cards.mjs'
 
@@ -95,7 +97,7 @@ const MOD = { sub: 'mod', name: 'Mod', roles: ['mod'], isModerator: true }
 const asUser = user => verifyUser.mockImplementation(async req => (req.headers.authorization ? user : null))
 
 beforeEach(async () => {
-  await query('TRUNCATE sealed_pool_games, sealed_pools, tournaments')
+  await query('TRUNCATE sealed_pool_games, sealed_pools, hidden_tournaments, tournaments')
 })
 
 afterAll(async () => {
@@ -501,6 +503,97 @@ describe('GET /api/tournament-bound-pools', () => {
     res = await call(boundPools)
     expect(res.body.pending).toBeNull()
     expect(res.body.pools.map(p => p.id)).toEqual([prep.id])
+  })
+})
+
+describe('PATCH /api/tournament-visibility', () => {
+  const hide = (bgaTournamentId, hidden = true) => call(tournamentVisibility, { method: 'PATCH', body: { bgaTournamentId, hidden } })
+
+  it('hides a legacy pool by its BGA id, for the caller only, and shows it again', async () => {
+    const legacy = await bindTournamentId('alice', '7007', 'ROC Launch Sealed Event 2')
+    await bindTournamentId('bob', '7007', 'ROC Launch Sealed Event 2')
+    verifySub.mockResolvedValue('alice')
+    let res = await hide('7007')
+    expect(res.statusCode).toBe(200)
+    expect((await hide('7007')).statusCode).toBe(200) // idempotent
+    res = await call(boundPools)
+    expect(res.body.pools.find(p => p.id === legacy.id).hidden).toBe(true)
+
+    verifySub.mockResolvedValue('bob')
+    res = await call(boundPools)
+    expect(res.body.pools[0].hidden).toBe(false)
+
+    verifySub.mockResolvedValue('alice')
+    await hide('7007', false)
+    res = await call(boundPools)
+    expect(res.body.pools.find(p => p.id === legacy.id).hidden).toBe(false)
+  })
+
+  it('one hide covers a declared tournament everywhere: the list (viewer.hidden) and the pool', async () => {
+    const t = await mkTournament({ name: 'Forgotten', startsAt: inDays(-1), bgaTournamentId: '9009' })
+    asUser(ALICE)
+    verifySub.mockResolvedValue('alice')
+    await hide('9009')
+    let res = await call(tournamentsIndex, { query: { status: 'open' } })
+    expect(res.body.tournaments.find(x => x.id === t.id).viewer).toMatchObject({ hidden: true, hasPool: false })
+
+    await getOrCreateTournamentPool('alice', t)
+    res = await call(boundPools)
+    expect(res.body.pools.find(p => p.tournament?.id === t.id).hidden).toBe(true)
+
+    asUser(MOD)
+    res = await call(tournamentsIndex, { query: { status: 'open' } })
+    expect(res.body.tournaments.find(x => x.id === t.id).viewer.hidden).toBe(false)
+  })
+
+  describe('a new declaration on a BGA id starts unhidden', () => {
+    const hiddenFor = async (sub, bgaId) => (await hiddenBgaTournamentIds(sub, [bgaId])).has(bgaId)
+
+    it('deleted, then declared again on the same BGA id', async () => {
+      const first = await mkTournament({ bgaTournamentId: '9101' })
+      await setTournamentHidden('alice', '9101', true)
+      expect(await deleteTournamentIfNoPools(first.id)).toBe('deleted')
+      await mkTournament({ bgaTournamentId: '9101' })
+      expect(await hiddenFor('alice', '9101')).toBe(false)
+    })
+
+    it('detached, then redeclared: the readopted legacy pool is not hidden either', async () => {
+      // A legacy pool adopted by the squat, released by the detach, readopted by the real one.
+      await bindTournamentId('alice', '9102', 'Legacy event')
+      const squat = await mkTournament({ bgaTournamentId: '9102' })
+      await setTournamentHidden('alice', '9102', true)
+      await detachTournament(squat.id)
+      expect(await hiddenFor('alice', '9102')).toBe(true) // a detach alone keeps it
+      const real = await mkTournament({ bgaTournamentId: '9102' })
+      expect(real.adopted_pools).toBe(1)
+      expect(await hiddenFor('alice', '9102')).toBe(false)
+      const pool = (await listBoundTournamentPools('alice')).find(p => p.tournament_id === '9102')
+      expect(pool.hidden).toBe(false)
+    })
+
+    it('a link change onto a hidden BGA id resets it; an edit keeping its id resets nothing', async () => {
+      await setTournamentHidden('alice', '9103', true)
+      await setTournamentHidden('bob', '9104', true)
+      const t = await mkTournament({ bgaTournamentId: '9104' })
+      expect(await hiddenFor('bob', '9104')).toBe(false) // created on it
+      await setTournamentHidden('bob', '9104', true)
+      // Same id sent again (the form always sends the link): the hide stays.
+      await updateTournament(t.id, { name: 'Renamed', bgaUrl: 'https://boardgamearena.com/tournament?id=9104', bgaTournamentId: '9104' }, { requireUnlocked: true })
+      expect(await hiddenFor('bob', '9104')).toBe(true)
+      await updateTournament(t.id, { bgaUrl: 'https://boardgamearena.com/tournament?id=9103', bgaTournamentId: '9103' }, { requireUnlocked: true })
+      expect(await hiddenFor('alice', '9103')).toBe(false)
+      expect(await hiddenFor('bob', '9104')).toBe(true) // the id it left keeps its hides
+    })
+  })
+
+  it('400s on a bad body, 401s logged out, 405s on GET', async () => {
+    verifySub.mockResolvedValue('alice')
+    expect((await call(tournamentVisibility, { method: 'PATCH', body: { hidden: true } })).statusCode).toBe(400)
+    expect((await call(tournamentVisibility, { method: 'PATCH', body: { bgaTournamentId: '  ', hidden: true } })).statusCode).toBe(400)
+    expect((await call(tournamentVisibility, { method: 'PATCH', body: { bgaTournamentId: '1', hidden: 'yes' } })).statusCode).toBe(400)
+    expect((await call(tournamentVisibility, { method: 'GET' })).statusCode).toBe(405)
+    verifySub.mockResolvedValue(null)
+    expect((await hide('1')).statusCode).toBe(401)
   })
 })
 

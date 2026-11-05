@@ -314,7 +314,7 @@ const PSQL = (sql) => pre(`docker compose exec -T postgres psql -U altered-draft
 
 // Steps replayed by the Playwright suite. Rewritten by `npm run test:e2e:coverage -- --write`
 // (scripts/e2e-acceptance-coverage.mjs) from the tests' tags: do not edit this line by hand.
-const AUTO_STEPS = ['a-grid', 'a-lang', 'a-sealed-run', 'b-cap', 'b-dup', 'b-end-before', 'b-even', 'b-happy', 'b-links', 'b-logged-out', 'b-nej', 'b-options', 'b-past', 'b-session-expired', 'c-404', 'c-anon', 'c-organizer', 'c-step1', 'd-back', 'd-bob', 'd-deck', 'd-one-deck', 'd-open', 'd-same', 'e-cancel', 'e-close', 'e-dates', 'e-delete', 'e-edit-anon', 'e-locked', 'e-relink-taken', 'e-rename', 'e-reopen-past', 'e-stranger', 'f-bga-r3', 'f-button-r3', 'f-delete', 'f-detach-r3', 'f-frozen', 'f-no-button', 'f-players-r3', 'f-redeclare-r3', 'f-squat-r3', 'g-adopt', 'g-adopt-mixed', 'g-carol-menu', 'g-counts', 'g-create', 'g-legacy', 'g-name', 'g-panel', 'h-anon', 'h-created', 'h-generic-r2', 'h-mobile', 'h-my-ongoing', 'h-ongoing', 'h-order', 'h-pools-r2', 'h-tabs-url', 'h-unmask-r2', 'i-freeze', 'i-legacy-row', 'i-normal', 'j-console', 'j-fr', 'j-mobile', 'j-theme', 'l-api-invalid', 'l-api-no-unique', 'l-create', 'l-form-r2', 'l-imposed', 'l-menu', 'l-pool'];
+const AUTO_STEPS = ['a-grid', 'a-lang', 'a-sealed-run', 'b-cap', 'b-dup', 'b-end-before', 'b-even', 'b-happy', 'b-links', 'b-logged-out', 'b-nej', 'b-options', 'b-past', 'b-session-expired', 'c-404', 'c-anon', 'c-organizer', 'c-step1', 'd-back', 'd-bob', 'd-deck', 'd-one-deck', 'd-open', 'd-same', 'e-cancel', 'e-close', 'e-dates', 'e-delete', 'e-edit-anon', 'e-locked', 'e-relink-taken', 'e-rename', 'e-reopen-past', 'e-stranger', 'f-bga-r3', 'f-button-r3', 'f-delete', 'f-detach-r3', 'f-frozen', 'f-no-button', 'f-players-r3', 'f-redeclare-r3', 'f-squat-r3', 'g-adopt', 'g-adopt-mixed', 'g-carol-menu', 'g-counts', 'g-create', 'g-legacy', 'g-name', 'g-panel', 'h-anon', 'h-created', 'h-generic-r2', 'h-hide-redeclare', 'h-mobile', 'h-my-ongoing', 'h-ongoing', 'h-ongoing-hide', 'h-order', 'h-pools-hide', 'h-pools-r2', 'h-tabs-url', 'h-unmask-r2', 'i-freeze', 'i-legacy-row', 'i-normal', 'j-console', 'j-fr', 'j-mobile', 'j-theme', 'l-api-invalid', 'l-api-no-unique', 'l-create', 'l-form-r2', 'l-imposed', 'l-menu', 'l-pool'];
 // Steps the suite covers with a narrower assertion than the acceptance steps (hand-maintained).
 const AUTO_PARTIAL = { 'j-fr': 'raw keys and a FR sample; English leftovers stay a human check', 'j-theme': 'toggle, persistence and screenshots; contrast stays a human check' };
 
@@ -602,6 +602,20 @@ ${pre(`curl -s "${API}/api/tournament-bga-decklist?tournamentId=484848&tournamen
       { id: 'h-unmask-r2', v2: true, who: 'alice', title: 'After the beta: the hub is back on /tournament, /tournament/beta redirects there',
         html: `<ul><li>Home › “Tournaments” → ${url(WEB + '/tournament')}: the hub of this group (tabs, “Create a tournament”), no “Prepare my next tournament” button at the top any more (it sits in the block below the tabs).</li>
 <li>${url(WEB + '/tournament/beta?tab=created')} redirects to <code>/tournament?tab=created</code> (bookmarks of the beta keep working); a tournament page's “← Tournaments” link comes back to <code>/tournament</code>. Logged out, <code>/tournament/beta</code> lands on the public tabs.</li></ul>` },
+      { id: 'h-pools-hide', v11: true, who: 'carol', title: '“My pools”: ended / cancelled folded, hide a pool by hand',
+        html: `<ul><li>${url(WEB + '/tournament?tab=pools')}: the pools of ended, cancelled or detached tournaments are no longer in the list but in “▸ Ended, cancelled and hidden (N)” folded below it; the tab counter counts only the list.</li>
+<li>On a legacy pool (e.g. “Legacy cup”) or a pool of an open tournament: “Hide” → the card moves at once to the folded block and the counter drops by 1; it stays there after a reload and on another browser (stored on the account).</li>
+<li>In the folded block, “Show” on that pool brings it back to the list. A pool folded because its tournament is over has no “Show” button.</li>
+<li>One hide per BGA tournament: hiding the pool of an ongoing tournament also removes it from “My ongoing tournaments” at the top and folds it in the “Ongoing” tab’s “Hidden (1)”.</li></ul>` },
+      { id: 'h-ongoing-hide', v11: true, who: 'carol', title: '“Ongoing”: hide a tournament its organizer forgot to close',
+        html: `<ul><li>${url(WEB + '/tournament?tab=ongoing')}: each card has a “Hide” button (logged in only; logged out there is none). Click it on a tournament, with or without a pool: it leaves the list into “▸ Hidden (1)” folded below, the counter drops by 1, and it leaves “My ongoing tournaments” too; if you have a pool in it, that pool folds in “My pools” as well.</li>
+<li>Reload: still hidden. As alice, the same tournament is still listed (hiding is per player).</li>
+<li>“Show” in the folded block brings it back.</li></ul>` },
+      { id: 'h-hide-redeclare', v11: true, who: 'carol', title: 'A tournament declared again on a hidden BGA link starts visible',
+        html: `<p>Why: an organizer who got the settings wrong deletes their tournament and declares it again on the same BGA link (or a moderator detaches a squat and the real organizer declares it); the new tournament must not show up hidden for the players who hid the first one.</p>
+<ul><li>As alice, declare “Wrong settings cup” on a BGA link nobody uses yet, starting in a few minutes. Once it shows in ${url(WEB + '/tournament?tab=ongoing')}, as carol: “Hide” → it folds into “Hidden (1)”.</li>
+<li>As alice, delete it from its page (possible while it has no pool), then declare “Right settings cup” on the <strong>same</strong> BGA link.</li>
+<li>As carol, once it has started, reload “Ongoing”: “Right settings cup” is in the list with its “Hide” button, and there is no “Hidden” block.</li></ul>` },
     ],
   },
   {
