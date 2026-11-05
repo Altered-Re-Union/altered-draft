@@ -15,6 +15,17 @@ export function StatusPill({ status, t }) {
   return <span data-testid="tournament-status" className={`text-xs px-2 py-0.5 rounded-full border ${PILL[status] ?? PILL.upcoming}`}>{t(`tournaments.${key}`)}</span>
 }
 
+export function PrivateBadge({ t }) {
+  return (
+    <span data-testid="tournament-private" title={t('tournaments.privateBadgeTitle')} className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border text-muted border-line bg-surface2">
+      <svg aria-hidden="true" viewBox="0 0 16 16" className="w-3 h-3" fill="currentColor">
+        <path d="M8 1a3.5 3.5 0 0 0-3.5 3.5V7H4a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1h-.5V4.5A3.5 3.5 0 0 0 8 1Zm2 6H6V4.5a2 2 0 1 1 4 0V7Z" />
+      </svg>
+      {t('tournaments.privateBadge')}
+    </span>
+  )
+}
+
 /** Viewer-local date + time (the API sends UTC ISO strings). */
 export function formatDateTime(iso) {
   if (!iso) return '—'

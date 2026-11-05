@@ -7,7 +7,7 @@ import { validateTournamentConfig } from './tournamentConfig.js'
 import { parseBgaTournamentUrl } from './bgaUrl.js'
 
 // Display order = order of the fields on the page.
-const FIELD_ORDER = ['name', 'description', 'bgaUrl', 'startsAt', 'endsAt', 'setCode', 'faction', 'sets', 'uniques']
+const FIELD_ORDER = ['name', 'description', 'visibility', 'bgaUrl', 'startsAt', 'endsAt', 'setCode', 'faction', 'sets', 'uniques']
 
 /**
  * @param {object} p

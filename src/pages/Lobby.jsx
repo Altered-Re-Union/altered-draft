@@ -18,6 +18,7 @@ import SettingsFields from '../components/SettingsFields.jsx'
 import SetPresetGrid from '../components/SetPresetGrid.jsx'
 import { DRAFT_FORMATS } from '../lib/draftFormats.js'
 import TopNav from '../components/TopNav.jsx'
+import QrCode from '../components/QrCode.jsx'
 
 // Lobby wizard, step 1: how to play. Modes are the draft formats plus Sealed; player-count
 // badges come from the format metadata. Booster Draft is the classic pick-and-pass format.
@@ -156,7 +157,6 @@ export default function Lobby() {
   }, [mode])
 
   const joinUrl = `${window.location.origin}/?join=${code}`
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(joinUrl)}&bgcolor=111827&color=f59e0b`
 
   useEffect(() => {
     const stored = localStorage.getItem(`player_${code}`)
@@ -746,7 +746,7 @@ export default function Lobby() {
                 </button>
               </div>
             </div>
-            <img src={qrUrl} alt={t('lobby.qrCodeAlt')} className="hidden sm:block w-[120px] h-[120px] rounded-lg shrink-0" />
+            <QrCode value={joinUrl} label={t('lobby.qrCodeAlt')} className="hidden sm:block shrink-0" />
           </div>
         </div>
 

@@ -70,7 +70,7 @@ import tournamentsIndex from '../../api/tournaments/index.js'
 import tournamentsItem from '../../api/tournaments/[id].js'
 import tournamentPoolFor from '../../api/tournaments/[id]/pool.js'
 import boundPools from '../../api/tournament-bound-pools.js'
-import tournamentVisibility from '../../api/tournament-visibility.js'
+import tournamentHidden from '../../api/tournament-hidden.js'
 import { freezeSealedPools } from '../../scripts/freeze-sealed-pools.mjs'
 import { replaceBannedCards } from '../../scripts/replace-banned-cards.mjs'
 
@@ -113,6 +113,8 @@ describe('schema', () => {
     expect(rows.map(r => r.column_name).sort()).toEqual(['boosters', 'cards', 'config', 'created_by', 'tournament_ref'])
     const t = await query("SELECT 1 FROM information_schema.tables WHERE table_name = 'tournaments'")
     expect(t.rows).toHaveLength(1)
+    const v = await query("SELECT 1 FROM information_schema.columns WHERE table_name = 'tournaments' AND column_name = 'visibility'")
+    expect(v.rows).toHaveLength(1)
   })
 })
 
@@ -506,8 +508,8 @@ describe('GET /api/tournament-bound-pools', () => {
   })
 })
 
-describe('PATCH /api/tournament-visibility', () => {
-  const hide = (bgaTournamentId, hidden = true) => call(tournamentVisibility, { method: 'PATCH', body: { bgaTournamentId, hidden } })
+describe('PATCH /api/tournament-hidden', () => {
+  const hide = (bgaTournamentId, hidden = true) => call(tournamentHidden, { method: 'PATCH', body: { bgaTournamentId, hidden } })
 
   it('hides a legacy pool by its BGA id, for the caller only, and shows it again', async () => {
     const legacy = await bindTournamentId('alice', '7007', 'ROC Launch Sealed Event 2')
@@ -588,10 +590,10 @@ describe('PATCH /api/tournament-visibility', () => {
 
   it('400s on a bad body, 401s logged out, 405s on GET', async () => {
     verifySub.mockResolvedValue('alice')
-    expect((await call(tournamentVisibility, { method: 'PATCH', body: { hidden: true } })).statusCode).toBe(400)
-    expect((await call(tournamentVisibility, { method: 'PATCH', body: { bgaTournamentId: '  ', hidden: true } })).statusCode).toBe(400)
-    expect((await call(tournamentVisibility, { method: 'PATCH', body: { bgaTournamentId: '1', hidden: 'yes' } })).statusCode).toBe(400)
-    expect((await call(tournamentVisibility, { method: 'GET' })).statusCode).toBe(405)
+    expect((await call(tournamentHidden, { method: 'PATCH', body: { hidden: true } })).statusCode).toBe(400)
+    expect((await call(tournamentHidden, { method: 'PATCH', body: { bgaTournamentId: '  ', hidden: true } })).statusCode).toBe(400)
+    expect((await call(tournamentHidden, { method: 'PATCH', body: { bgaTournamentId: '1', hidden: 'yes' } })).statusCode).toBe(400)
+    expect((await call(tournamentHidden, { method: 'GET' })).statusCode).toBe(405)
     verifySub.mockResolvedValue(null)
     expect((await hide('1')).statusCode).toBe(401)
   })
@@ -1109,5 +1111,99 @@ describe('V3: multi-set sealed and random uniques', () => {
       vi.unstubAllGlobals()
       vi.mocked(verifySub).mockResolvedValue(null)
     }
+  })
+})
+
+describe('private tournaments (V4)', () => {
+  const bga = id => `https://boardgamearena.com/tournament?id=${id}`
+  const postBody = { name: 'Winter Cup', description: 'Be there', startsAt: inDays(3).toISOString(), endsAt: null, config: CONFIG }
+
+  it('the schema adds visibility, public by default, checked', async () => {
+    const { rows } = await query("SELECT column_default, is_nullable FROM information_schema.columns WHERE table_name = 'tournaments' AND column_name = 'visibility'")
+    expect(rows[0].is_nullable).toBe('NO')
+    expect(rows[0].column_default).toContain('public')
+    const t = await mkTournament()
+    expect(t.visibility).toBe('public')
+    await expect(query("UPDATE tournaments SET visibility = 'hidden' WHERE id = $1", [t.id])).rejects.toMatchObject({ code: '23514' })
+  })
+
+  it('lists a private tournament to its organizer, a pool holder (page or BGA) and a moderator, to nobody else', async () => {
+    const priv = await mkTournament({ visibility: 'private' })
+    const pub = await mkTournament()
+    await getOrCreateTournamentPool('holder', priv, { createdBy: 'page' })
+    await getOrCreateTournamentPool('bgaholder', priv, { createdBy: 'bga' })
+    const ids = async viewer => (await listTournaments('open', viewer)).map(r => r.id).sort()
+    expect(await ids(null)).toEqual([pub.id])
+    expect(await ids({ sub: 'stranger', isModerator: false })).toEqual([pub.id])
+    for (const viewer of [{ sub: 'org', isModerator: false }, { sub: 'holder', isModerator: false }, { sub: 'bgaholder', isModerator: false }, { sub: 'mod', isModerator: true }]) {
+      expect(await ids(viewer), viewer.sub).toEqual([priv.id, pub.id].sort())
+    }
+    expect((await listTournaments('upcoming', { sub: 'org', isModerator: false })).map(r => r.visibility)).toContain('private')
+  })
+
+  it('GET /api/tournaments filters by the caller; POST defaults to public and refuses other values', async () => {
+    const priv = await mkTournament({ visibility: 'private' })
+    verifyUser.mockResolvedValue(null)
+    expect((await call(tournamentsIndex, { method: 'GET', auth: false })).body.tournaments).toEqual([])
+    asUser(ALICE)
+    expect((await call(tournamentsIndex, { method: 'GET' })).body.tournaments).toEqual([])
+    asUser(MOD)
+    expect((await call(tournamentsIndex, { method: 'GET' })).body.tournaments.map(t => [t.id, t.visibility])).toEqual([[priv.id, 'private']])
+    asUser(ALICE)
+    expect((await call(tournamentsIndex, { method: 'POST', body: { ...postBody, bgaUrl: bga('9101') } })).body.visibility).toBe('public')
+    const created = await call(tournamentsIndex, { method: 'POST', body: { ...postBody, bgaUrl: bga('9102'), visibility: 'private' } })
+    expect(created.statusCode).toBe(201)
+    expect(created.body.visibility).toBe('private')
+    expect((await call(tournamentsIndex, { method: 'GET', query: { mine: '1' } })).body.tournaments.map(t => t.visibility).sort()).toEqual(['private', 'public'])
+    const bad = await call(tournamentsIndex, { method: 'POST', body: { ...postBody, bgaUrl: bga('9103'), visibility: 'hidden' } })
+    expect(bad.statusCode).toBe(400)
+    expect(bad.body.fields).toEqual({ visibility: 'invalid_visibility' })
+  })
+
+  it('PATCH visibility works whatever the status and on a locked tournament, not on a detached one', async () => {
+    const t = await mkTournament({ organizerSub: 'alice' })
+    await getOrCreateTournamentPool('bob', t)
+    asUser(ALICE)
+    const toPrivate = await call(tournamentsItem, { method: 'PATCH', query: { id: t.id }, body: { visibility: 'private' } })
+    expect(toPrivate.statusCode).toBe(200)
+    expect(toPrivate.body).toMatchObject({ visibility: 'private', locked: true })
+    expect((await call(tournamentsItem, { method: 'PATCH', query: { id: t.id }, body: { action: 'cancel', visibility: 'public' } })).body).toMatchObject({ visibility: 'public', status: 'cancelled' })
+    const cancelledToPrivate = await call(tournamentsItem, { method: 'PATCH', query: { id: t.id }, body: { visibility: 'private' } })
+    expect(cancelledToPrivate.statusCode).toBe(200)
+    expect(cancelledToPrivate.body).toMatchObject({ visibility: 'private', status: 'cancelled' })
+    expect((await call(tournamentsItem, { method: 'PATCH', query: { id: t.id }, body: { visibility: 'nope' } })).statusCode).toBe(400)
+    expect((await call(tournamentsItem, { method: 'GET', query: { id: t.id } })).body.visibility).toBe('private')
+    asUser(MOD)
+    expect((await call(tournamentsItem, { method: 'PATCH', query: { id: t.id }, body: { action: 'detach' } })).statusCode).toBe(200)
+    expect((await call(tournamentsItem, { method: 'PATCH', query: { id: t.id }, body: { visibility: 'private' } })).body).toEqual({ error: 'tournament_detached' })
+  })
+
+  it('?bgaId= redacts a private declaration the caller may not see', async () => {
+    const priv = await mkTournament({ visibility: 'private', bgaTournamentId: '777', organizerSub: 'alice' })
+    const lookup = () => call(tournamentsIndex, { method: 'GET', query: { bgaId: '777' } })
+    verifyUser.mockResolvedValue(null)
+    const anon = await call(tournamentsIndex, { method: 'GET', query: { bgaId: '777' }, auth: false })
+    expect(anon.body).toEqual({ tournaments: [{ visibility: 'private' }], legacy: null })
+    asUser({ ...ALICE, sub: 'stranger' })
+    expect((await lookup()).body.tournaments).toEqual([{ visibility: 'private' }])
+    asUser(ALICE)
+    expect((await lookup()).body.tournaments[0]).toMatchObject({ id: priv.id, name: 'Winter Cup', visibility: 'private', viewer: { isOrganizer: true } })
+    await getOrCreateTournamentPool('holder', priv)
+    asUser({ ...ALICE, sub: 'holder' })
+    expect((await lookup()).body.tournaments[0]).toMatchObject({ id: priv.id, viewer: { hasPool: true } })
+    asUser(MOD)
+    expect((await lookup()).body.tournaments[0].id).toBe(priv.id)
+    const pub = await mkTournament({ bgaTournamentId: '778' })
+    verifyUser.mockResolvedValue(null)
+    expect((await call(tournamentsIndex, { method: 'GET', query: { bgaId: '778' }, auth: false })).body.tournaments[0].id).toBe(pub.id)
+  })
+
+  it('bound pools carry the tournament visibility', async () => {
+    const priv = await mkTournament({ visibility: 'private' })
+    await getOrCreateTournamentPool('alice', priv)
+    const { verifySub } = await import('../../api/_lib/auth.js')
+    verifySub.mockResolvedValue('alice')
+    const res = await call(boundPools)
+    expect(res.body.pools[0].tournament).toMatchObject({ id: priv.id, visibility: 'private' })
   })
 })

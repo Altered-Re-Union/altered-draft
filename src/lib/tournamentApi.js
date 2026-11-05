@@ -63,7 +63,7 @@ export async function fetchBoundPools() {
 
 /** Hides (or shows again) a BGA tournament in the caller's hub: "Ongoing", "My ongoing tournaments", "My pools". */
 export async function setTournamentHidden(bgaTournamentId, hidden) {
-  const res = await fetch('/api/tournament-visibility', {
+  const res = await fetch('/api/tournament-hidden', {
     method: 'PATCH',
     headers: { ...(await authHeaders()), 'Content-Type': 'application/json' },
     body: JSON.stringify({ bgaTournamentId, hidden }),

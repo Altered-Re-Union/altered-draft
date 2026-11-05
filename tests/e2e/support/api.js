@@ -74,6 +74,17 @@ export function multisetTournamentBody(overrides = {}) {
   })
 }
 
+// "Private cup" of the V4 acceptance page: listed only for its organizer, the players who
+// have a pool on it and the moderators.
+export function privateTournamentBody(overrides = {}) {
+  return tournamentBody({
+    name: 'Private cup',
+    bgaUrl: 'https://boardgamearena.com/tournament?id=123500',
+    visibility: 'private',
+    ...overrides,
+  })
+}
+
 function expectStatus(res, status, what) {
   if (res.status !== status) throw new Error(`${what} → ${res.status} ${JSON.stringify(res.body)}`)
   return res.body

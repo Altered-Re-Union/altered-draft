@@ -218,6 +218,10 @@ create index if not exists sealed_pools_legacy_by_bga_id
 -- snapshot column is null for those rows (their contents are always stored, never regenerated).
 alter table sealed_pools alter column set_code drop not null;
 
+-- V4 (private tournaments): listing-only visibility; every existing row is public.
+alter table tournaments add column if not exists visibility text not null default 'public'
+  check (visibility in ('public', 'private'));
+
 -- Hub: tournaments a player tucked into the folded sections by hand — an organizer forgot to
 -- close theirs ("Ongoing"), or an old event clutters "My pools". Keyed by the BGA tournament
 -- id, which both a declaration (bga_tournament_id) and every bound pool (tournament_id,

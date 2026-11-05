@@ -5,6 +5,7 @@ import { parseBgaTournamentUrl } from './bgaUrl.js'
 export const NAME_MIN = 3
 export const NAME_MAX = 80
 export const DESCRIPTION_MAX = 2000
+export const VISIBILITIES = ['public', 'private']
 export const MAX_OPEN_TOURNAMENTS = 10
 export const OPEN_STATUSES = ['upcoming', 'ongoing']
 
@@ -53,6 +54,13 @@ export function validateTournamentFields(body, { now = new Date(), isCreate = fa
     const description = String(body?.description ?? '').trim()
     if (description.length > DESCRIPTION_MAX) errors.description = 'too_long'
     else values.description = description
+  }
+
+  if (isCreate || has('visibility')) {
+    const v = body?.visibility
+    if (v === undefined || (isCreate && (v === null || v === ''))) values.visibility = 'public'
+    else if (VISIBILITIES.includes(v)) values.visibility = v
+    else errors.visibility = 'invalid_visibility'
   }
 
   if (isCreate || has('startsAt')) {
@@ -109,6 +117,17 @@ export function groupCreatedTournaments(list) {
     .filter(g => g.items.length)
   const archive = group(ARCHIVE_ORDER)
   return { active: group(ACTIVE_ORDER), archive, archiveCount: archive.reduce((n, g) => n + g.items.length, 0) }
+}
+
+/**
+ * Listing visibility of a declared tournament (row shape: `visibility`, `organizer_sub`; a missing
+ * `visibility` = public). A private one is seen by its organizer, a moderator and anyone holding
+ * a pool of it (`hasPool`, computed by the caller).
+ * @param {{ visibility?: string, organizer_sub?: string }} row
+ * @param {{ sub: string, isModerator?: boolean } | null} viewer
+ */
+export function canSeeTournament(row, viewer, { hasPool = false } = {}) {
+  return row.visibility !== 'private' || (!!viewer && (!!viewer.isModerator || viewer.sub === row.organizer_sub || hasPool))
 }
 
 /** A bound pool whose declared tournament is over (ended / cancelled / detached). */

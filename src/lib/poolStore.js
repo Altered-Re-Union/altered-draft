@@ -264,6 +264,7 @@ export async function listBoundTournamentPools(sub) {
     `SELECT p.*,
             t.name AS t_name, t.starts_at AS t_starts_at, t.ends_at AS t_ends_at,
             t.cancelled_at AS t_cancelled_at, t.ended_at AS t_ended_at,
+            t.visibility AS t_visibility,
             EXISTS (SELECT 1 FROM hidden_tournaments h WHERE h.sub = p.sub AND h.bga_tournament_id = p.tournament_id) AS hidden
      FROM sealed_pools p
      LEFT JOIN tournaments t ON t.id = p.tournament_ref

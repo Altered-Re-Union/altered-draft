@@ -5,7 +5,7 @@ import { fetchBoundPools, listTournaments, listMyTournaments, setTournamentHidde
 import { useLang } from '../lib/i18n/i18n.jsx'
 import TopNav from '../components/TopNav.jsx'
 import Footer from '../components/Footer.jsx'
-import { StatusPill, formatDateTime, ConfigSummary } from '../components/TournamentBits.jsx'
+import { StatusPill, PrivateBadge, formatDateTime, ConfigSummary } from '../components/TournamentBits.jsx'
 import { groupCreatedTournaments, splitBoundPools, poolTournamentOver } from '../lib/tournamentRules.js'
 import { TOURNAMENT_HUB_PATH } from '../lib/links.js'
 
@@ -27,6 +27,7 @@ function TournamentCard({ tn, t, tc, action }) {
       <div className="flex items-center gap-2 flex-wrap">
         <p className="font-semibold">{tn.name}</p>
         <StatusPill status={tn.status} t={t} />
+        {tn.visibility === 'private' && <PrivateBadge t={t} />}
         {v?.hasPool && <span className="text-xs text-ok">✓ {t('tournaments.youHavePool')}</span>}
       </div>
       <p className="text-sm text-ink2">{t('tournaments.startsAt', { date: formatDateTime(tn.startsAt) })}</p>
@@ -146,6 +147,7 @@ function BoundPools({ pools, visible, archived, onToggle, busy, t, tc }) {
         <p className="font-semibold text-sm flex items-center gap-2 flex-wrap">
           {name}
           {p.tournament && <StatusPill status={p.tournament.status} t={t} />}
+          {p.tournament?.visibility === 'private' && <PrivateBadge t={t} />}
         </p>
         <p className="text-xs text-faint">
           {p.tournament
@@ -288,7 +290,10 @@ export default function TournamentMenu() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {myOngoing.map(tn => (
                 <CardWithDeckCta key={tn.id} to={`/tournament/t/${tn.id}`} deckTo={`/tournament/t/${tn.id}/pool`} label={tn.name} t={t}>
-                  <p className="font-semibold text-sm truncate">{tn.name}</p>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <p className="font-semibold text-sm truncate">{tn.name}</p>
+                    {tn.visibility === 'private' && <PrivateBadge t={t} />}
+                  </div>
                   <p className="text-xs text-ink2">{t('tournaments.startsAt', { date: formatDateTime(tn.startsAt) })}</p>
                   <p className="text-xs text-faint truncate">
                     {tn.viewer?.deck ? t('tournaments.yourDeck', { name: tn.viewer.deck.name, n: tn.viewer.deck.cardQuantity ?? 0 }) : t('tournamentPages.noDeckStartedYet')}

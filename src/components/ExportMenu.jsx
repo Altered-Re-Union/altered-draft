@@ -3,6 +3,7 @@ import { useAuth } from '../auth/AuthProvider.jsx'
 import { createDeck, toDeckCards } from '../lib/decks.js'
 import { useLang } from '../lib/i18n/i18n.jsx'
 import { endpoints } from '../lib/endpoints.js'
+import { copyText } from '../lib/share.js'
 
 // Where "open ↗" points after a save. A finished DECK is a legal deck (one hero), so use
 // altered.re's clean per-deck viewer (handles its own login, no raw 401). A saved POOL is
@@ -19,19 +20,6 @@ const openUrl = (id, kind) => kind === 'pool'
 function ddmm() {
   const d = new Date()
   return String(d.getDate()).padStart(2, '0') + String(d.getMonth() + 1).padStart(2, '0')
-}
-
-async function copyText(text) {
-  if (!text) return false
-  try { await navigator.clipboard.writeText(text); return true }
-  catch {
-    try {
-      const ta = document.createElement('textarea')
-      ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0'
-      document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta)
-      return true
-    } catch { return false }
-  }
 }
 
 // One dropdown for both copying card lists (altered.re format) and saving to Re:Union —
