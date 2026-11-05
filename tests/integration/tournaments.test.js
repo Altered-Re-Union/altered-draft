@@ -70,7 +70,7 @@ import tournamentsIndex from '../../api/tournaments/index.js'
 import tournamentsItem from '../../api/tournaments/[id].js'
 import tournamentPoolFor from '../../api/tournaments/[id]/pool.js'
 import boundPools from '../../api/tournament-bound-pools.js'
-import tournamentVisibility from '../../api/tournament-visibility.js'
+import tournamentHidden from '../../api/tournament-hidden.js'
 import { freezeSealedPools } from '../../scripts/freeze-sealed-pools.mjs'
 import { replaceBannedCards } from '../../scripts/replace-banned-cards.mjs'
 
@@ -508,8 +508,8 @@ describe('GET /api/tournament-bound-pools', () => {
   })
 })
 
-describe('PATCH /api/tournament-visibility', () => {
-  const hide = (bgaTournamentId, hidden = true) => call(tournamentVisibility, { method: 'PATCH', body: { bgaTournamentId, hidden } })
+describe('PATCH /api/tournament-hidden', () => {
+  const hide = (bgaTournamentId, hidden = true) => call(tournamentHidden, { method: 'PATCH', body: { bgaTournamentId, hidden } })
 
   it('hides a legacy pool by its BGA id, for the caller only, and shows it again', async () => {
     const legacy = await bindTournamentId('alice', '7007', 'ROC Launch Sealed Event 2')
@@ -590,10 +590,10 @@ describe('PATCH /api/tournament-visibility', () => {
 
   it('400s on a bad body, 401s logged out, 405s on GET', async () => {
     verifySub.mockResolvedValue('alice')
-    expect((await call(tournamentVisibility, { method: 'PATCH', body: { hidden: true } })).statusCode).toBe(400)
-    expect((await call(tournamentVisibility, { method: 'PATCH', body: { bgaTournamentId: '  ', hidden: true } })).statusCode).toBe(400)
-    expect((await call(tournamentVisibility, { method: 'PATCH', body: { bgaTournamentId: '1', hidden: 'yes' } })).statusCode).toBe(400)
-    expect((await call(tournamentVisibility, { method: 'GET' })).statusCode).toBe(405)
+    expect((await call(tournamentHidden, { method: 'PATCH', body: { hidden: true } })).statusCode).toBe(400)
+    expect((await call(tournamentHidden, { method: 'PATCH', body: { bgaTournamentId: '  ', hidden: true } })).statusCode).toBe(400)
+    expect((await call(tournamentHidden, { method: 'PATCH', body: { bgaTournamentId: '1', hidden: 'yes' } })).statusCode).toBe(400)
+    expect((await call(tournamentHidden, { method: 'GET' })).statusCode).toBe(405)
     verifySub.mockResolvedValue(null)
     expect((await hide('1')).statusCode).toBe(401)
   })

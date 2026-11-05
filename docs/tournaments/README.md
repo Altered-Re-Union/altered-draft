@@ -769,7 +769,7 @@ isDraft, isPublic, user, deckCards[], stats, formatErrors, legalityDetail }`.
 | `api/tournament-pool.js` | GET one pool by id (owner-scoped, full cards + boosters); POST update deck summary. |
 | `api/tournament-bga-decklist.js` | Called by altered-bga-api. Resolves the pool (§5 order), records game, `ensureDeck`, answers the hydra collection. |
 | `api/tournament-pool-by-deck.js` | Called by decks-api. Pool for `(sub, deckId)`, flat counts. |
-| `api/tournament-visibility.js` | PATCH: hide / show a BGA tournament in the caller's hub ("Ongoing", "My ongoing tournaments", "My pools", §14.8). |
+| `api/tournament-hidden.js` | PATCH: hide / show a BGA tournament in the caller's hub ("Ongoing", "My ongoing tournaments", "My pools", §14.8). |
 | `api/tournament-pool-counts.js` | Legacy (no caller today). Pool counts by `tournamentId` — **also binds** as a side effect. |
 | `api/decks/index.js`, `api/decks/[id].js` | Same-origin proxies to decks-api (list/create; get/patch) forwarding the player's token. Used by the frontend sync. |
 | `server/index.js` | Express server for the Docker deployment: mounts every handler above on `/api/*`. **A new handler must be registered here too.** |
@@ -1302,7 +1302,7 @@ pools created for the declaration.
 | `/api/tournaments/:id` | PATCH | organizer / moderator | Partial update: `name`, `description`, `visibility` (every status but detached, never locked, §14.9), `startsAt`, `endsAt`, `bgaUrl` (unlocked only), `config` (unlocked only, atomic), `action: cancel\|restore\|close\|reopen\|detach` (`detach` moderator only, §14.5). 409 `tournament_locked` when a locked field is sent, `tournament_detached` on a detached tournament, `bga_tournament_taken` when the new link is already declared. A `bgaUrl` change to a BGA id already played with legacy pools follows the same rule as creation (their format imposed, pools adopted; mixed formats → 409 `bga_tournament_mixed_formats`). |
 | `/api/tournaments/:id` | DELETE | organizer / moderator | 409 `tournament_has_pools` unless zero pools. |
 | `/api/tournaments/:id/pool` | GET | required | Get-or-create the caller's pool (`createdBy: 'page'`). 409 `tournament_closed` when cancelled/ended **and** no pool exists yet (with `status: 'detached'` when a detach won the race), 409 `pool_unavailable` when the config kept changing during generation (§5). `/api/tournament-bga-decklist` and `/api/tournament-pool-counts` answer the same two cases with a 409 too. |
-| `/api/tournament-visibility` | PATCH | required | Body `{ bgaTournamentId, hidden: boolean }`: hide / show that BGA tournament in the caller's hub (declared or legacy, with or without a pool; idempotent). 400 bad body (§14.8). |
+| `/api/tournament-hidden` | PATCH | required | Body `{ bgaTournamentId, hidden: boolean }`: hide / show that BGA tournament in the caller's hub (declared or legacy, with or without a pool; idempotent). 400 bad body (§14.8). |
 | `/api/tournament-bound-pools` | GET | required | Unchanged shape + `tournament: { id, name, startsAt, visibility, status } \| null` and `hidden` per pool, + top-level `pending: { id, deck } \| null` (the pending prep pool, read only). |
 | `/api/tournament-bga-decklist`, `/api/tournament-pool-counts`, `/api/tournament-pool-by-deck`, `/api/tournament-pool` | — | — | **Unchanged contracts.** Internally they go through §14.2 / `loadPool`. |
 
@@ -1521,7 +1521,8 @@ player, display only**: nothing here is read by binding, deck validation or the 
   `tournamentStore.js`, same statement as the INSERT / UPDATE): an organizer who deletes a
   wrongly set tournament and declares it again, or the real organizer after a detach, gets
   a tournament nobody has hidden, and the legacy pools it adopts show again too. An edit
-  that keeps the id resets nothing. `PATCH /api/tournament-visibility`
+  that keeps the id resets nothing. `PATCH /api/tournament-hidden`
+  (a per-player display preference, unrelated to a tournament's public / private `visibility`, §14.9)
   (`setTournamentHidden`), read as `viewer.hidden` on `GET /api/tournaments` and `hidden` on
   `GET /api/tournament-bound-pools`.
 - **"My pools"** (`splitBoundPools` in `tournamentRules.js`): a pool goes to the folded
