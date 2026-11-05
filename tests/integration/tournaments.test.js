@@ -11,6 +11,7 @@ import {
 import {
   createTournament, getTournament, getTournamentByBgaId, listTournaments, countOpenTournaments,
   updateTournament, countPoolsForTournament, deleteTournamentIfNoPools, toTournamentJson,
+  detachTournament, setTournamentHidden, hiddenBgaTournamentIds,
 } from '../../src/lib/tournamentStore.js'
 
 const CONFIG = {
@@ -543,6 +544,46 @@ describe('PATCH /api/tournament-visibility', () => {
     asUser(MOD)
     res = await call(tournamentsIndex, { query: { status: 'open' } })
     expect(res.body.tournaments.find(x => x.id === t.id).viewer.hidden).toBe(false)
+  })
+
+  describe('a new declaration on a BGA id starts unhidden', () => {
+    const hiddenFor = async (sub, bgaId) => (await hiddenBgaTournamentIds(sub, [bgaId])).has(bgaId)
+
+    it('deleted, then declared again on the same BGA id', async () => {
+      const first = await mkTournament({ bgaTournamentId: '9101' })
+      await setTournamentHidden('alice', '9101', true)
+      expect(await deleteTournamentIfNoPools(first.id)).toBe('deleted')
+      await mkTournament({ bgaTournamentId: '9101' })
+      expect(await hiddenFor('alice', '9101')).toBe(false)
+    })
+
+    it('detached, then redeclared: the readopted legacy pool is not hidden either', async () => {
+      // A legacy pool adopted by the squat, released by the detach, readopted by the real one.
+      await bindTournamentId('alice', '9102', 'Legacy event')
+      const squat = await mkTournament({ bgaTournamentId: '9102' })
+      await setTournamentHidden('alice', '9102', true)
+      await detachTournament(squat.id)
+      expect(await hiddenFor('alice', '9102')).toBe(true) // a detach alone keeps it
+      const real = await mkTournament({ bgaTournamentId: '9102' })
+      expect(real.adopted_pools).toBe(1)
+      expect(await hiddenFor('alice', '9102')).toBe(false)
+      const pool = (await listBoundTournamentPools('alice')).find(p => p.tournament_id === '9102')
+      expect(pool.hidden).toBe(false)
+    })
+
+    it('a link change onto a hidden BGA id resets it; an edit keeping its id resets nothing', async () => {
+      await setTournamentHidden('alice', '9103', true)
+      await setTournamentHidden('bob', '9104', true)
+      const t = await mkTournament({ bgaTournamentId: '9104' })
+      expect(await hiddenFor('bob', '9104')).toBe(false) // created on it
+      await setTournamentHidden('bob', '9104', true)
+      // Same id sent again (the form always sends the link): the hide stays.
+      await updateTournament(t.id, { name: 'Renamed', bgaUrl: 'https://boardgamearena.com/tournament?id=9104', bgaTournamentId: '9104' }, { requireUnlocked: true })
+      expect(await hiddenFor('bob', '9104')).toBe(true)
+      await updateTournament(t.id, { bgaUrl: 'https://boardgamearena.com/tournament?id=9103', bgaTournamentId: '9103' }, { requireUnlocked: true })
+      expect(await hiddenFor('alice', '9103')).toBe(false)
+      expect(await hiddenFor('bob', '9104')).toBe(true) // the id it left keeps its hides
+    })
   })
 
   it('400s on a bad body, 401s logged out, 405s on GET', async () => {

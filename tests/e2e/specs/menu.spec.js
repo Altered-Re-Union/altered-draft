@@ -335,3 +335,24 @@ test('"my pools": ended / cancelled folded, a pool hidden by hand', { tag: ['@h-
   await expect(hideBtn(folded(), 'Test cup')).toHaveCount(0)
   expect((await api('alice').patch(`/api/tournaments/${testCup.id}`, { action: 'reopen' })).status).toBe(200)
 })
+
+test('a tournament declared again on a hidden BGA id is not hidden', { tag: ['@h-hide-redeclare'] }, async ({ openAs, seed, api }) => {
+  const declare = async name => {
+    const tn = await seed.tournament('alice', { name, bgaUrl: bga(650001) })
+    expect((await api('alice').patch(`/api/tournaments/${tn.id}`, { startsAt: isoDaysFromNow(-1) })).status).toBe(200)
+    return tn
+  }
+  const first = await declare('Wrong settings cup')
+  const carol = await openAs('carol')
+  await openMenu(carol, '?tab=ongoing')
+  await hideBtn(panel(carol), 'Wrong settings cup').click()
+  await expect(panel(carol).getByTestId('ongoing-hidden')).toContainText(t('tournaments.ongoingHidden', { n: 1 }))
+
+  // The organizer got the settings wrong: deletes it (no pool yet), declares it again.
+  expect((await api('alice').delete(`/api/tournaments/${first.id}`)).status).toBe(204)
+  await declare('Right settings cup')
+  await carol.reload()
+  await expect(tournamentLink(panel(carol), 'Right settings cup')).toBeVisible()
+  await expect(hideBtn(panel(carol), 'Right settings cup')).toBeVisible()
+  await expect(panel(carol).getByTestId('ongoing-hidden')).toHaveCount(0)
+})

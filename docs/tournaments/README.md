@@ -1228,7 +1228,7 @@ would need binding an already-completed `draft_rooms` result to a tournament id 
 | 2026-10-16 | Service URLs made configurable (`src/lib/endpoints.js`), local dev stack. |
 | 2026-10-16 | **User-created tournaments, lot 1** (branch `feat/user-tournaments`): `tournaments` registry, stored pools (`poolBuilder`, `loadPool`, freeze script), declared tournaments first on the BGA path, public list, create / edit / cancel / close / delete, checklist page, moderators via env, moderator-only detach against squatting, live form validation. Spec `user-tournaments-spec.md`, §14. |
 | 2026-10-18 | **Lot 1 review fixes** (PR #20): detach releases the pools a declaration adopted (`adopted_at`) instead of deleting them; pool creation guarded against a concurrent config edit or detach (409, never a stale config or a 500); one deck save at a time on the pool page (no duplicate decks); "Reconnect, input kept" on the form; indexes on `tournament_ref` and the legacy BGA id; `scripts/` in the image for the container freeze; golden test of the legacy regeneration. |
-| 2026-11-02 | **Hub tidy-up** (§14.8): "My pools" folds the pools of ended / cancelled tournaments; a player can hide a BGA tournament (an organizer forgot to close it, an old legacy event) from "Ongoing" or "My pools", one hide per BGA id for the whole hub (`hidden_tournaments`). |
+| 2026-11-02 | **Hub tidy-up** (§14.8): "My pools" folds the pools of ended / cancelled tournaments; a player can hide a BGA tournament (an organizer forgot to close it, an old legacy event) from "Ongoing" or "My pools", one hide per BGA id for the whole hub (`hidden_tournaments`), dropped when a new tournament is declared on that id. |
 | 2026-11-04 | **Versioned ban list** (PR #30): exact suspended printings (`v2`, altered.re's list) instead of whole cards; each tournament keeps the version stamped in `config.banlist` at creation (absent = `v1`), so a tournament already dealing pools keeps its rules; `replace-banned-cards.mjs` follows each tournament's version. |
 
 Decisions worth knowing: pools are stored (the upstream set file's order must not change a
@@ -1514,8 +1514,12 @@ player, display only**: nothing here is read by binding, deck validation or the 
   "My pools" (`sealed_pools.tournament_id`, legacy pools included: the list only shows bound
   pools). No FK, since a legacy id has no `tournaments` row. Hiding a tournament from
   "Ongoing" or its pool from "My pools" is the same action: it folds out of "Ongoing", "My
-  ongoing tournaments" and "My pools" at once. A re-declaration of the same BGA tournament
-  after a detach keeps the hide (same real tournament). `PATCH /api/tournament-visibility`
+  ongoing tournaments" and "My pools" at once. A **new declaration** on a BGA id (creation,
+  or a link change onto it) drops every hide made on that id (`RESET_HIDES` in
+  `tournamentStore.js`, same statement as the INSERT / UPDATE): an organizer who deletes a
+  wrongly set tournament and declares it again, or the real organizer after a detach, gets
+  a tournament nobody has hidden, and the legacy pools it adopts show again too. An edit
+  that keeps the id resets nothing. `PATCH /api/tournament-visibility`
   (`setTournamentHidden`), read as `viewer.hidden` on `GET /api/tournaments` and `hidden` on
   `GET /api/tournament-bound-pools`.
 - **"My pools"** (`splitBoundPools` in `tournamentRules.js`): a pool goes to the folded
@@ -1528,7 +1532,7 @@ player, display only**: nothing here is read by binding, deck validation or the 
 - The toggles are optimistic: the cards move at once and move back with an error line if
   the request fails.
 
-**Recette.** Steps `h-pools-hide` and `h-ongoing-hide` (v1.1) of
+**Recette.** Steps `h-pools-hide`, `h-ongoing-hide` and `h-hide-redeclare` (v1.1) of
 `docs/tournaments/acceptance-user-tournaments.html`, replayed by `tests/e2e/specs/menu.spec.js`.
 
 ---
