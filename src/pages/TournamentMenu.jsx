@@ -76,14 +76,14 @@ function FoldedSection({ title, testId, children }) {
 // A card that opens a page as a whole AND carries its own "Change my deck" button: the
 // card link is stretched over the card (a link can't contain another link). It is a real,
 // focusable link labelled with the card's title, so a screen reader gets two clear links.
-function CardWithDeckCta({ to, deckTo, label, t, action, children }) {
+function CardWithDeckCta({ to, deckTo, deckLabel, label, t, action, children }) {
   return (
     <div className={`${cardCls} flex items-center justify-between gap-3`}>
       <Link to={to} aria-label={label} className="absolute inset-0 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-accent" />
       <div className="min-w-0">{children}</div>
       <div className="relative z-10 shrink-0 flex items-center gap-2">
         {action}
-        <Link to={deckTo} className={ctaCls}>{t('tournamentPages.changeMyDeck')}</Link>
+        <Link to={deckTo} className={ctaCls}>{deckLabel ?? t('tournamentPages.changeMyDeck')}</Link>
       </div>
     </div>
   )
@@ -132,11 +132,14 @@ function BoundPools({ pools, visible, archived, onToggle, busy, t, tc }) {
     const name = p.tournamentName || t('tournamentPages.sealedPoolFallback', { set: p.setCode })
     const hidden = !!p.hidden
     // A pool archived because its tournament is over stays there: no button.
-    const canToggle = !poolTournamentOver(p)
+    const over = poolTournamentOver(p)
+    const canToggle = !over
     return (
       // A declared tournament has a page; a pool bound to an undeclared BGA
       // tournament doesn't, so its card opens the pool itself.
+      // The tournament is over: the deck is only looked at, no longer changed.
       <CardWithDeckCta key={p.id} t={t} label={name}
+        deckLabel={over ? t('tournamentPages.seeMyDeck') : undefined}
         to={p.tournament ? `/tournament/t/${p.tournament.id}` : `/tournament/pools/${p.id}`}
         deckTo={p.tournament ? `/tournament/t/${p.tournament.id}/pool` : `/tournament/pools/${p.id}`}
         action={canToggle && <HideButton hidden={hidden} name={name} disabled={busy.has(p.tournamentId)} onClick={() => onToggle(p, !hidden)} t={t} />}>

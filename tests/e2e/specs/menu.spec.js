@@ -246,7 +246,7 @@ test('the generic prep path still works; its button follows the prep pool', { ta
 test('the hub answers on /tournament, its beta address redirects there', { tag: ['@h-unmask-r2'] }, async ({ openAs, page }) => {
   const alice = await openAs('alice')
   await alice.goto('/')
-  await alice.getByRole('button', { name: t('home.tournamentsBtn') }).click()
+  await alice.getByRole('link', { name: t('home.tournamentsBtn') }).click()
   await alice.waitForURL(/\/tournament$/)
   await expect(alice.getByRole('tablist')).toBeVisible()
   await expect(alice.getByRole('button', { name: t('tournaments.createButton') })).toBeVisible()
@@ -264,6 +264,12 @@ test('the hub answers on /tournament, its beta address redirects there', { tag: 
   await expect(page).toHaveURL(/\/tournament$/)
   await expect(page.getByRole('tablist')).toBeVisible()
   await expect(page.getByText(t('home.bgaConnectRequired'))).toHaveCount(0)
+
+  // Logged out, Home's "Tournaments" opens the public hub, never the Keycloak login.
+  await page.goto('/')
+  await page.getByRole('link', { name: t('home.tournamentsBtn') }).click()
+  await page.waitForURL(/\/tournament$/)
+  await expect(page.getByRole('tablist')).toBeVisible()
 })
 
 const hideBtn = (scope, name) => scope.getByRole('button', { name: t('tournaments.hideLabel', { name }), exact: true })
@@ -333,6 +339,9 @@ test('"my pools": ended / cancelled folded, a pool hidden by hand', { tag: ['@h-
   await expect(folded().getByRole('link', { name: 'Test cup', exact: true })).toBeVisible()
   await expect(showBtn(folded(), 'Test cup')).toHaveCount(0)
   await expect(hideBtn(folded(), 'Test cup')).toHaveCount(0)
+  // Over: the deck can still be opened, but the CTA no longer says "Change".
+  await expect(changeMyDeck(folded())).toHaveCount(0)
+  await expect(folded().getByRole('link', { name: t('tournamentPages.seeMyDeck') })).toBeVisible()
   expect((await api('alice').patch(`/api/tournaments/${testCup.id}`, { action: 'reopen' })).status).toBe(200)
 })
 

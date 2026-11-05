@@ -443,6 +443,7 @@ export default {
     myOngoingTournaments: 'Mes tournois en cours',
     noOngoingTournaments: 'Aucun tournoi en cours.',
     changeMyDeck: 'Changer mon deck',
+    seeMyDeck: 'Voir mon deck',
     normalTitle: 'Scellé sur BGA — mode normal',
     prepTitle: 'Préparation de votre prochaine pool de tournoi',
     boundDetailTitle: 'Pool de tournoi — modifier entre les parties',

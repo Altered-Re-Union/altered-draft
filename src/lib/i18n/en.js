@@ -444,6 +444,7 @@ export default {
     myOngoingTournaments: 'My ongoing tournaments',
     noOngoingTournaments: 'No ongoing tournament.',
     changeMyDeck: 'Change my deck',
+    seeMyDeck: 'See my deck',
     normalTitle: 'Sealed on BGA — normal mode',
     prepTitle: 'Preparing your next tournament pool',
     boundDetailTitle: 'Tournament pool — edit between games',
