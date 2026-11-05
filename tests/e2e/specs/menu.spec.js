@@ -246,7 +246,7 @@ test('the generic prep path still works; its button follows the prep pool', { ta
 test('the hub answers on /tournament, its beta address redirects there', { tag: ['@h-unmask-r2'] }, async ({ openAs, page }) => {
   const alice = await openAs('alice')
   await alice.goto('/')
-  await alice.getByRole('button', { name: t('home.tournamentsBtn') }).click()
+  await alice.getByRole('link', { name: t('home.tournamentsBtn') }).click()
   await alice.waitForURL(/\/tournament$/)
   await expect(alice.getByRole('tablist')).toBeVisible()
   await expect(alice.getByRole('button', { name: t('tournaments.createButton') })).toBeVisible()
@@ -264,4 +264,104 @@ test('the hub answers on /tournament, its beta address redirects there', { tag: 
   await expect(page).toHaveURL(/\/tournament$/)
   await expect(page.getByRole('tablist')).toBeVisible()
   await expect(page.getByText(t('home.bgaConnectRequired'))).toHaveCount(0)
+
+  // Logged out, Home's "Tournaments" opens the public hub, never the Keycloak login.
+  await page.goto('/')
+  await page.getByRole('link', { name: t('home.tournamentsBtn') }).click()
+  await page.waitForURL(/\/tournament$/)
+  await expect(page.getByRole('tablist')).toBeVisible()
+})
+
+const hideBtn = (scope, name) => scope.getByRole('button', { name: t('tournaments.hideLabel', { name }), exact: true })
+const showBtn = (scope, name) => scope.getByRole('button', { name: t('tournaments.showLabel', { name }), exact: true })
+
+test('"ongoing": a tournament can be hidden by hand, per player', { tag: ['@h-ongoing-hide'] }, async ({ openAs, page: anon }) => {
+  const carol = await openAs('carol')
+  await openMenu(carol, '?tab=ongoing')
+  const before = await tabCount(carol, 'tabOngoing')
+  await expect(myOngoing(carol).getByRole('link', { name: 'Test cup', exact: true })).toBeVisible()
+  await hideBtn(panel(carol), 'Test cup').click()
+  const folded = panel(carol).getByTestId('ongoing-hidden')
+  await expect(folded).toContainText(t('tournaments.ongoingHidden', { n: 1 }))
+  await expect(tournamentLink(panel(carol), 'Test cup')).toHaveCount(0) // folded = hidden
+  await expect.poll(() => tabCount(carol, 'tabOngoing')).toBe(before - 1)
+  await expect(myOngoing(carol).getByRole('link', { name: 'Test cup', exact: true })).toHaveCount(0)
+
+  await carol.reload()
+  await expect(panel(carol).getByTestId('ongoing-hidden')).toBeVisible()
+  const alice = await openAs('alice')
+  await openMenu(alice, '?tab=ongoing')
+  await expect(tournamentLink(panel(alice), 'Test cup')).toBeVisible()
+  await openMenu(anon, '?tab=ongoing')
+  await expect(tournamentLink(panel(anon), 'Test cup')).toBeVisible()
+  await expect(panel(anon).getByRole('button', { name: t('tournaments.hideLabel', { name: 'Test cup' }) })).toHaveCount(0)
+
+  await panel(carol).getByText(t('tournaments.ongoingHidden', { n: 1 })).click()
+  await showBtn(panel(carol), 'Test cup').click()
+  await expect(tournamentLink(panel(carol), 'Test cup')).toBeVisible()
+  await expect(panel(carol).getByTestId('ongoing-hidden')).toHaveCount(0)
+  await expect(myOngoing(carol).getByRole('link', { name: 'Test cup', exact: true })).toBeVisible()
+})
+
+test('"my pools": ended / cancelled folded, a pool hidden by hand', { tag: ['@h-pools-hide'] }, async ({ openAs, api }) => {
+  const carol = await openAs('carol')
+  await openMenu(carol, '?tab=pools')
+  const before = await tabCount(carol, 'tabPools')
+  const folded = () => panel(carol).getByTestId('pools-archive')
+
+  // A legacy pool has no status: only a hand hide folds it.
+  await hideBtn(panel(carol), 'Legacy cup').click()
+  await expect(folded()).toContainText(t('tournaments.poolsArchive', { n: 1 }))
+  await expect.poll(() => tabCount(carol, 'tabPools')).toBe(before - 1)
+  await carol.reload()
+  await expect(folded()).toContainText(t('tournaments.poolsArchive', { n: 1 }))
+  await folded().getByText(t('tournaments.poolsArchive', { n: 1 })).click()
+  await showBtn(folded(), 'Legacy cup').click()
+  await expect(folded()).toHaveCount(0)
+  await expect(panel(carol).getByRole('link', { name: 'Legacy cup', exact: true })).toBeVisible()
+
+  // One hide per BGA tournament: hiding an ongoing tournament's pool also takes it out of
+  // "My ongoing tournaments" and folds it in "Ongoing".
+  await hideBtn(panel(carol), 'Test cup').click()
+  await expect(myOngoing(carol).getByRole('link', { name: 'Test cup', exact: true })).toHaveCount(0)
+  await tab(carol, 'tabOngoing').click()
+  await expect(panel(carol).getByTestId('ongoing-hidden')).toContainText(t('tournaments.ongoingHidden', { n: 1 }))
+  await tab(carol, 'tabPools').click()
+  await folded().getByText(t('tournaments.poolsArchive', { n: 1 })).click()
+  await showBtn(folded(), 'Test cup').click()
+  await expect(myOngoing(carol).getByRole('link', { name: 'Test cup', exact: true })).toBeVisible()
+
+  // An ended tournament's pool folds by itself, with no button to bring it back.
+  expect((await api('alice').patch(`/api/tournaments/${testCup.id}`, { action: 'close' })).status).toBe(200)
+  await carol.reload()
+  await expect(folded()).toContainText(t('tournaments.poolsArchive', { n: 1 }))
+  await folded().getByText(t('tournaments.poolsArchive', { n: 1 })).click()
+  await expect(folded().getByRole('link', { name: 'Test cup', exact: true })).toBeVisible()
+  await expect(showBtn(folded(), 'Test cup')).toHaveCount(0)
+  await expect(hideBtn(folded(), 'Test cup')).toHaveCount(0)
+  // Over: the deck can still be opened, but the CTA no longer says "Change".
+  await expect(changeMyDeck(folded())).toHaveCount(0)
+  await expect(folded().getByRole('link', { name: t('tournamentPages.seeMyDeck') })).toBeVisible()
+  expect((await api('alice').patch(`/api/tournaments/${testCup.id}`, { action: 'reopen' })).status).toBe(200)
+})
+
+test('a tournament declared again on a hidden BGA id is not hidden', { tag: ['@h-hide-redeclare'] }, async ({ openAs, seed, api }) => {
+  const declare = async name => {
+    const tn = await seed.tournament('alice', { name, bgaUrl: bga(650001) })
+    expect((await api('alice').patch(`/api/tournaments/${tn.id}`, { startsAt: isoDaysFromNow(-1) })).status).toBe(200)
+    return tn
+  }
+  const first = await declare('Wrong settings cup')
+  const carol = await openAs('carol')
+  await openMenu(carol, '?tab=ongoing')
+  await hideBtn(panel(carol), 'Wrong settings cup').click()
+  await expect(panel(carol).getByTestId('ongoing-hidden')).toContainText(t('tournaments.ongoingHidden', { n: 1 }))
+
+  // The organizer got the settings wrong: deletes it (no pool yet), declares it again.
+  expect((await api('alice').delete(`/api/tournaments/${first.id}`)).status).toBe(204)
+  await declare('Right settings cup')
+  await carol.reload()
+  await expect(tournamentLink(panel(carol), 'Right settings cup')).toBeVisible()
+  await expect(hideBtn(panel(carol), 'Right settings cup')).toBeVisible()
+  await expect(panel(carol).getByTestId('ongoing-hidden')).toHaveCount(0)
 })

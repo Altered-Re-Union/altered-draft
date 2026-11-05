@@ -23,6 +23,7 @@ export default async function handler(req, res) {
     tournamentId: p.tournament_id,
     tournamentName: p.tournament_name,
     boundAt: p.bound_at,
+    hidden: !!p.hidden,
     gamesPlayed: await countGamesPlayed(p.id),
     tournament: p.tournament_ref
       ? {

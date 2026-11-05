@@ -3,6 +3,7 @@
 // read) and, from lot 2 on, for the Lobby. Pure: shared by server validation and the form.
 import { SETS, FACTIONS } from './cardData.js'
 import { hasFactionRanges } from './uniqueFactionRanges.js'
+import { CURRENT_BANLIST } from './banlist.js'
 
 export const CONFIG_VERSION = 1
 export const SEALED_BOOSTERS = 7
@@ -139,6 +140,11 @@ export function validateTournamentConfig(input) {
       // mislead the stored config. Same for a faction left over with no unique at all.
       uniques: { inBoosters, guaranteed, evenFactions: !!u.evenFactions && !random && !multiSets && uniqueTotal >= 2 && !faction, faction, randomOneIn: random ? randomOneIn : null },
       excludeBanlist: !!c.excludeBanlist,
+      // The ban-list version this config draws under (banlist.js): always the current one,
+      // whatever the client sent. Only reached on creation and on a config edit, which is
+      // only allowed while the tournament has no pool, so no pool ever changes list. Absent
+      // when the ban list is off (and on configs stored before versioning: legacy list).
+      ...(c.excludeBanlist ? { banlist: CURRENT_BANLIST } : {}),
     },
   }
 }

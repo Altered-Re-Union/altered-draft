@@ -1,5 +1,6 @@
 import { SETS, SET_ABBREV, FACTION_NAMES } from '../lib/cardData.js'
 import { FACTION_ICONS } from '../lib/assets.js'
+import { banlistVersionOf, LEGACY_BANLIST } from '../lib/banlist.js'
 
 const PILL = {
   upcoming: 'text-accent-ink border-accent/50 bg-accent/15',
@@ -74,7 +75,8 @@ export function configSummaryParts(config, t, tc) {
   }
   if (!u.randomOneIn && u.evenFactions && (u.inBoosters + u.guaranteed) >= 2) parts.push({ text: t('tournaments.summaryEven') })
   if (config.heroes === 'free') parts.push({ text: t('tournaments.summaryHeroesFree') })
-  if (config.excludeBanlist) parts.push({ text: t('tournaments.summaryBanlist') })
+  // A tournament created before the ban list was versioned keeps the old, whole-card list.
+  if (config.excludeBanlist) parts.push({ text: t(banlistVersionOf(config) === LEGACY_BANLIST ? 'tournaments.summaryBanlistLegacy' : 'tournaments.summaryBanlist') })
   return parts
 }
 

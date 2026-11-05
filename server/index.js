@@ -19,6 +19,7 @@ import tournamentPoolHandler from '../api/tournament-pool.js'
 import tournamentBgaDecklistHandler from '../api/tournament-bga-decklist.js'
 import tournamentPoolCountsHandler from '../api/tournament-pool-counts.js'
 import tournamentPoolByDeckHandler from '../api/tournament-pool-by-deck.js'
+import tournamentVisibilityHandler from '../api/tournament-visibility.js'
 import tournamentsIndexHandler from '../api/tournaments/index.js'
 import tournamentsItemHandler from '../api/tournaments/[id].js'
 import tournamentPoolForHandler from '../api/tournaments/[id]/pool.js'
@@ -69,6 +70,7 @@ app.all('/api/tournament-pool', route(tournamentPoolHandler))
 app.all('/api/tournament-bga-decklist', route(tournamentBgaDecklistHandler))
 app.all('/api/tournament-pool-counts', route(tournamentPoolCountsHandler))
 app.all('/api/tournament-pool-by-deck', route(tournamentPoolByDeckHandler))
+app.all('/api/tournament-visibility', route(tournamentVisibilityHandler))
 app.all('/api/tournaments', route(tournamentsIndexHandler))
 app.all('/api/tournaments/:id', routeWithParam(tournamentsItemHandler, 'id'))
 app.all('/api/tournaments/:id/pool', routeWithParam(tournamentPoolForHandler, 'id'))

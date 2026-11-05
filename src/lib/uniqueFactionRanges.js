@@ -115,7 +115,7 @@ export function pickDeterministicUniques(setCode, rng, { uniqueCount = 0, evenFa
     const candidates = buildCandidates(rangesForSet, target)
     if (!candidates.length) continue
     // Retry on a serial already picked (astronomically unlikely) or one the caller
-    // rejects (e.g. a banned unique family when the ban list is on).
+    // rejects (e.g. a banned unique when the ban list is on).
     for (let attempt = 0; attempt < 10; attempt++) {
       const { family, faction, windows } = pickWeighted(candidates, rng)
       const serial = pickSerialInWindows(windows, rng)

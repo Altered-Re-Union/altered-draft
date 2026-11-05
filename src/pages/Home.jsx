@@ -6,6 +6,7 @@ import { useAuth } from '../auth/AuthProvider.jsx'
 import { useLang } from '../lib/i18n/i18n.jsx'
 import TopNav from '../components/TopNav.jsx'
 import Footer from '../components/Footer.jsx'
+import { TOURNAMENT_HUB_PATH } from '../lib/links.js'
 
 export default function Home() {
   const navigate = useNavigate()
@@ -116,11 +117,12 @@ export default function Home() {
           <h2 className="font-semibold text-lg">{t('home.sealedTitle')}</h2>
           <p className="text-muted text-sm mb-3">{t('home.sealedDesc')}</p>
           <div className="space-y-2">
-            <button onClick={() => user ? navigate('/tournament') : login('/tournament')}
-              className="w-full bg-surface2 hover:bg-surface3 text-ink rounded-lg overflow-hidden transition-colors text-left">
+            {/* The hub is public (its personal tabs ask to connect), so no login gate here. */}
+            <Link to={TOURNAMENT_HUB_PATH}
+              className="block w-full bg-surface2 hover:bg-surface3 text-ink rounded-lg overflow-hidden transition-colors text-left">
               <img src="/images/tournois.png" alt="" className="w-full h-24 object-cover" />
               <span className="block font-semibold py-3 px-4">{t('home.tournamentsBtn')}</span>
-            </button>
+            </Link>
             <button onClick={() => user ? navigate('/tournament/normal') : login('/tournament/normal')}
               className="w-full bg-surface2 hover:bg-surface3 text-ink rounded-lg overflow-hidden transition-colors text-left">
               <img src="/images/normal.png" alt="" className="w-full h-24 object-cover" />

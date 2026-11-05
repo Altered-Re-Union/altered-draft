@@ -11,6 +11,7 @@ import {
 import {
   createTournament, getTournament, getTournamentByBgaId, listTournaments, countOpenTournaments,
   updateTournament, countPoolsForTournament, deleteTournamentIfNoPools, toTournamentJson,
+  detachTournament, setTournamentHidden, hiddenBgaTournamentIds,
 } from '../../src/lib/tournamentStore.js'
 
 const CONFIG = {
@@ -69,7 +70,9 @@ import tournamentsIndex from '../../api/tournaments/index.js'
 import tournamentsItem from '../../api/tournaments/[id].js'
 import tournamentPoolFor from '../../api/tournaments/[id]/pool.js'
 import boundPools from '../../api/tournament-bound-pools.js'
+import tournamentVisibility from '../../api/tournament-visibility.js'
 import { freezeSealedPools } from '../../scripts/freeze-sealed-pools.mjs'
+import { replaceBannedCards } from '../../scripts/replace-banned-cards.mjs'
 
 function mockRes() {
   const res = {
@@ -94,7 +97,7 @@ const MOD = { sub: 'mod', name: 'Mod', roles: ['mod'], isModerator: true }
 const asUser = user => verifyUser.mockImplementation(async req => (req.headers.authorization ? user : null))
 
 beforeEach(async () => {
-  await query('TRUNCATE sealed_pool_games, sealed_pools, tournaments')
+  await query('TRUNCATE sealed_pool_games, sealed_pools, hidden_tournaments, tournaments')
 })
 
 afterAll(async () => {
@@ -505,6 +508,97 @@ describe('GET /api/tournament-bound-pools', () => {
   })
 })
 
+describe('PATCH /api/tournament-visibility', () => {
+  const hide = (bgaTournamentId, hidden = true) => call(tournamentVisibility, { method: 'PATCH', body: { bgaTournamentId, hidden } })
+
+  it('hides a legacy pool by its BGA id, for the caller only, and shows it again', async () => {
+    const legacy = await bindTournamentId('alice', '7007', 'ROC Launch Sealed Event 2')
+    await bindTournamentId('bob', '7007', 'ROC Launch Sealed Event 2')
+    verifySub.mockResolvedValue('alice')
+    let res = await hide('7007')
+    expect(res.statusCode).toBe(200)
+    expect((await hide('7007')).statusCode).toBe(200) // idempotent
+    res = await call(boundPools)
+    expect(res.body.pools.find(p => p.id === legacy.id).hidden).toBe(true)
+
+    verifySub.mockResolvedValue('bob')
+    res = await call(boundPools)
+    expect(res.body.pools[0].hidden).toBe(false)
+
+    verifySub.mockResolvedValue('alice')
+    await hide('7007', false)
+    res = await call(boundPools)
+    expect(res.body.pools.find(p => p.id === legacy.id).hidden).toBe(false)
+  })
+
+  it('one hide covers a declared tournament everywhere: the list (viewer.hidden) and the pool', async () => {
+    const t = await mkTournament({ name: 'Forgotten', startsAt: inDays(-1), bgaTournamentId: '9009' })
+    asUser(ALICE)
+    verifySub.mockResolvedValue('alice')
+    await hide('9009')
+    let res = await call(tournamentsIndex, { query: { status: 'open' } })
+    expect(res.body.tournaments.find(x => x.id === t.id).viewer).toMatchObject({ hidden: true, hasPool: false })
+
+    await getOrCreateTournamentPool('alice', t)
+    res = await call(boundPools)
+    expect(res.body.pools.find(p => p.tournament?.id === t.id).hidden).toBe(true)
+
+    asUser(MOD)
+    res = await call(tournamentsIndex, { query: { status: 'open' } })
+    expect(res.body.tournaments.find(x => x.id === t.id).viewer.hidden).toBe(false)
+  })
+
+  describe('a new declaration on a BGA id starts unhidden', () => {
+    const hiddenFor = async (sub, bgaId) => (await hiddenBgaTournamentIds(sub, [bgaId])).has(bgaId)
+
+    it('deleted, then declared again on the same BGA id', async () => {
+      const first = await mkTournament({ bgaTournamentId: '9101' })
+      await setTournamentHidden('alice', '9101', true)
+      expect(await deleteTournamentIfNoPools(first.id)).toBe('deleted')
+      await mkTournament({ bgaTournamentId: '9101' })
+      expect(await hiddenFor('alice', '9101')).toBe(false)
+    })
+
+    it('detached, then redeclared: the readopted legacy pool is not hidden either', async () => {
+      // A legacy pool adopted by the squat, released by the detach, readopted by the real one.
+      await bindTournamentId('alice', '9102', 'Legacy event')
+      const squat = await mkTournament({ bgaTournamentId: '9102' })
+      await setTournamentHidden('alice', '9102', true)
+      await detachTournament(squat.id)
+      expect(await hiddenFor('alice', '9102')).toBe(true) // a detach alone keeps it
+      const real = await mkTournament({ bgaTournamentId: '9102' })
+      expect(real.adopted_pools).toBe(1)
+      expect(await hiddenFor('alice', '9102')).toBe(false)
+      const pool = (await listBoundTournamentPools('alice')).find(p => p.tournament_id === '9102')
+      expect(pool.hidden).toBe(false)
+    })
+
+    it('a link change onto a hidden BGA id resets it; an edit keeping its id resets nothing', async () => {
+      await setTournamentHidden('alice', '9103', true)
+      await setTournamentHidden('bob', '9104', true)
+      const t = await mkTournament({ bgaTournamentId: '9104' })
+      expect(await hiddenFor('bob', '9104')).toBe(false) // created on it
+      await setTournamentHidden('bob', '9104', true)
+      // Same id sent again (the form always sends the link): the hide stays.
+      await updateTournament(t.id, { name: 'Renamed', bgaUrl: 'https://boardgamearena.com/tournament?id=9104', bgaTournamentId: '9104' }, { requireUnlocked: true })
+      expect(await hiddenFor('bob', '9104')).toBe(true)
+      await updateTournament(t.id, { bgaUrl: 'https://boardgamearena.com/tournament?id=9103', bgaTournamentId: '9103' }, { requireUnlocked: true })
+      expect(await hiddenFor('alice', '9103')).toBe(false)
+      expect(await hiddenFor('bob', '9104')).toBe(true) // the id it left keeps its hides
+    })
+  })
+
+  it('400s on a bad body, 401s logged out, 405s on GET', async () => {
+    verifySub.mockResolvedValue('alice')
+    expect((await call(tournamentVisibility, { method: 'PATCH', body: { hidden: true } })).statusCode).toBe(400)
+    expect((await call(tournamentVisibility, { method: 'PATCH', body: { bgaTournamentId: '  ', hidden: true } })).statusCode).toBe(400)
+    expect((await call(tournamentVisibility, { method: 'PATCH', body: { bgaTournamentId: '1', hidden: 'yes' } })).statusCode).toBe(400)
+    expect((await call(tournamentVisibility, { method: 'GET' })).statusCode).toBe(405)
+    verifySub.mockResolvedValue(null)
+    expect((await hide('1')).statusCode).toBe(401)
+  })
+})
+
 describe('freeze-sealed-pools', () => {
   it('stores cards/boosters/config on rows that lack them, skips the others, survives one failure', async () => {
     await query(
@@ -523,6 +617,63 @@ describe('freeze-sealed-pools', () => {
     expect((await query("SELECT cards FROM sealed_pools WHERE sub = 'b'")).rows[0].cards).toBeNull()
     expect(regenerate).not.toHaveBeenCalledWith('c', expect.anything())
     void stored
+  })
+})
+
+describe('replace-banned-cards', () => {
+  const LYRA_C = 'ALT_CORE_B_LY_29_C'
+  const card = (reference, faction, rarity) => ({ reference, name: reference, faction, rarity, cardType: 'PERMANENT' })
+  const fetchCards = vi.fn(async () => [card(LYRA_C, 'LY', 'C'), card('ALT_CORE_B_LY_10_C', 'LY', 'C')])
+  const insertPool = (sub, tournamentRef, boosters, deckId = null) => {
+    const cards = {}
+    for (const ref of boosters.flat()) cards[ref] = (cards[ref] ?? 0) + 1
+    return query(
+      `INSERT INTO sealed_pools (sub, kind, nonce, tournament_ref, cards, boosters, config, created_by, deck_id, deck_name)
+       VALUES ($1, 'tournament', $1, $2, $3, $4, '{}', 'page', $5, $6) RETURNING id`,
+      [sub, tournamentRef, JSON.stringify(cards), JSON.stringify(boosters), deckId, deckId && `deck of ${sub}`])
+  }
+  const boostersOf = async sub => (await query('SELECT boosters FROM sealed_pools WHERE sub = $1', [sub])).rows[0].boosters
+
+  it('fixes only the open ban-list tournaments, dry run first, and lists the saved decks', async () => {
+    const banned = await mkTournament({ config: { ...CONFIG, excludeBanlist: true } })
+    const allowed = await mkTournament({ config: CONFIG })
+    const ended = await mkTournament({ config: { ...CONFIG, excludeBanlist: true }, endsAt: inDays(-1), startsAt: inDays(-2) })
+    await insertPool('alice', banned.id, [[LYRA_C, 'ALT_CORE_B_LY_10_C']], 'deck-1')
+    await insertPool('bob', allowed.id, [[LYRA_C]])
+    await insertPool('carol', ended.id, [[LYRA_C]])
+    const log = vi.fn()
+
+    const dry = await replaceBannedCards({ fetchCards, log })
+    expect(dry).toMatchObject({ scanned: 1, pools: 1, replaced: 1, unresolved: 0, conflicts: 0 })
+    expect(dry.decks).toEqual([expect.objectContaining({ deckId: 'deck-1', sub: 'alice' })])
+    expect(await boostersOf('alice')).toEqual([[LYRA_C, 'ALT_CORE_B_LY_10_C']])
+
+    const applied = await replaceBannedCards({ apply: true, fetchCards, log })
+    expect(applied).toMatchObject({ pools: 1, replaced: 1 })
+    const row = (await query("SELECT cards, boosters FROM sealed_pools WHERE sub = 'alice'")).rows[0]
+    expect(row.boosters).toEqual([['ALT_CORE_B_LY_10_C', 'ALT_CORE_B_LY_10_C']])
+    expect(row.cards).toEqual({ ALT_CORE_B_LY_10_C: 2 })
+    expect(await boostersOf('bob')).toEqual([[LYRA_C]])
+    expect(await boostersOf('carol')).toEqual([[LYRA_C]])
+
+    expect(await replaceBannedCards({ apply: true, fetchCards, log })).toMatchObject({ pools: 0, replaced: 0 })
+  })
+
+  it('replaces under the ban-list version of each tournament', async () => {
+    // Lyra Festival R1's only same-faction rare candidate is Dr. Frankenstein's Lyra R2:
+    // banned by the legacy list (whole card), legal in v2.
+    const LYRA_R1 = 'ALT_CORE_B_LY_29_R1'
+    const FRANK_R2 = 'ALT_CORE_B_AX_17_R2'
+    const fetch = vi.fn(async () => [card(LYRA_R1, 'LY', 'R1'), card(FRANK_R2, 'LY', 'R2')])
+    const legacy = await mkTournament({ config: { ...CONFIG, excludeBanlist: true } })
+    const current = await mkTournament({ config: { ...CONFIG, excludeBanlist: true, banlist: 'v2' } })
+    await insertPool('dave', legacy.id, [[LYRA_R1]])
+    await insertPool('erin', current.id, [[LYRA_R1]])
+
+    const result = await replaceBannedCards({ apply: true, fetchCards: fetch, log: vi.fn() })
+    expect(result).toMatchObject({ pools: 1, replaced: 1, unresolved: 1 })
+    expect(await boostersOf('dave')).toEqual([[LYRA_R1]])
+    expect(await boostersOf('erin')).toEqual([[FRANK_R2]])
   })
 })
 

@@ -221,3 +221,16 @@ alter table sealed_pools alter column set_code drop not null;
 -- V4 (private tournaments): listing-only visibility; every existing row is public.
 alter table tournaments add column if not exists visibility text not null default 'public'
   check (visibility in ('public', 'private'));
+
+-- Hub: tournaments a player tucked into the folded sections by hand — an organizer forgot to
+-- close theirs ("Ongoing"), or an old event clutters "My pools". Keyed by the BGA tournament
+-- id, which both a declaration (bga_tournament_id) and every bound pool (tournament_id,
+-- legacy pools included) carry, so one hide covers the tournament everywhere in the hub.
+-- Per player, display only: binding, validation and BGA lookups never read it. No FK: a
+-- legacy BGA id has no tournaments row.
+create table if not exists hidden_tournaments (
+  sub               text not null,
+  bga_tournament_id text not null,
+  hidden_at         timestamptz not null default now(),
+  primary key (sub, bga_tournament_id)
+);

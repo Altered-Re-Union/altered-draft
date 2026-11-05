@@ -18,7 +18,7 @@ function fakeSet() {
   for (let i = 0; i < 4; i++, n++) {
     cards.push({ reference: `ALT_TEST_B_AX_${n}_R1`, name: `Rare ${i}`, faction: 'AX', rarity: 'R1', cardType: 'SPELL' })
   }
-  // Same family as a banned CORE card: banlist.js keys on ALT_<SET>_B_<FACTION>_<NUM>.
+  // A suspended printing (banlist.js: Tiny Jinn common).
   cards.push({ reference: 'ALT_CORE_B_BR_06_C', name: 'Banned one', faction: 'BR', rarity: 'C', cardType: 'CHARACTER' })
   return cards
 }
@@ -57,13 +57,30 @@ describe('buildPool', () => {
     expect(cards['ALT_TEST_B_BR_01_C']).toBe(1)
   })
 
-  it('excludes banned families when excludeBanlist is on', async () => {
+  it('excludes the suspended printings when excludeBanlist is on', async () => {
     const seen = new Set()
     for (let i = 0; i < 20; i++) {
       const { cards } = await buildPool('alice', { config: config({ excludeBanlist: true }), nonce: `n${i}` }, { fetchCards })
       Object.keys(cards).forEach(r => seen.add(r))
     }
     expect(seen.has('ALT_CORE_B_BR_06_C')).toBe(false)
+  })
+
+  it('draws under the ban-list version of the config: legacy (no field) = whole cards, v2 = exact printings', async () => {
+    // Baba Yaga Yzmir common: banned by v1 (whole card), legal in v2 (only its Ordis R2 is suspended).
+    const babaYaga = { reference: 'ALT_CORE_B_YZ_11_C', name: 'Baba Yaga', faction: 'YZ', rarity: 'C', cardType: 'CHARACTER' }
+    const withBaba = async () => [...fakeSet(), babaYaga]
+    const seen = async over => {
+      const refs = new Set()
+      for (let i = 0; i < 20; i++) {
+        const { cards } = await buildPool('alice', { config: config({ excludeBanlist: true, ...over }), nonce: `n${i}` }, { fetchCards: withBaba })
+        Object.keys(cards).forEach(r => refs.add(r))
+      }
+      return refs
+    }
+    expect((await seen({})).has('ALT_CORE_B_YZ_11_C')).toBe(false)
+    expect((await seen({ banlist: 'v1' })).has('ALT_CORE_B_YZ_11_C')).toBe(false)
+    expect((await seen({ banlist: 'v2' })).has('ALT_CORE_B_YZ_11_C')).toBe(true)
   })
 
   it('throws when the set has no cards', async () => {
@@ -109,7 +126,7 @@ function fakeFactionSet(setCode) {
     // OOF print: ref letters say YZ, the card object says AX/BR
     cards.push({ reference: `ALT_${setCode}_B_YZ_${f === 'AX' ? 45 : 46}_R2`, name: `Rare ${f} oof`, faction: f, rarity: 'R2', cardType: 'SPELL' })
   }
-  if (setCode === 'CORE') cards.push({ reference: 'ALT_CORE_B_AX_17_C', name: 'Banned AX', faction: 'AX', rarity: 'C', cardType: 'CHARACTER' })
+  if (setCode === 'CORE') cards.push({ reference: 'ALT_CORE_B_AX_17_R1', name: 'Banned AX', faction: 'AX', rarity: 'R1', cardType: 'SPELL' })
   return cards
 }
 
@@ -150,8 +167,16 @@ describe('buildPool faction source', () => {
     expect(heroes.sort()).toEqual(['ALT_CORE_B_AX_01_C', 'ALT_CORE_B_AX_02_C', 'ALT_EOLE_B_AX_01_C', 'ALT_EOLE_B_AX_02_C'])
   })
   it('applies the ban list set by set', async () => {
-    const { cards } = await buildPool('sub', { config: factionConfig({ excludeBanlist: true }), nonce: 'n' }, { fetchCards })
-    expect(Object.keys(cards).some(r => r.startsWith('ALT_CORE_B_AX_17'))).toBe(false)
+    const draws = async excludeBanlist => {
+      const seen = new Set()
+      for (let i = 0; i < 20; i++) {
+        const { cards } = await buildPool('sub', { config: factionConfig({ excludeBanlist }), nonce: `n${i}` }, { fetchCards })
+        Object.keys(cards).forEach(r => seen.add(r))
+      }
+      return seen
+    }
+    expect((await draws(false)).has('ALT_CORE_B_AX_17_R1')).toBe(true)
+    expect((await draws(true)).has('ALT_CORE_B_AX_17_R1')).toBe(false)
   })
   it('draws the uniques from the included sets that have range data, never from FUGUE', async () => {
     const config = factionConfig({ source: { type: 'faction', faction: 'AX', sets: { FUGUE: 2, EOLE: 1 }, boosters: 7 }, uniques: { inBoosters: 2, guaranteed: 1, evenFactions: false, faction: 'AX' } })
@@ -177,7 +202,7 @@ function fakeMultiSet(code) {
     for (let i = 0; i < 3; i++, n++) cards.push({ reference: `ALT_${code}_B_${f}_${n}_C`, name: `Common ${f} ${i}`, faction: f, rarity: 'C', cardType: 'CHARACTER' })
     cards.push({ reference: `ALT_${code}_B_${f}_${n++}_R1`, name: `Rare ${f}`, faction: f, rarity: 'R1', cardType: 'SPELL' })
   }
-  // Banned family (banlist.js): ALT_CYCLONE_B_AX_81.
+  // A suspended printing (banlist.js: Restocking Station common).
   if (code === 'CYCLONE') cards.push({ reference: 'ALT_CYCLONE_B_AX_81_C', name: 'Banned SKY', faction: 'AX', rarity: 'C', cardType: 'CHARACTER' })
   return cards
 }

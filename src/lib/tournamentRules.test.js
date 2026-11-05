@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { tournamentStatus, validateTournamentFields, groupCreatedTournaments, canSeeTournament } from './tournamentRules.js'
+import { tournamentStatus, validateTournamentFields, groupCreatedTournaments, canSeeTournament, splitBoundPools } from './tournamentRules.js'
 
 const NOW = new Date('2026-11-01T12:00:00Z')
 const later = '2026-11-02T19:00:00Z'
@@ -116,5 +116,19 @@ describe('canSeeTournament', () => {
     expect(canSeeTournament(priv, { sub: 'org', isModerator: false })).toBe(true)
     expect(canSeeTournament(priv, { sub: 'x', isModerator: false }, { hasPool: true })).toBe(true)
     expect(canSeeTournament(priv, { sub: 'x', isModerator: true })).toBe(true)
+  })
+})
+
+describe('splitBoundPools', () => {
+  const pool = (id, status, hidden = false) => ({ id, hidden, tournament: status ? { status } : null })
+  it('archives hidden pools and pools of ended / cancelled / detached tournaments, keeping the order', () => {
+    const pools = [
+      pool('cancelled', 'cancelled'), pool('ongoing', 'ongoing'), pool('ended', 'ended'),
+      pool('upcoming', 'upcoming'), pool('detached', 'detached'), pool('legacy', null),
+      pool('legacy-hidden', null, true), pool('ongoing-hidden', 'ongoing', true),
+    ]
+    const { visible, archived } = splitBoundPools(pools)
+    expect(visible.map(p => p.id)).toEqual(['ongoing', 'upcoming', 'legacy'])
+    expect(archived.map(p => p.id)).toEqual(['cancelled', 'ended', 'detached', 'legacy-hidden', 'ongoing-hidden'])
   })
 })

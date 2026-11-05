@@ -244,6 +244,12 @@ One shape for tournaments, for the legacy format (converted on read), and later 
 - Conversion of a `current_format` row: `set_code → source.setCode`, `heroes_in_pool → heroes`,
   `unique_count → uniques.inBoosters`, `guaranteed_uniques → uniques.guaranteed`,
   `even_factions → uniques.evenFactions`, `excludeBanlist: false`.
+- `banlist` (added 2026-11-04): the ban-list version (`src/lib/banlist.js`) the pools draw under,
+  present only when `excludeBanlist`. The server always stamps the current one (`v2`, exact
+  printings), whatever the client sends, on creation and on a config edit (only allowed while
+  the tournament has no pool, so no pool ever changes list). Absent on a config stored before
+  versioning = `v1` (whole cards and their uniques). Config-only: not in the seed nor the
+  snapshot columns. The summary says "whole cards, list before Nov 4 2026" for `v1`.
 
 Server-side validation (`src/lib/tournamentConfig.js`, pure, unit-tested): shape, ranges,
 `setCode` among the visible `SETS`, `boosters === 7` in lot 1, and **uniques > 0 rejected for
@@ -260,7 +266,7 @@ buildPool(sub, { config, nonce, seedColumns }) -> { cards, boosters }
 Lot 1 implementation = today's `regeneratePool` body (seeded PRNG from `buildPoolSeedString`,
 `pickDeterministicUniques`, `generateTournamentSealedPool`, appended heroes and guaranteed
 uniques), with two additions: `excludeBanlist` filters the set with `filterBanned` before
-generation and rejects banned unique families (`pickDeterministicUniques` gets an optional
+generation and rejects banned uniques (both under the config's `banlist` version) (`pickDeterministicUniques` gets an optional
 `isAllowed` predicate; its existing retry loop redraws). `uniques.faction` is passed as
 `pickDeterministicUniques`'s `faction` option: every draw targets that faction (precedence over
 `evenFactions`). **V2 branch:** `source.type = 'faction'` goes to `buildFactionPool` (`quotas()` exact split of the hero, common and rare card slots over the weighted sets, `generateFactionSealedPool`, uniques from range-capable sets only); the `set` branch is unchanged. **V3 branch (§13):** `source.type = 'multiset'` goes to `buildMultisetPool` (single-set boosters per set, shuffled; in-booster uniques of their booster's set, guaranteed uniques over the range-capable sets by a weighted draw), and `uniques.randomOneIn` adds a per-booster roll after the exact path of every source (the exact paths and their golden digests stay byte-identical). Lot 2 ports the Lobby's other sealed
@@ -549,7 +555,7 @@ uRng = mulberry32(hashSeed(seedStr + '#uniques')) # uniques stream
    { uniqueCount: inSet + outSet, faction, isAllowed })`; the first `inSet` refs fill that
    set's positions in the order of step 3, the rest are the guaranteed uniques. `isAllowed` is
    the per-pool gate (`uniqueGate`, module-private, used by every source): it rejects banned
-   families (when `excludeBanlist`) **and** any ref already drawn for this pool, so two calls
+   uniques (when `excludeBanlist`, under the config's `banlist` version) **and** any ref already drawn for this pool, so two calls
    never hand out the same serial. Fewer refs than wanted → throw (as today).
 6. `cards` = counts of every booster ref + guaranteed refs + (heroes `free`) every hero of every
    included set once.
