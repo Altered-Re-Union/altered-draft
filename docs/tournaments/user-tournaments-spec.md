@@ -757,7 +757,9 @@ after the name.
 **Tournament page.** The header shows the badge after the status pill. The share box sits between
 the checklist and the organizer panel, for every status but detached (`data-testid="share-box"`,
 `share-url` on the input, `share-copy`, `share-native`, `share-qr`). As built, a failed copy focuses
-and selects `share-url`; the label stays "Copy".
+and selects `share-url`; the label stays "Copy". Added after the recette (pv-i-mobile-r2): below
+`sm`, where the inline QR is hidden, a "Show QR code" button (`share-qr-open`) opens the QR large
+in a dialog (`QrModal.jsx`) with a "Close" button; a click outside or Escape closes it too.
 
 **Lobby.** Only the QR `<img>` changes (§14.2).
 

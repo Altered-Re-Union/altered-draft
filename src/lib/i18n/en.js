@@ -630,6 +630,8 @@ export default {
     shareCopied: '✓ Copied',
     shareNative: 'Share…',
     shareQrAlt: 'QR code of the tournament link',
+    shareQrShow: 'Show QR code',
+    shareQrClose: 'Close',
     // organizer panel
     organizerPanel: 'Organizer',
     poolsByOrigin: '{{page}} from this site · {{bga}} created by BGA games',

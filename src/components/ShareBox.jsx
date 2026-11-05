@@ -1,12 +1,16 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLang } from '../lib/i18n/i18n.jsx'
 import { copyText, canNativeShare, nativeShare, tournamentShareUrl } from '../lib/share.js'
 import QrCode from './QrCode.jsx'
+import QrModal from './QrModal.jsx'
 
 // Share box of the tournament page: link, copy, native share (when available) and QR code.
+// Below `sm` the inline QR is hidden and a "Show QR code" button opens it large in a dialog.
 export default function ShareBox({ tournament }) {
   const { t } = useLang()
   const [copied, setCopied] = useState(false)
+  const [qrOpen, setQrOpen] = useState(false)
+  const closeQr = useCallback(() => setQrOpen(false), [])
   const inputRef = useRef(null)
   const timer = useRef(null)
   const url = tournamentShareUrl(tournament.id)
@@ -47,10 +51,18 @@ export default function ShareBox({ tournament }) {
                 {t('tournaments.shareNative')}
               </button>
             )}
+            <button type="button" data-testid="share-qr-open" onClick={() => setQrOpen(true)}
+              className="sm:hidden px-3 py-2 rounded-lg text-sm border border-line bg-surface2 text-ink2 hover:bg-surface3">
+              {t('tournaments.shareQrShow')}
+            </button>
           </div>
         </div>
         <QrCode value={url} label={t('tournaments.shareQrAlt')} testId="share-qr" className="hidden sm:block shrink-0" />
       </div>
+      {qrOpen && (
+        <QrModal value={url} title={t('tournaments.shareTitle')} label={t('tournaments.shareQrAlt')}
+          closeLabel={t('tournaments.shareQrClose')} onClose={closeQr} />
+      )}
     </section>
   )
 }

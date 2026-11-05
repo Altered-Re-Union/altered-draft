@@ -1598,6 +1598,9 @@ upcoming or ongoing), the absolute URL `${location.origin}/tournament/t/<id>` in
 (`share-url`, selected on focus), **Copy** (`share-copy`, "✓ Copied" for 2 s), **Share…**
 (`share-native`, rendered only when `navigator.share` exists, called with the tournament name and
 the URL; a dismissed or rejected sheet is ignored) and the QR code (`share-qr`, hidden below `sm`).
+Below `sm` a **Show QR code** button (`share-qr-open`) opens it large in a dialog instead
+(`QrModal.jsx`: `share-qr-dialog`, `share-qr-large`, a **Close** button `share-qr-close`; a click
+outside or Escape closes it too, the page behind does not scroll, focus goes back to the button).
 The helpers are in `src/lib/share.js` (`copyText`, `canNativeShare`, `nativeShare`,
 `tournamentShareUrl`). `copyText` moved there from `ExportMenu`: `navigator.clipboard` first, then
 the `execCommand('copy')` textarea, and it now returns `false` when `execCommand` refuses (it used to

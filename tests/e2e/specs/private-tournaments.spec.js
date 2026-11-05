@@ -251,6 +251,7 @@ test('share box: hint, link, copy, QR black on white in both themes', { tag: ['@
 
   const qr = page.getByTestId('share-qr')
   await expect(qr).toBeVisible()
+  await expect(page.getByTestId('share-qr-open')).toBeHidden()
   expect(await qr.evaluate(el => el.tagName.toLowerCase())).toBe('svg')
   await expectBlackOnWhite(qr)
   const theme = await page.evaluate(() => document.documentElement.dataset.theme)
@@ -324,7 +325,7 @@ test('Lobby: the room QR code is a local SVG', { tag: ['@pv-h-lobby-qr'] }, asyn
   await expect(page.locator('img[src*="qrserver"]')).toHaveCount(0)
 })
 
-test('375 px: stacked radios, share box without the QR, no horizontal scroll', { tag: ['@pv-i-mobile', '@mobile'] }, async ({ openAs, seed }) => {
+test('375 px: stacked radios, share box with the QR behind a button, no horizontal scroll', { tag: ['@pv-i-mobile-r2', '@mobile'] }, async ({ openAs, seed }) => {
   const { id } = await seed.tournament('alice', privateTournamentBody())
   const page = await openAs('alice')
   await page.goto('/tournament/new')
@@ -343,6 +344,31 @@ test('375 px: stacked radios, share box without the QR, no horizontal scroll', {
   await expect(shareUrl(page)).toBeVisible()
   await expect(page.getByTestId('share-qr')).toBeHidden()
   await expectNoHorizontalScroll(page)
+
+  // The QR opens large in a dialog; "Close", a click outside and Escape all close it.
+  const open = page.getByRole('button', { name: t('tournaments.shareQrShow') })
+  const dialog = page.getByRole('dialog', { name: t('tournaments.shareTitle') })
+  await open.click()
+  await expect(dialog).toBeVisible()
+  const large = page.getByTestId('share-qr-large')
+  await expect(large).toHaveAttribute('aria-label', t('tournaments.shareQrAlt'))
+  await expectBlackOnWhite(large)
+  const box = await large.boundingBox()
+  expect(box.width).toBeGreaterThan(250)
+  await expectNoHorizontalScroll(page)
+  await dialog.getByRole('button', { name: t('tournaments.shareQrClose') }).click()
+  await expect(dialog).toHaveCount(0)
+  await expect(open).toBeFocused()
+
+  await open.click()
+  await page.getByTestId('share-qr-backdrop').click({ position: { x: 5, y: 5 } })
+  await expect(dialog).toHaveCount(0)
+
+  await open.click()
+  await dialog.click()
+  await expect(dialog).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(dialog).toHaveCount(0)
 })
 
 test('French UI: visibility, private pill and share box, no raw key', { tag: ['@pv-i-fr'] }, async ({ openAs, seed }) => {

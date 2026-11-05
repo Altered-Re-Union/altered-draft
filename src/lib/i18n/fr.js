@@ -624,6 +624,8 @@ export default {
     shareCopied: '✓ Copié',
     shareNative: 'Partager…',
     shareQrAlt: 'Code QR du lien du tournoi',
+    shareQrShow: 'Afficher le QR code',
+    shareQrClose: 'Fermer',
     organizerPanel: 'Organisateur',
     poolsByOrigin: '{{page}} depuis ce site · {{bga}} créés par des parties BGA',
     bgaZeroWarning: 'Le tournoi a commencé mais aucun pool n’a été créé par une partie BGA. Vérifiez que le lien BGA pointe vers le tournoi principal, pas une étape.',
