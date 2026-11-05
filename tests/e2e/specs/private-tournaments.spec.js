@@ -170,7 +170,9 @@ test('once started: in carol’s My ongoing tournaments, with the pill', { tag: 
   const mine = page.getByTestId('my-ongoing')
   await expect(mine.getByRole('link', { name: 'Private cup', exact: true })).toBeVisible()
   await expect(pill(mine)).toBeVisible()
-  await expect(pill(tournamentLink(panel, 'Private cup'))).toBeVisible()
+  // Logged in, an Ongoing card carries a "Hide" button: its link is stretched over the card
+  // (a link can't hold a button), so the pill sits next to the link, in the card itself.
+  await expect(pill(tournamentLink(panel, 'Private cup').locator('..'))).toBeVisible()
 
   const anon = await openAs(null)
   const anonPanel = await openMenu(anon, '?tab=ongoing')
