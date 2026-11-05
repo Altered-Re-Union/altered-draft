@@ -17,6 +17,14 @@ describe('configSummaryParts', () => {
   it('lists the included sets by abbreviation with ×n for weights above 1', () => {
     expect(configSummaryParts(faction({ CORE: 1, BISE: 2, EOLE: 1 }), t, tc)[2]).toEqual({ text: 'BTG, WTM ×2, ROC' })
   })
+  it('tells the legacy (whole-card) ban list apart from the current one', () => {
+    const set = over => ({ source: { type: 'set', setCode: 'CYCLONE', boosters: 7 }, uniques: {}, heroes: 'packs', ...over })
+    const texts = over => configSummaryParts(set(over), t, tc).map(p => p.text)
+    expect(texts({ excludeBanlist: true })).toContain('tournaments.summaryBanlistLegacy')
+    expect(texts({ excludeBanlist: true, banlist: 'v2' })).toContain('tournaments.summaryBanlist')
+    expect(texts({ excludeBanlist: true, banlist: 'v2' })).not.toContain('tournaments.summaryBanlistLegacy')
+    expect(texts({ excludeBanlist: false }).some(x => x.startsWith('tournaments.summaryBanlist'))).toBe(false)
+  })
   it('keeps the single-set summary unchanged', () => {
     const parts = configSummaryParts({ source: { type: 'set', setCode: 'CYCLONE', boosters: 7 }, uniques: {}, heroes: 'packs' }, t, tc)
     expect(parts[0].text).toBe('tournaments.summaryBoosters {"n":7,"set":"Skybound Odyssey"}')
