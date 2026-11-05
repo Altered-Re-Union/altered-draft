@@ -7,19 +7,20 @@ import { hashSeed, mulberry32 } from './prng.js'
 import { generateTournamentSealedPool, generateFactionSealedPool, generateMultisetSealedPool, pickRareSlots, pickWeightedSet, rollBoosterHits, quotas, shuffle, deduplicateByNameFaction } from './packGenerator.js'
 import { pickDeterministicUniques, hasFactionRanges } from './uniqueFactionRanges.js'
 import { fetchSet, SETS } from './cardData.js'
-import { filterBanned, isBanned } from './banlist.js'
+import { filterBanned, isBanned, banlistVersionOf } from './banlist.js'
 import { legacyColumnsFromConfig, configSetCodes, SEALED_BOOSTERS } from './tournamentConfig.js'
 import { setCodeFromRef } from './assets.js'
 
 /**
  * The one filter every pickDeterministicUniques call of this module goes through: rejects a
- * banned family (when the ban list is on) and any ref already drawn for this pool, so two
+ * banned unique (when the ban list is on) and any ref already drawn for this pool, so two
  * calls on the same uniques stream never hand out the same serial. The caller adds every
  * drawn ref to `drawn`. An always-true predicate consumes no extra rng (goldens pin it).
  */
 function uniqueGate(config) {
   const drawn = new Set()
-  const isAllowed = ref => !drawn.has(ref) && (!config.excludeBanlist || !isBanned(ref))
+  const banlist = banlistVersionOf(config)
+  const isAllowed = ref => !drawn.has(ref) && (!config.excludeBanlist || !isBanned(ref, banlist))
   return { isAllowed, drawn }
 }
 
@@ -106,7 +107,7 @@ export async function buildPool(sub, { config, nonce }, { fetchCards = fetchSet 
 
   let cards = await fetchCards(setCode)
   if (!cards?.length) throw new Error(`no cards loaded for ${setCode}`)
-  if (config.excludeBanlist) cards = filterBanned(cards)
+  if (config.excludeBanlist) cards = filterBanned(cards, banlistVersionOf(config))
 
   const includeHeroes = config.heroes === 'packs'
   const rng = mulberry32(hashSeed(seedStr))
@@ -148,7 +149,7 @@ async function buildFactionPool(sub, { config, nonce }, fetchCards) {
   const loaded = await Promise.all(setCodes.map(code => fetchCards(code)))
   setCodes.forEach((code, i) => {
     if (!loaded[i]?.length) throw new Error(`no cards loaded for ${code}`)
-    cardsBySet[code] = config.excludeBanlist ? filterBanned(loaded[i]) : loaded[i]
+    cardsBySet[code] = config.excludeBanlist ? filterBanned(loaded[i], banlistVersionOf(config)) : loaded[i]
   })
 
   const inBooster = config.uniques.inBoosters
@@ -231,7 +232,7 @@ async function buildMultisetPool(sub, { config, nonce }, fetchCards) {
   for (const code of setCodes) {
     const loaded = await fetchCards(code)
     if (!loaded?.length) throw new Error(`no cards loaded for ${code}`)
-    cardsBySet[code] = config.excludeBanlist ? filterBanned(loaded) : loaded
+    cardsBySet[code] = config.excludeBanlist ? filterBanned(loaded, banlistVersionOf(config)) : loaded
   }
 
   const includeHeroes = config.heroes === 'packs'

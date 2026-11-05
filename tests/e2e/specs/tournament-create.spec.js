@@ -203,7 +203,7 @@ test('even factions needs two uniques', { tag: ['@b-even'] }, async ({ openAs, a
   expect(body.tournaments[0].config.uniques).toMatchObject({ inBoosters: 1, guaranteed: 0, evenFactions: false })
 })
 
-test('free hero choice and ban list show in the summary', { tag: ['@b-options'] }, async ({ openAs }) => {
+test('free hero choice and ban list show in the summary', { tag: ['@b-options'] }, async ({ openAs, api }) => {
   const page = await openForm(openAs)
   await fillValid(page, { bgaUrl: bga(123460) })
   await page.getByRole('button', { name: startsWith(t('settingsFields.freeChoice')) }).click()
@@ -212,6 +212,20 @@ test('free hero choice and ban list show in the summary', { tag: ['@b-options'] 
   const summary = page.getByTestId('tournament-summary')
   await expect(summary).toContainText(t('tournaments.summaryHeroesFree'))
   await expect(summary).toContainText(t('tournaments.summaryBanlist'))
+  await expect(summary).not.toContainText(t('tournaments.summaryBanlistLegacy'))
+  // A new tournament draws under the current, per-printing ban list.
+  const { body } = await api(null).get('/api/tournaments')
+  expect(body.tournaments[0].config).toMatchObject({ excludeBanlist: true, banlist: 'v2' })
+})
+
+test('a ban-list tournament stored before versioning keeps the whole-card list in its summary', { tag: ['@b-options'] }, async ({ openAs, seed, db }) => {
+  const created = await seed.tournament('alice', { name: 'Legacy ban list cup', bgaUrl: bga(123461), config: { ...tournamentBody().config, excludeBanlist: true } })
+  expect(created.config.banlist).toBe('v2')
+  // Every config stored before the deploy has no `banlist` field: it draws under v1.
+  await db.query("UPDATE tournaments SET config = config - 'banlist' WHERE id = $1", [created.id])
+  const page = await openAs('alice')
+  await page.goto(`/tournament/t/${created.id}`)
+  await expect(page.getByTestId('tournament-summary')).toContainText(t('tournaments.summaryBanlistLegacy'))
 })
 
 test('an expired session keeps what was typed through the reconnect', { tag: ['@b-session-expired'] }, async ({ openAs, fakes }) => {

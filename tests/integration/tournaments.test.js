@@ -71,6 +71,7 @@ import tournamentPoolFor from '../../api/tournaments/[id]/pool.js'
 import boundPools from '../../api/tournament-bound-pools.js'
 import tournamentVisibility from '../../api/tournament-visibility.js'
 import { freezeSealedPools } from '../../scripts/freeze-sealed-pools.mjs'
+import { replaceBannedCards } from '../../scripts/replace-banned-cards.mjs'
 
 function mockRes() {
   const res = {
@@ -573,6 +574,63 @@ describe('freeze-sealed-pools', () => {
     expect((await query("SELECT cards FROM sealed_pools WHERE sub = 'b'")).rows[0].cards).toBeNull()
     expect(regenerate).not.toHaveBeenCalledWith('c', expect.anything())
     void stored
+  })
+})
+
+describe('replace-banned-cards', () => {
+  const LYRA_C = 'ALT_CORE_B_LY_29_C'
+  const card = (reference, faction, rarity) => ({ reference, name: reference, faction, rarity, cardType: 'PERMANENT' })
+  const fetchCards = vi.fn(async () => [card(LYRA_C, 'LY', 'C'), card('ALT_CORE_B_LY_10_C', 'LY', 'C')])
+  const insertPool = (sub, tournamentRef, boosters, deckId = null) => {
+    const cards = {}
+    for (const ref of boosters.flat()) cards[ref] = (cards[ref] ?? 0) + 1
+    return query(
+      `INSERT INTO sealed_pools (sub, kind, nonce, tournament_ref, cards, boosters, config, created_by, deck_id, deck_name)
+       VALUES ($1, 'tournament', $1, $2, $3, $4, '{}', 'page', $5, $6) RETURNING id`,
+      [sub, tournamentRef, JSON.stringify(cards), JSON.stringify(boosters), deckId, deckId && `deck of ${sub}`])
+  }
+  const boostersOf = async sub => (await query('SELECT boosters FROM sealed_pools WHERE sub = $1', [sub])).rows[0].boosters
+
+  it('fixes only the open ban-list tournaments, dry run first, and lists the saved decks', async () => {
+    const banned = await mkTournament({ config: { ...CONFIG, excludeBanlist: true } })
+    const allowed = await mkTournament({ config: CONFIG })
+    const ended = await mkTournament({ config: { ...CONFIG, excludeBanlist: true }, endsAt: inDays(-1), startsAt: inDays(-2) })
+    await insertPool('alice', banned.id, [[LYRA_C, 'ALT_CORE_B_LY_10_C']], 'deck-1')
+    await insertPool('bob', allowed.id, [[LYRA_C]])
+    await insertPool('carol', ended.id, [[LYRA_C]])
+    const log = vi.fn()
+
+    const dry = await replaceBannedCards({ fetchCards, log })
+    expect(dry).toMatchObject({ scanned: 1, pools: 1, replaced: 1, unresolved: 0, conflicts: 0 })
+    expect(dry.decks).toEqual([expect.objectContaining({ deckId: 'deck-1', sub: 'alice' })])
+    expect(await boostersOf('alice')).toEqual([[LYRA_C, 'ALT_CORE_B_LY_10_C']])
+
+    const applied = await replaceBannedCards({ apply: true, fetchCards, log })
+    expect(applied).toMatchObject({ pools: 1, replaced: 1 })
+    const row = (await query("SELECT cards, boosters FROM sealed_pools WHERE sub = 'alice'")).rows[0]
+    expect(row.boosters).toEqual([['ALT_CORE_B_LY_10_C', 'ALT_CORE_B_LY_10_C']])
+    expect(row.cards).toEqual({ ALT_CORE_B_LY_10_C: 2 })
+    expect(await boostersOf('bob')).toEqual([[LYRA_C]])
+    expect(await boostersOf('carol')).toEqual([[LYRA_C]])
+
+    expect(await replaceBannedCards({ apply: true, fetchCards, log })).toMatchObject({ pools: 0, replaced: 0 })
+  })
+
+  it('replaces under the ban-list version of each tournament', async () => {
+    // Lyra Festival R1's only same-faction rare candidate is Dr. Frankenstein's Lyra R2:
+    // banned by the legacy list (whole card), legal in v2.
+    const LYRA_R1 = 'ALT_CORE_B_LY_29_R1'
+    const FRANK_R2 = 'ALT_CORE_B_AX_17_R2'
+    const fetch = vi.fn(async () => [card(LYRA_R1, 'LY', 'R1'), card(FRANK_R2, 'LY', 'R2')])
+    const legacy = await mkTournament({ config: { ...CONFIG, excludeBanlist: true } })
+    const current = await mkTournament({ config: { ...CONFIG, excludeBanlist: true, banlist: 'v2' } })
+    await insertPool('dave', legacy.id, [[LYRA_R1]])
+    await insertPool('erin', current.id, [[LYRA_R1]])
+
+    const result = await replaceBannedCards({ apply: true, fetchCards: fetch, log: vi.fn() })
+    expect(result).toMatchObject({ pools: 1, replaced: 1, unresolved: 1 })
+    expect(await boostersOf('dave')).toEqual([[LYRA_R1]])
+    expect(await boostersOf('erin')).toEqual([[FRANK_R2]])
   })
 })
 
