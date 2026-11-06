@@ -22,7 +22,8 @@ const expand = cards => cards.flatMap(c => Array(c.qty).fill(c.ref))
 // Chooses the cube of a tournament: a community cube, the user's Re:Union decks, or a pasted list.
 // `value` = null | { name, origin, cubeId, cards, heroesFound, unresolved, resolved: true }.
 // The card data is always resolved in EN (the preview and the pool page do the same).
-export default function CubePicker({ value, onChange, disabled = false }) {
+// `readOnly`: the config is locked (pools exist): the chosen cube can no longer be changed.
+export default function CubePicker({ value, onChange, disabled = false, readOnly = false }) {
   const { user, login } = useAuth()
   const { t, tc } = useLang()
   const [preview, setPreview] = useState(null)
@@ -118,8 +119,10 @@ export default function CubePicker({ value, onChange, disabled = false }) {
             name: value.name, author: originLabel, cardCount: total + value.heroesFound.length,
             refs: [...expand(value.cards), ...value.heroesFound.map(h => h.ref)],
           })} className="text-xs text-accent-ink hover:text-accent transition-colors">{t('tournaments.cubePreview')}</button>
-          <button type="button" data-testid="cube-change" disabled={disabled} onClick={() => { setMsg(''); onChange(null) }}
-            className="text-xs text-faint hover:text-ink2 disabled:opacity-40 transition-colors ml-auto">{t('tournaments.cubeChange')}</button>
+          {!readOnly && (
+            <button type="button" data-testid="cube-change" disabled={disabled} onClick={() => { setMsg(''); onChange(null) }}
+              className="text-xs text-faint hover:text-ink2 disabled:opacity-40 transition-colors ml-auto">{t('tournaments.cubeChange')}</button>
+          )}
         </div>
         {preview && <CubePreviewModal cube={preview} onClose={() => setPreview(null)} />}
       </div>

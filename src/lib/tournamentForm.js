@@ -77,3 +77,18 @@ export function tournamentFormIssues({ body, config, now = new Date(), isCreate,
 
   return issues.sort((a, b) => FIELD_ORDER.indexOf(a.field) - FIELD_ORDER.indexOf(b.field))
 }
+
+/**
+ * The player cap the form shows when the cube's capacity changes (spec §15.2 "Capacity").
+ * Untouched, the field takes the capacity, up or down; once the organizer changed it, it is only
+ * lowered to the capacity (never raised, an emptied field stays empty). A capacity below 2 refuses
+ * the config: the field is left as is.
+ * @param {number | string} prev - the field's value ('' = no limit)
+ * @param {{ players: number } | null} capacity
+ * @param {boolean} edited - the organizer changed the field (or the tournament has a stored cap)
+ */
+export function followCapacity(prev, capacity, edited) {
+  if (!capacity || capacity.players < 2) return prev
+  if (!edited) return capacity.players
+  return prev !== '' && Number(prev) > capacity.players ? capacity.players : prev
+}

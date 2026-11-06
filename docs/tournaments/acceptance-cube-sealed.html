@@ -351,7 +351,7 @@ const PASTE_LIST = `3 ALT_DUSTER_A_AX_98_C
 // (scripts/e2e-acceptance-coverage.mjs) from the tests' tags: do not edit this line by hand.
 const AUTO_STEPS = ['cu-a-community', 'cu-a-paste', 'cu-a-reunion', 'cu-a-switch', 'cu-a-tab', 'cu-b-boosters', 'cu-b-capacity', 'cu-b-heroes', 'cu-b-too-small', 'cu-c-create', 'cu-c-summary', 'cu-d-link', 'cu-d-page', 'cu-d-redirect', 'cu-e-composition', 'cu-e-deck', 'cu-e-first', 'cu-e-others', 'cu-e-reveal', 'cu-f-api', 'cu-f-free', 'cu-f-page', 'cu-g-create', 'cu-g-full', 'cu-g-lower', 'cu-h-api', 'cu-h-locked', 'cu-i-locked', 'cu-i-unlocked', 'cu-j-bga', 'cu-k-fr', 'cu-k-mobile'];
 // Steps the suite covers with a narrower assertion than the acceptance steps (hand-maintained).
-const AUTO_PARTIAL = { 'cu-b-capacity': 'the field following a capacity that rises from its prefill (2 at 7 × 12, 3 at 6 × 10) is a test.fixme: the form keeps the untouched 2', 'cu-e-reveal': 'the suite checks the generated cover is shown on the 6 boosters, the sublabel and no bonus pack; the drawing itself (logo, title, subtitle) stays a human check', 'cu-i-locked': 'the absence of “Change cube” on the locked chosen cube is a test.fixme: the button and the name field are shown, disabled', 'cu-k-fr': 'no raw key and sample French strings on the form, the tournament page and the cube page; no English leftovers, the hub cards and the cover’s subtitle stay a human check', 'cu-k-mobile': 'no horizontal scroll on the Cube tab, the chosen cube, the hero picker, the tournament page, the cube page and the reveal; nothing cut off and the bottom bar stay a human check' };
+const AUTO_PARTIAL = { 'cu-e-reveal': 'the suite checks the generated cover is shown on the 6 boosters, the sublabel and no bonus pack; the drawing itself (logo, title, subtitle) stays a human check', 'cu-k-fr': 'no raw key and sample French strings on the form, the tournament page and the cube page; no English leftovers, the hub cards and the cover’s subtitle stay a human check', 'cu-k-mobile': 'no horizontal scroll on the Cube tab, the chosen cube, the hero picker, the tournament page, the cube page and the reveal; nothing cut off and the bottom bar stay a human check' };
 
 const GROUPS = [
   {
@@ -435,7 +435,7 @@ ${pre(LOGOUT_ALICE)}
       { id: 'cu-b-capacity', who: 'alice', title: 'The player cap: the capacity line, the prefill, the ceiling',
         html: `<ul><li>Section <strong>“Players”</strong>: “Maximum players” (a number field), the hint “Required for a cube: it is dealt once into that many sets of boosters.” and the BGA hint “Once reached, nobody else can open a pool… Set the same limit on the BGA tournament.”.</li>
 <li>All Commons at <strong>7 × 12</strong>: <strong>“This cube allows up to 2 players with these boosters.”</strong>, <strong>“Limiting: 192 cards, 84 needed per player.”</strong> after it (a faction-bound cube reads “Limiting: 56 Yzmir cards, … needed per player.”), the field <strong>prefilled with 2</strong>.</li>
-<li>Set <strong>6 × 10</strong>: the line says <strong>3</strong> players and the field follows to <strong>3</strong> (it follows while it was untouched or above the capacity).</li>
+<li>Set <strong>6 × 10</strong>: the line says <strong>3</strong> players and the field follows to <strong>3</strong>; back to 7 boosters it follows down to 2. Type 2 in the field yourself, then set 6 × 10 again: the line says 3 but the field <strong>stays 2</strong> (once changed by hand, it is only lowered, never raised).</li>
 <li>Type <strong>4</strong> in the field: <strong>“At most 3 players with this cube and these boosters.”</strong> in the bottom bar. Type <strong>2</strong>: no issue (the cap can be lowered). Empty the field: “Set the maximum number of players.”.</li>
 <li>Type 1: “The maximum must be a whole number between 2 and 256.”.</li></ul>` },
       { id: 'cu-b-too-small', who: 'alice', title: 'A cube too small for the boosters',
@@ -584,7 +584,7 @@ ${PSQL(`SELECT max_players, config->'source'->>'boosters', config->'source'->>'p
       { id: 'cu-i-locked', who: 'alice', title: '“Commons cube” (3 pools): the edit page is locked',
         html: `<ul><li>${url(WEB + '/tournament?tab=created')} › “Commons cube” › Edit.</li>
 <li>The lock notice names the cap: it says the cards, the settings <strong>and the maximum number of players</strong> are locked because pools exist.</li>
-<li>Cards: the chosen cube is <strong>read-only</strong> (no name field to edit, no “Change cube”), <strong>“Preview”</strong> still opens the modal.</li>
+<li>Cards: the chosen cube is <strong>read-only</strong> (the cube name greyed out, no “Change cube”), <strong>“Preview”</strong> still opens the modal.</li>
 <li>Settings: the steppers, the faction guarantee, the hero mode cards, the hero picker and “Maximum players” are <strong>disabled</strong>.</li>
 <li>The <strong>name</strong> of the tournament stays editable: change it to ${chip('Commons cube')} + a space and back, save (works).</li></ul>` },
     ],

@@ -3,7 +3,7 @@ import { useNavigate, useParams, Link } from 'react-router-dom'
 import { useAuth } from '../auth/AuthProvider.jsx'
 import { useLang } from '../lib/i18n/i18n.jsx'
 import { parseBgaTournamentUrl } from '../lib/bgaUrl.js'
-import { tournamentFormIssues } from '../lib/tournamentForm.js'
+import { tournamentFormIssues, followCapacity } from '../lib/tournamentForm.js'
 import { VISIBILITIES } from '../lib/tournamentRules.js'
 import { validateTournamentConfig, DEFAULT_RANDOM_ONE_IN } from '../lib/tournamentConfig.js'
 import { hasFactionRanges } from '../lib/uniqueFactionRanges.js'
@@ -161,6 +161,8 @@ export default function TournamentForm() {
   const [heroPool, setHeroPool] = useState([])
   // The player cap, every source: '' (no limit) or what was typed.
   const [maxPlayers, setMaxPlayers] = useState('')
+  // Set once the organizer changes the cap (or it comes stored): it then stops following a rising capacity.
+  const [maxPlayersEdited, setMaxPlayersEdited] = useState(false)
   const [poolCount, setPoolCount] = useState(0)
 
   const [locked, setLocked] = useState(false)
@@ -203,11 +205,11 @@ export default function TournamentForm() {
       if (d.cube !== undefined) setCube(d.cube); if (d.cubeSettings) setCubeSettings(d.cubeSettings); if (Array.isArray(d.heroPool)) setHeroPool(d.heroPool)
     }
     // A cube's cap is locked with its config (withConfig false); the other sources' is not.
-    if (d.maxPlayers !== undefined && (withConfig || d.sourceType !== 'cube')) setMaxPlayers(d.maxPlayers)
+    if (d.maxPlayers !== undefined && (withConfig || d.sourceType !== 'cube')) { setMaxPlayers(d.maxPlayers); setMaxPlayersEdited(!!d.maxPlayersEdited) }
   }
   function reconnect() {
     try {
-      sessionStorage.setItem(draftKey, JSON.stringify({ name, description, visibility, bgaUrl, startsAt, endsAt, sourceType, setCounts, mixOpen, faction, setWeights, heroes, uniques, lastOneIn, excludeBanlist, cube, cubeSettings, heroPool, maxPlayers }))
+      sessionStorage.setItem(draftKey, JSON.stringify({ name, description, visibility, bgaUrl, startsAt, endsAt, sourceType, setCounts, mixOpen, faction, setWeights, heroes, uniques, lastOneIn, excludeBanlist, cube, cubeSettings, heroPool, maxPlayers, maxPlayersEdited }))
     } catch { /* storage unavailable: the reconnect still works, the draft is lost */ }
     login(isEdit ? `/tournament/t/${id}/edit` : '/tournament/new')
   }
@@ -277,6 +279,7 @@ export default function TournamentForm() {
         else setSetCounts({ [src.setCode]: 7 })
         setHeroes(tn.config.heroes)
         setMaxPlayers(tn.maxPlayers ?? '')
+        setMaxPlayersEdited(tn.maxPlayers != null)
         setPoolCount(tn.poolCount ?? 0)
         // A faction source stores its own faction as the uniques faction (forced server-side):
         // keep it out of the shared uniques state, or switching to "Sets" would preselect it.
@@ -357,11 +360,10 @@ export default function TournamentForm() {
     () => (isCube && cube?.resolved ? cubeCapacity({ cards: cube.cards, ...cubeSettings }) : null),
     [isCube, cube?.resolved, cube?.cards, cubeSettings],
   )
-  // The cap follows the capacity while it is empty or above it; the organizer can only lower it.
+  // The cap follows the capacity until the organizer changes it; then it is only lowered to it.
   useEffect(() => {
-    if (!capacity || capacity.players < 2) return
-    setMaxPlayers(prev => (prev === '' || Number(prev) > capacity.players ? capacity.players : prev))
-  }, [capacity])
+    setMaxPlayers(prev => followCapacity(prev, capacity, maxPlayersEdited))
+  }, [capacity]) // eslint-disable-line react-hooks/exhaustive-deps -- a manual edit must not re-trigger it
   const issueCtx = { isFaction, boosterTotal, maxInBoosters, cube, cubeSettings, capacity, poolCount, unresolved: [] }
   // A new cube (not a rename) brings its own heroes as the preselected pool.
   function changeCube(next) {
@@ -582,7 +584,7 @@ export default function TournamentForm() {
             faction={faction} onFaction={edit('faction', setFaction)}
             weights={setWeights} onWeights={edit('sets', setSetWeights)}
             cube={cube} onCube={changeCube}
-            disabled={configFrozen || saving} />
+            disabled={configFrozen || saving} cubeReadOnly={configFrozen} />
           <ErrorLine field="faction" /><ErrorLine field="sets" /><ErrorLine field="cube" />
         </section>
 
@@ -616,7 +618,7 @@ export default function TournamentForm() {
           )}
           <div className="space-y-3">
             <h3 className="text-sm font-semibold text-ink">{t('tournaments.playersTitle')}</h3>
-            <MaxPlayersField value={maxPlayers} onChange={edit('maxPlayers', setMaxPlayers)} onBlur={() => touch('maxPlayers')}
+            <MaxPlayersField value={maxPlayers} onChange={edit('maxPlayers', v => { setMaxPlayers(v); setMaxPlayersEdited(true) })} onBlur={() => touch('maxPlayers')}
               required={isCube} capacity={capacity} invalid={!!fieldIssue('maxPlayers')}
               resolving={isCube && !!cube && !cube.resolved && !locked}
               disabled={(isCube && configFrozen) || saving} />

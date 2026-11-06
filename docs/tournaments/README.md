@@ -1658,7 +1658,7 @@ printing kept as given when it has no `B` twin, e.g. the promo-only `ALT_BISE_P_
 (default 12, heroes not counted), `perFaction` 0 \| 1 \| 2 (default 1; 2 needs 12 cards or more).
 A ref's set is checked on its **base set** (`canonicalCardRef`): a promo / OP printing of a set code
 `SETS` does not know (e.g. `ALT_DUSTERTOP_P_AX_04_C` in Wozow's Common Cube) is accepted, and
-`configSetCodes` lists only the base sets `SETS` knows (`['DUSTER']` for it). At most **300 distinct
+`configSetCodes` lists only the base sets `SETS` knows (`['DUSTER']` for it). At most **1000 distinct
 refs needing the cards API** (uniques and non-`B` printings, `CUBE_LIMITS.maxCardApiRefs`), else
 `source.cards`: it bounds the server-side fan-out and is above every community cube.
 Error codes: `source.name`, `source.origin`, `source.cubeId`, `source.cards`, `source.heroPool`,
@@ -1719,9 +1719,9 @@ stays editable down to the pool count (checked only when the cap changes), and 1
 
 **UI.** Form: the **Cube** tab (`TournamentCardsSource` > `CubePicker`: community cubes with Preview,
 "Load from your Re:Union decks", "Paste your own cube", then a "Chosen cube" card with an editable
-name, counts by faction, the unresolved refs and Change cube); `TournamentCubeSettings` (boosters,
+name, counts by faction, the unresolved refs and Change cube, hidden once the config is locked); `TournamentCubeSettings` (boosters,
 cards per booster, faction guarantee, hero mode + `HeroPicker` over every hero of the game, live
-pool line) and `MaxPlayersField` (prefilled with the capacity, can only be lowered; also the last
+pool line) and `MaxPlayersField` (prefilled with the capacity, follows it until the organizer changes it, then only lowered by it; also the last
 field of the other sources' Settings, optional there). Editing an unlocked cube re-resolves the
 stored refs **keeping the stored quantities** and keeps unresolved refs in the config (they show in
 the unresolved callout; the server refuses them with `source.cards.unresolved` if they are truly

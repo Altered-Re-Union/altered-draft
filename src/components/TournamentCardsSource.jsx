@@ -13,7 +13,7 @@ import CubePicker from './CubePicker.jsx'
 // disclosure, one stepper per set.
 export default function TournamentCardsSource({
   sourceType, onSourceType, setCounts, onSetCounts, faction, onFaction, weights, onWeights,
-  mixOpen, onMixOpen, cube = null, onCube, lang, disabled = false,
+  mixOpen, onMixOpen, cube = null, onCube, lang, disabled = false, cubeReadOnly = false,
 }) {
   const { t } = useLang()
   const tab = active => `flex-1 px-3 py-1.5 rounded-md text-sm font-medium transition-colors disabled:opacity-60 ${
@@ -36,7 +36,7 @@ export default function TournamentCardsSource({
       {sourceType === 'cube' ? (
         <>
           <p className="text-sm text-muted">{t('tournaments.cubeHint')}</p>
-          <CubePicker value={cube} onChange={onCube} disabled={disabled} lang={lang} />
+          <CubePicker value={cube} onChange={onCube} disabled={disabled} readOnly={cubeReadOnly} lang={lang} />
         </>
       ) : sourceType === 'faction' ? (
         <>

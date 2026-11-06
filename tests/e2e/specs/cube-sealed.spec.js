@@ -297,10 +297,8 @@ test('form: the cube Settings — steppers, faction guarantee, heroes, capacity,
   await expect(page.getByTestId('hero-pool-search')).toHaveCount(0)
 })
 
-test.fixme('form: the cap follows a capacity that rises from its prefill (7 × 12 → 6 × 10)', { tag: ['@cu-b-capacity'] }, async ({ openAs }) => {
-  // The acceptance step: at 7 × 12 the field is prefilled with 2; at 6 × 10 "the field follows to 3
-  // (it follows while it was untouched or above the capacity)". The form only follows when the
-  // field is empty or above the capacity, so an untouched prefill of 2 stays 2.
+test('form: the cap follows the capacity until the organizer changes it, then is only lowered', { tag: ['@cu-b-capacity'] }, async ({ openAs }) => {
+  // Untouched, the prefill follows the capacity up (7 × 12 → 6 × 10: 2 → 3) and down.
   const page = await openForm(openAs)
   await chooseCommons(page)
   await expect(maxPlayers(page)).toHaveValue('2')
@@ -308,6 +306,18 @@ test.fixme('form: the cap follows a capacity that rises from its prefill (7 × 1
   await stepTo(page, 'cube-cards-per-booster', 10)
   await expect(page.getByTestId('max-players-capacity')).toHaveText(t('tournaments.cubeCapacityLine', { n: 3 }))
   await expect(maxPlayers(page)).toHaveValue('3')
+  await stepTo(page, 'cube-boosters', 7)
+  await expect(page.getByTestId('max-players-capacity')).toHaveText(t('tournaments.cubeCapacityLine', { n: 2 }))
+  await expect(maxPlayers(page)).toHaveValue('2')
+  // Changed once by hand: a rising capacity no longer raises it, a falling one still lowers it.
+  await maxPlayers(page).fill('2')
+  await stepTo(page, 'cube-boosters', 6)
+  await expect(page.getByTestId('max-players-capacity')).toHaveText(t('tournaments.cubeCapacityLine', { n: 3 }))
+  await expect(maxPlayers(page)).toHaveValue('2')
+  await maxPlayers(page).fill('3')
+  await stepTo(page, 'cube-boosters', 7)
+  await expect(page.getByTestId('max-players-capacity')).toHaveText(t('tournaments.cubeCapacityLine', { n: 2 }))
+  await expect(maxPlayers(page)).toHaveValue('2')
 })
 
 test('create "Commons cube" through the form: stored config, summary, "0 / 3 players"', { tag: ['@cu-c-create', '@cu-c-summary'] }, async ({ openAs, api }) => {
@@ -686,7 +696,7 @@ test('edit a cube with pools: everything locked but the name', { tag: ['@cu-i-lo
   await expect(page.getByText(t('tournaments.lockedNotice'))).toBeVisible()
   await expect(page.getByTestId('cube-chosen')).toBeVisible()
   await expect(page.getByTestId('cube-name')).toBeDisabled()
-  await expect(page.getByTestId('cube-change')).toBeDisabled()
+  await expect(page.getByTestId('cube-change')).toHaveCount(0)
   await expect(page.getByTestId('cube-preview')).toBeEnabled()
   await page.getByTestId('cube-preview').click()
   await expect(page.getByRole('heading', { name: seeded.config.source.name })).toBeVisible()
@@ -705,17 +715,6 @@ test('edit a cube with pools: everything locked but the name', { tag: ['@cu-i-lo
   const { body } = await api(null).get(`/api/tournaments/${id}`)
   expect(body.name.trim()).toBe('Commons cube')
   expect(body.maxPlayers).toBe(3)
-})
-
-test.fixme('edit a cube with pools: no "Change cube" on the read-only chosen cube', { tag: ['@cu-i-locked'] }, async ({ openAs, seed }) => {
-  // The acceptance step: "the chosen cube is read-only (no name field to edit, no “Change cube”)".
-  // The locked form shows the name field and the "Change cube" button, both disabled.
-  const { id } = await seed.tournament('alice', cubeTournamentBody())
-  await seed.pool('bob', id)
-  const page = await openAs('alice')
-  await page.goto(`/tournament/t/${id}/edit`)
-  await expect(page.getByTestId('cube-chosen')).toBeVisible()
-  await expect(page.getByTestId('cube-change')).toHaveCount(0)
 })
 
 test('French: the Cube tab, the cube settings, the tournament page and the cube page', { tag: ['@cu-k-fr'] }, async ({ openAs, seed }) => {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { tournamentFormIssues } from './tournamentForm.js'
+import { tournamentFormIssues, followCapacity } from './tournamentForm.js'
 
 const NOW = new Date('2026-11-01T12:00:00Z')
 const config = { source: { type: 'set', setCode: 'CYCLONE' }, heroes: 'packs', uniques: { inBoosters: 1, guaranteed: 1 } }
@@ -148,5 +148,25 @@ describe('tournamentFormIssues (BGA tournament already played with mixed legacy 
       expect(tournamentFormIssues({ body: { ...body, maxPlayers: 2 }, config, now: NOW, isCreate: true, poolCount: 3 }))
         .toEqual([{ field: 'maxPlayers', code: 'below_pool_count' }])
     })
+  })
+})
+
+describe('followCapacity', () => {
+  const cap = n => ({ players: n })
+  it('an untouched field takes the capacity, up and down', () => {
+    expect(followCapacity('', cap(2), false)).toBe(2)
+    expect(followCapacity(2, cap(3), false)).toBe(3)
+    expect(followCapacity(3, cap(2), false)).toBe(2)
+  })
+  it('a field the organizer changed is only lowered to the capacity, never raised or refilled', () => {
+    expect(followCapacity(2, cap(3), true)).toBe(2)
+    expect(followCapacity('2', cap(3), true)).toBe('2')
+    expect(followCapacity(4, cap(3), true)).toBe(3)
+    expect(followCapacity('', cap(3), true)).toBe('')
+  })
+  it('no capacity, or one below 2: the field is left as is', () => {
+    expect(followCapacity(2, null, false)).toBe(2)
+    expect(followCapacity(2, cap(1), false)).toBe(2)
+    expect(followCapacity(5, cap(0), true)).toBe(5)
   })
 })
