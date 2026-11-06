@@ -46,6 +46,10 @@ export default async function handler(req, res) {
     // A declared tournament changed under a racing call (poolStore.getOrCreateTournamentPool):
     // a retry from BGA settles it.
     if (e.code === 'tournament_unavailable' || e.code === 'pool_unavailable') return res.status(409).json({ error: e.code })
+    // A player beyond the cap gets no deck list (spec §15.2 "Full"); a cube card the cards
+    // API could not resolve at deal time is a retry later.
+    if (e.code === 'tournament_full') return res.status(409).json({ error: 'tournament_full' })
+    if (e.code === 'cube_unresolved') return res.status(409).json({ error: 'pool_unavailable' })
     throw e
   }
 

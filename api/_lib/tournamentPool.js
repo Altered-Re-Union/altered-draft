@@ -2,7 +2,7 @@
 // nonce/binding model, replacing the earlier time-window-based event lookup.
 import { buildPool } from '../../src/lib/poolBuilder.js'
 import { configFromLegacyFormat } from '../../src/lib/tournamentConfig.js'
-import { fetchSet, fetchUniques, isUniqueRef, SETS } from '../../src/lib/cardData.js'
+import { fetchSet, fetchUniques, isUniqueRef, needsCardApi, SETS } from '../../src/lib/cardData.js'
 import { updateDeckSummary } from '../../src/lib/poolStore.js'
 import { buildRandomDeck } from '../../src/lib/randomDeck.js'
 import { setCodeFromRef } from '../../src/lib/assets.js'
@@ -31,8 +31,9 @@ export async function loadPoolCounts(sub, poolRow) {
 
 /**
  * Card lookup (reference -> normalized card) for an arbitrary ref list drawn from a pool's
- * card counts. The sets present in the refs cover everything except uniques, which get resolved
- * individually — mirrors TournamentPoolView.jsx's own pool-load cardMap build.
+ * card counts. The sets present in the refs cover the `B` printings; the rest (uniques, and the
+ * non-`B` printings a cube may hold, spec §15.2) get resolved individually by reference —
+ * mirrors TournamentPoolView.jsx's own pool-load cardMap build.
  * Only codes known to SETS are fetched: deck refs are user-editable on decks-api, and a
  * malformed ref or a set the community DB does not serve would make fetchSet throw and skip
  * the whole deck reconciliation (the stray card just stays out of the map). A failure on a
@@ -44,10 +45,10 @@ async function buildCardMap(refs) {
   const sets = await Promise.all(setCodes.map(code => fetchSet(code)))
   const map = {}
   for (const cards of sets) for (const c of cards) map[c.reference] = c
-  const uniqueRefs = refs.filter(r => isUniqueRef(r) && !map[r])
-  if (uniqueRefs.length) {
-    const uCards = await fetchUniques(uniqueRefs)
-    for (const c of uCards) map[c.reference] = c
+  const byReference = refs.filter(r => needsCardApi(r) && !map[r])
+  if (byReference.length) {
+    const fetched = await fetchUniques(byReference)
+    for (const c of fetched) map[c.reference] = c
   }
   return map
 }
@@ -270,6 +271,9 @@ export function poolResponse(poolRow, cardCounts, boosters = null, gamesPlayed =
     ...(gamesPlayed !== null ? { gamesPlayed } : {}),
     ...(poolRow.tournament_ref ? { tournamentRef: poolRow.tournament_ref } : {}),
     ...(extra.tournament ? { tournament: extra.tournament } : {}),
+    ...(poolRow.config?.source?.type === 'cube'
+      ? { cube: { name: poolRow.config.source.name, cardCount: Object.values(poolRow.config.source.cards).reduce((a, b) => a + b, 0) } }
+      : {}),
     deck: poolRow.deck_id
       ? {
           id: poolRow.deck_id,

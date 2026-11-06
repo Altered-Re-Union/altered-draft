@@ -8,8 +8,12 @@
 // boosters). Rows created before storage existed keep being regenerated from their
 // snapshot columns via buildPoolSeedString() (see api/_lib/tournamentPool.js loadPool).
 import crypto from 'node:crypto'
-import { query } from './db.js'
+import { query, withTransaction } from './db.js'
 import { buildPool, buildPoolSeedString } from './poolBuilder.js'
+import { dealCubeSlots } from './packGenerator.js'
+import { expandCube } from './cubeSealed.js'
+import { resolveCubeSource } from './cubeSource.js'
+import { hashSeed, mulberry32 } from './prng.js'
 import { configFromLegacyFormat, legacyColumnsFromConfig } from './tournamentConfig.js'
 import { getTournamentByBgaId, getTournament } from './tournamentStore.js'
 // Re-exported: api/_lib/tournamentPool.js and the freeze script import it from here.
@@ -71,6 +75,99 @@ async function insertPool(sub, kind, { config, tournament = null, createdBy = 'p
     ],
   )
   return rows[0] ?? null
+}
+
+/**
+ * The insert of a pool for a tournament WITH a player cap (spec §15.3). The pool contents
+ * (cube: its resolved cards; other sources: the built pool) are computed before the lock;
+ * then, under FOR UPDATE on the tournament row (same four conditions as insertPool's FOR
+ * SHARE, so a config change / relink / detach serializes with it), the cap is checked
+ * against EVERY pool of the tournament (adopted ones included) and the row inserted. A
+ * cube tournament is dealt once, at its first pool: `max_players` lots stored in
+ * tournament_cube_slots; every pool claims the lowest free slot. Returns null when the
+ * tournament changed meanwhile (the caller re-reads it and retries) or on a lost
+ * (sub, tournament) insert race; throws `tournament_full` / `cube_unresolved`.
+ */
+async function insertCappedPool(sub, { config, tournament, createdBy = 'page' }) {
+  const nonce = newNonce()
+  const source = config.source
+  const isCube = source.type === 'cube'
+  let resolved = null
+  let built = null
+  if (isCube) {
+    resolved = await resolveCubeSource(source)
+    if (resolved.unresolved.length) throw codedError('cube_unresolved', `cube refs unresolved: ${resolved.unresolved.join(', ')}`)
+  } else {
+    built = await buildPool(sub, { config, nonce })
+  }
+  const cols = legacyColumnsFromConfig(config)
+
+  return withTransaction(async q => {
+    const { rows: [row] } = await q(
+      `SELECT * FROM tournaments
+       WHERE id = $1 AND bga_tournament_id = $2 AND config = $3::jsonb AND detached_at IS NULL
+       FOR UPDATE`,
+      [tournament.id, tournament.bga_tournament_id, JSON.stringify(config)],
+    )
+    if (!row) return null
+    const { rows: [{ n }] } = await q('SELECT count(*)::int AS n FROM sealed_pools WHERE tournament_ref = $1', [row.id])
+    if (row.max_players != null && n >= row.max_players) throw tournamentFull(row)
+
+    let cards = built?.cards
+    let boosters = built?.boosters
+    let cubeSlot = null
+    if (isCube) {
+      const { rows: dealt } = await q('SELECT 1 FROM tournament_cube_slots WHERE tournament_ref = $1 LIMIT 1', [row.id])
+      if (!dealt.length) {
+        const lots = dealCubeSlots({
+          cards: expandCube(resolved.cards),
+          heroPool: source.heroPool,
+          slots: row.max_players,
+          boosters: source.boosters,
+          cardsPerBooster: source.cardsPerBooster,
+          perFaction: source.perFaction,
+          heroesInBoosters: config.heroes === 'packs',
+        }, mulberry32(hashSeed(`${row.id}|cube|${nonce}`)))
+        for (const [slot, lot] of lots.entries()) {
+          await q('INSERT INTO tournament_cube_slots (tournament_ref, slot, boosters) VALUES ($1, $2, $3::jsonb)', [row.id, slot, JSON.stringify(lot)])
+        }
+      }
+      const { rows: [free] } = await q(
+        `SELECT slot, boosters FROM tournament_cube_slots s
+         WHERE s.tournament_ref = $1
+           AND NOT EXISTS (SELECT 1 FROM sealed_pools p WHERE p.tournament_ref = $1 AND p.cube_slot = s.slot)
+         ORDER BY slot LIMIT 1`,
+        [row.id],
+      )
+      if (!free) throw tournamentFull(row)
+      cards = {}
+      for (const ref of free.boosters.flat()) cards[ref] = (cards[ref] ?? 0) + 1
+      if (config.heroes === 'free') for (const ref of source.heroPool) cards[ref] = (cards[ref] ?? 0) + 1
+      boosters = free.boosters
+      cubeSlot = free.slot
+    }
+
+    const { rows } = await q(
+      `INSERT INTO sealed_pools
+         (sub, kind, set_code, unique_count, even_factions, heroes_in_pool, guaranteed_uniques, nonce,
+          config, cards, boosters, created_by, tournament_ref, tournament_id, tournament_name, bound_at, cube_slot)
+       VALUES ($1, 'tournament', $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, now(), $15)
+       ON CONFLICT (sub, tournament_ref) WHERE tournament_ref IS NOT NULL DO NOTHING
+       RETURNING *`,
+      [
+        sub, cols.set_code, cols.unique_count, cols.even_factions, cols.heroes_in_pool, cols.guaranteed_uniques, nonce,
+        JSON.stringify(config), JSON.stringify(cards), JSON.stringify(boosters), createdBy,
+        row.id, row.bga_tournament_id, row.name, cubeSlot,
+      ],
+    )
+    return rows[0] ?? null
+  })
+}
+
+function tournamentFull(row) {
+  const err = codedError('tournament_full', `the tournament is full (${row.max_players} players)`)
+  err.maxPlayers = row.max_players
+  return err
 }
 
 /** The player's single normal-mode pool, creating it (from the active format) if absent. */
@@ -165,11 +262,13 @@ export async function getPoolForTournament(sub, tournamentId) {
  *     or one left on a DETACHED declaration of that id — adopted, never replaced: its deck
  *     may be in play (adopted_at marks it, so a later detach releases it);
  *  3. a fresh stored pool from the tournament's config (insertPool only inserts while the
- *     tournament still has that config and is live).
+ *     tournament still has that config and is live; insertCappedPool when the tournament
+ *     has a player cap — adoption above is never refused by the cap, spec §15.2 "Full").
  * A race on either unique index, or a tournament changed meanwhile, makes a step miss:
  * the whole sequence is retried with the tournament re-read from the database. Throws
- * `tournament_unavailable` (deleted / detached meanwhile) or `pool_unavailable` (still no
- * row after the retries) instead of returning null.
+ * `tournament_unavailable` (deleted / detached meanwhile), `pool_unavailable` (still no
+ * row after the retries), `tournament_full` (the cap is reached) or `cube_unresolved` (a
+ * cube card could not be resolved at deal time) instead of returning null.
  */
 export async function getOrCreateTournamentPool(sub, tournament, { createdBy = 'page' } = {}) {
   let current = tournament
@@ -192,9 +291,16 @@ export async function getOrCreateTournamentPool(sub, tournament, { createdBy = '
     if (adopted[0]) return adopted[0]
 
     try {
-      const inserted = await insertPool(sub, 'tournament', { config: current.config, tournament: current, createdBy })
+      const inserted = current.max_players != null
+        ? await insertCappedPool(sub, { config: current.config, tournament: current, createdBy })
+        : await insertPool(sub, 'tournament', { config: current.config, tournament: current, createdBy })
       if (inserted) return inserted
     } catch (e) {
+      // The same player racing herself for the last place: her other request took it.
+      if (e.code === 'tournament_full') {
+        const mine = await getPoolForTournament(sub, current.id)
+        if (mine) return mine
+      }
       if (e.code !== '23505') throw e
     }
     // First attempt with the caller's row: it may be stale (config changed, detached).
