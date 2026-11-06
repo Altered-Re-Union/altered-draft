@@ -16,6 +16,7 @@ export default function HeroPicker({ value, onChange, preselected = [], disabled
   useEffect(() => {
     if (!open || heroes) return
     let alive = true
+    setError('')
     loadAllHeroes(lang).then(h => { if (alive) setHeroes(h) }).catch(e => { if (alive) setError(t('tournaments.cubeLoadFailed', { msg: e.message })) })
     return () => { alive = false }
   }, [open, heroes, lang])
@@ -24,6 +25,10 @@ export default function HeroPicker({ value, onChange, preselected = [], disabled
   const set = refs => onChange([...new Set(refs)].sort())
   const toggle = ref => set(selected.has(ref) ? value.filter(r => r !== ref) : [...value, ref])
   const q = search.trim().toLowerCase()
+  // Selected refs the catalog does not list (e.g. a COREKS hero from a paste): own chips, so
+  // they can still be deselected; labelled by their ref.
+  const known = new Set((heroes ?? []).map(h => h.ref))
+  const orphans = heroes ? value.filter(r => !known.has(r)) : []
 
   return (
     <div className="space-y-2">
@@ -31,7 +36,7 @@ export default function HeroPicker({ value, onChange, preselected = [], disabled
         <span data-testid="hero-pool-count" className="text-sm text-ink">{tc('tournaments.heroPoolCount', value.length)}</span>
         {!open && (
           <button type="button" data-testid="hero-pool-open" disabled={disabled} onClick={() => setOpen(true)}
-            className="px-3 py-1.5 rounded-lg text-sm font-medium bg-surface3 hover:bg-surface3 disabled:opacity-40 text-ink transition-colors">
+            className="px-3 py-1.5 rounded-lg text-sm font-medium bg-surface3 hover:bg-line disabled:opacity-40 text-ink transition-colors">
             {t('tournaments.heroPoolChoose')}
           </button>
         )}
@@ -45,6 +50,17 @@ export default function HeroPicker({ value, onChange, preselected = [], disabled
             className="w-full bg-surface2 border border-line rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-accent" />
           {error && <p className="text-xs text-danger">{error}</p>}
           {!heroes && !error && <p className="text-xs text-faint">{t('tournaments.heroPoolLoading')}</p>}
+          {orphans.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {orphans.map(ref => (
+                <button key={ref} type="button" data-testid={`hero-chip-${ref}`} aria-pressed="true"
+                  disabled={disabled} onClick={() => toggle(ref)}
+                  className="px-2 py-1 rounded-lg text-xs font-mono transition-colors disabled:opacity-40 bg-accent text-on-accent font-semibold">
+                  {ref}
+                </button>
+              ))}
+            </div>
+          )}
           {heroes && FACTIONS.map(f => {
             const all = heroes.filter(h => h.faction === f)
             if (!all.length) return null

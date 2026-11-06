@@ -53,12 +53,15 @@ async function insertPool(sub, kind, { config, tournament = null, createdBy = 'p
   // this config and BGA id and is not detached, under FOR SHARE on it: a concurrent config
   // change / relink / detach (FOR UPDATE, tournamentStore.js) either committed first — the
   // condition then fails, 0 rows, the caller re-reads the tournament — or waits for this
-  // insert and then sees the pool. No pool can be built from an outdated config.
+  // insert and then sees the pool. No pool can be built from an outdated config. A cap
+  // added meanwhile (max_players no longer null) misses too: the caller re-reads the row and
+  // goes through insertCappedPool, which counts the pools.
   const values = tournament
     ? `SELECT $1::text, $2::text, $3::text, $4::int, $5::boolean, $6::boolean, $7::int, $8::text,
               $9::jsonb, $10::jsonb, $11::jsonb, $12::text, $13::uuid, $14::text, $15::text, $16::timestamptz
        FROM (SELECT 1 FROM tournaments
              WHERE id = $13::uuid AND bga_tournament_id = $14::text AND config = $9::jsonb AND detached_at IS NULL
+               AND max_players IS NULL
              FOR SHARE) live`
     : 'VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)'
   const { rows } = await query(
@@ -84,9 +87,12 @@ async function insertPool(sub, kind, { config, tournament = null, createdBy = 'p
  * SHARE, so a config change / relink / detach serializes with it), the cap is checked
  * against EVERY pool of the tournament (adopted ones included) and the row inserted. A
  * cube tournament is dealt once, at its first pool: `max_players` lots stored in
- * tournament_cube_slots; every pool claims the lowest free slot. Returns null when the
- * tournament changed meanwhile (the caller re-reads it and retries) or on a lost
- * (sub, tournament) insert race; throws `tournament_full` / `cube_unresolved`.
+ * tournament_cube_slots; every pool claims the lowest free slot. The cube is only resolved
+ * (network) while it is not dealt yet: once slots exist, a pool needs none of the card data.
+ * Returns null when the tournament changed meanwhile, when the cube turned out undealt
+ * under the lock without having been resolved (the caller re-reads it and retries, and the
+ * retry resolves), or on a lost (sub, tournament) insert race; throws `tournament_full` /
+ * `cube_unresolved`.
  */
 async function insertCappedPool(sub, { config, tournament, createdBy = 'page' }) {
   const nonce = newNonce()
@@ -95,8 +101,11 @@ async function insertCappedPool(sub, { config, tournament, createdBy = 'page' })
   let resolved = null
   let built = null
   if (isCube) {
-    resolved = await resolveCubeSource(source)
-    if (resolved.unresolved.length) throw codedError('cube_unresolved', `cube refs unresolved: ${resolved.unresolved.join(', ')}`)
+    const { rows: dealt } = await query('SELECT 1 FROM tournament_cube_slots WHERE tournament_ref = $1 LIMIT 1', [tournament.id])
+    if (!dealt.length) {
+      resolved = await resolveCubeSource(source)
+      if (resolved.unresolved.length) throw codedError('cube_unresolved', `cube refs unresolved: ${resolved.unresolved.join(', ')}`)
+    }
   } else {
     built = await buildPool(sub, { config, nonce })
   }
@@ -119,6 +128,7 @@ async function insertCappedPool(sub, { config, tournament, createdBy = 'page' })
     if (isCube) {
       const { rows: dealt } = await q('SELECT 1 FROM tournament_cube_slots WHERE tournament_ref = $1 LIMIT 1', [row.id])
       if (!dealt.length) {
+        if (!resolved) return null
         const lots = dealCubeSlots({
           cards: expandCube(resolved.cards),
           heroPool: source.heroPool,

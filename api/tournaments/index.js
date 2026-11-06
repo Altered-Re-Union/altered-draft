@@ -75,6 +75,11 @@ export default async function handler(req, res) {
     if (legacy?.mixed) return res.status(409).json({ error: 'bga_tournament_mixed_formats' })
     const finalConfig = legacy ? validateTournamentConfig(legacy.config).config ?? legacy.config : config.config
 
+    // Quota first: a user at the limit costs no cube resolution (network).
+    if (!user.isModerator && (await countOpenTournaments(user.sub)) >= MAX_OPEN_TOURNAMENTS) {
+      return res.status(429).json({ error: 'too_many_open_tournaments' })
+    }
+
     // Cube: refs and capacity verified (an imposed legacy config is never a cube, so it skips this).
     let storedConfig = finalConfig
     if (!legacy) {
@@ -85,10 +90,6 @@ export default async function handler(req, res) {
     if (finalConfig.source?.type !== 'cube') {
       const cap = checkPlayerCap({ source: finalConfig.source, maxPlayers: fields.values.maxPlayers, poolCount: 0 })
       if (Object.keys(cap.fields).length) return res.status(400).json({ error: 'invalid_request', fields: cap.fields, config: cap.config })
-    }
-
-    if (!user.isModerator && (await countOpenTournaments(user.sub)) >= MAX_OPEN_TOURNAMENTS) {
-      return res.status(429).json({ error: 'too_many_open_tournaments' })
     }
 
     let row
