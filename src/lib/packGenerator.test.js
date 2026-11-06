@@ -3,7 +3,7 @@ import {
   generateAllPacks, generateChaosPacks, generateStructuredPacks,
   generateCubeDraftPacks, generateCubeRecipePacks, dealHeroSlots,
   generateTournamentSealedPool, generatePacksFromPool, quotas, generateFactionSealedPool,
-  generateMultisetSealedPool, pickRareSlots, rollBoosterHits, pickWeightedSet,
+  generateMultisetSealedPool, dealCubeSlots, pickRareSlots, rollBoosterHits, pickWeightedSet,
 } from './packGenerator.js'
 import { FACTIONS } from './cardData.js'
 import { mulberry32 } from './prng.js'
@@ -361,5 +361,44 @@ describe('pickRareSlots, rollBoosterHits, pickWeightedSet', () => {
     expect(pickWeightedSet({ EOLE: 1, CYCLONE: 6 }, () => 0.1)).toBe('CYCLONE')
     expect(pickWeightedSet({ EOLE: 1, CYCLONE: 6 }, () => 0.9)).toBe('EOLE')
     expect(pickWeightedSet({ EOLE: 1, CYCLONE: 0 }, () => 0.0)).toBe('EOLE')
+  })
+})
+
+describe('dealCubeSlots', () => {
+  function cubeOf(perFaction = 10, extra = 0) {
+    const cards = []
+    for (const f of FACTIONS) for (let n = 1; n <= perFaction; n++) cards.push({ ref: `ALT_CORE_B_${f}_${n}_C`, faction: f })
+    for (let n = 1; n <= extra; n++) cards.push({ ref: `ALT_CORE_B_AX_${n}_U_${n}`, faction: null })
+    return cards
+  }
+  it('deals slots x boosters boosters of cardsPerBooster (+1 hero), every copy at most once', () => {
+    const cards = cubeOf(10)
+    const lots = dealCubeSlots({ cards, heroPool: ['H1', 'H2', 'H3'], slots: 2, boosters: 3, cardsPerBooster: 10, perFaction: 1, heroesInBoosters: true }, mulberry32(1))
+    expect(lots).toHaveLength(2)
+    for (const lot of lots) { expect(lot).toHaveLength(3); for (const b of lot) expect(b).toHaveLength(11) }
+    const bodies = lots.flat().flatMap(b => b.slice(1))
+    expect(new Set(bodies).size).toBe(bodies.length)
+    expect(bodies.every(r => cards.some(c => c.ref === r))).toBe(true)
+  })
+  it('guarantees perFaction cards of each faction at the front of every booster', () => {
+    const lots = dealCubeSlots({ cards: cubeOf(12), heroPool: ['H1'], slots: 2, boosters: 2, cardsPerBooster: 14, perFaction: 2, heroesInBoosters: false }, mulberry32(2))
+    for (const b of lots.flat()) expect(b.slice(0, 12).map(r => r.split('_')[3])).toEqual(['AX', 'AX', 'BR', 'BR', 'LY', 'LY', 'MU', 'MU', 'OR', 'OR', 'YZ', 'YZ'])
+  })
+  it('gives a lot distinct heroes until the pool is exhausted, independently per lot', () => {
+    const lots = dealCubeSlots({ cards: cubeOf(50), heroPool: ['H1', 'H2', 'H3'], slots: 6, boosters: 5, cardsPerBooster: 10, perFaction: 0, heroesInBoosters: true }, mulberry32(3))
+    for (const lot of lots) { expect(new Set(lot.slice(0, 3).map(b => b[0])).size).toBe(3); expect(lot[3][0]).toBe(lot[0][0]) }
+    expect(new Set(lots.map(l => l.map(b => b[0]).join())).size).toBeGreaterThan(1)
+  })
+  it('is deterministic for a seed and throws, naming the short stack, before dealing', () => {
+    const args = { cards: cubeOf(10), heroPool: ['H1'], slots: 2, boosters: 3, cardsPerBooster: 10, perFaction: 1, heroesInBoosters: true }
+    expect(dealCubeSlots(args, mulberry32(7))).toEqual(dealCubeSlots(args, mulberry32(7)))
+    expect(() => dealCubeSlots({ ...args, slots: 3 }, mulberry32(7))).toThrow('cube too small: total 60/90')
+    const fewYz = args.cards.filter(c => c.faction !== 'YZ' || c.ref.endsWith('_1_C'))
+    expect(() => dealCubeSlots({ ...args, cards: [...fewYz, ...cubeOf(0, 40)] }, mulberry32(7))).toThrow('cube too small: YZ 1/6')
+  })
+  it('dealHeroSlots takes an rng and keeps its default', () => {
+    const packs = [['a'], ['b'], ['c']]
+    expect(dealHeroSlots(packs, ['H1', 'H2'], mulberry32(1))).toEqual(dealHeroSlots(packs, ['H1', 'H2'], mulberry32(1)))
+    expect(dealHeroSlots(packs, ['H1', 'H2']).map(p => p.length)).toEqual([2, 2, 2])
   })
 })

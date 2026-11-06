@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Link } from 'react-router-dom'
-import { fetchSet, fetchUniques, isUniqueRef } from '../lib/cardData.js'
+import { fetchSet, fetchUniques, isUniqueRef, needsCardApi } from '../lib/cardData.js'
 import { setCodeFromRef } from '../lib/assets.js'
 import { createDeck, updateDeck, toDeckCards, getDeck, deckCardsToRefs } from '../lib/decks.js'
 import { syncPoolDeck } from '../lib/tournamentApi.js'
 import { syncDeckToPool } from '../lib/poolDeckSync.js'
 import { createSerialRunner } from '../lib/serialRunner.js'
 import { buildRandomDeck } from '../lib/randomDeck.js'
+import { cubeBoosterCover } from '../lib/cubeCover.js'
 import { useLang } from '../lib/i18n/i18n.jsx'
 import PoolGrid from './PoolGrid.jsx'
 import PackReveal from './PackReveal.jsx'
@@ -49,9 +50,13 @@ export default function TournamentPoolView({ title, load, reset, backTo = null }
   const [deck, setDeck] = useState({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [retryLoad, setRetryLoad] = useState(false) // the load failed on a try-again-later answer
   const [cooldownMs, setCooldownMs] = useState(0)
   const [syncing, setSyncing] = useState(false)
   const [showReveal, setShowReveal] = useState(false) // first-open pack-by-pack overlay
+  const [coverImage, setCoverImage] = useState(null) // generated booster cover of a cube pool
+  const [coverReady, setCoverReady] = useState(false) // the cover attempt settled: the reveal may mount
+  const loadRunRef = useRef(0) // stale-run / unmount guard for the cover state
 
   const poolRef = useRef(null) // avoids clobbering deck state on a resolved-late reload
   const lastSyncAtRef = useRef(0)
@@ -64,11 +69,25 @@ export default function TournamentPoolView({ title, load, reset, backTo = null }
   const skipNextSyncRef = useRef(false)
 
   const loadPool = useCallback(async () => {
+    const run = ++loadRunRef.current
+    setCoverImage(null)
+    setCoverReady(false)
     setLoading(true)
     setError('')
+    setRetryLoad(false)
     try {
       const data = await load()
       poolRef.current = data
+      // A cube pool's cover is drawn BEFORE the reveal may mount (it never rejects: null on
+      // failure), so the first pack never skips it and it never pops in mid-reveal.
+      if (data.sourceType === 'cube' && data.cube) {
+        const cover = await cubeBoosterCover({
+          title: data.tournamentName ?? title,
+          subtitle: t('packReveal.cubeBooster', { name: data.cube.name }),
+        })
+        if (run === loadRunRef.current) setCoverImage(cover)
+      }
+      if (run === loadRunRef.current) setCoverReady(true)
       setPool(data)
       setCooldownMs(cooldownFromResetAt(data.resetAt)) // show the cooldown from the start, not just after a rejected click
 
@@ -80,7 +99,7 @@ export default function TournamentPoolView({ title, load, reset, backTo = null }
       if (!setCodes.length && data.setCode) setCodes.push(data.setCode)
       const sets = await Promise.all(setCodes.map(s => fetchSet(s).catch(() => [])))
       for (const c of sets.flat()) map[c.reference] = c
-      const uniqueRefs = refs.filter(r => isUniqueRef(r) && !map[r])
+      const uniqueRefs = refs.filter(r => needsCardApi(r) && !map[r])
       if (uniqueRefs.length) {
         const uCards = await fetchUniques(uniqueRefs)
         for (const c of uCards) map[c.reference] = c
@@ -106,13 +125,20 @@ export default function TournamentPoolView({ title, load, reset, backTo = null }
         setDeck({})
       }
     } catch (e) {
-      setError(e.message || t('tournamentPoolView.couldNotLoadPool'))
+      // A direct link on a full tournament, or a first pool the server could not deal yet
+      // (card data unavailable): a sentence, never the raw 409 code.
+      const code = e.status === 409 ? e.data?.error : null
+      setError(code === 'tournament_full' ? t('tournaments.step2Full', { max: e.data.maxPlayers ?? '?' })
+        : code === 'pool_unavailable' ? t('tournamentPoolView.couldNotLoadPool')
+          : e.message || t('tournamentPoolView.couldNotLoadPool'))
+      setRetryLoad(code === 'pool_unavailable')
+      if (run === loadRunRef.current) setCoverReady(true)
     } finally {
       setLoading(false)
     }
-  }, [load, t])
+  }, [load, t, title])
 
-  useEffect(() => { loadPool() }, [loadPool])
+  useEffect(() => { loadPool(); return () => { loadRunRef.current++ } }, [loadPool])
 
   // Tick the reset cooldown down every second while it's active (self-corrects on a 429).
   useEffect(() => {
@@ -123,9 +149,9 @@ export default function TournamentPoolView({ title, load, reset, backTo = null }
 
   // Show the first-open pack reveal once per pool (skips if already seen, or no boosters).
   useEffect(() => {
-    if (!pool?.id || !pool.boosters?.length) return
+    if (!coverReady || !pool?.id || !pool.boosters?.length) return
     try { if (!localStorage.getItem(revealKey(pool))) setShowReveal(true) } catch { /* ignore */ }
-  }, [pool?.id, pool?.resetAt])
+  }, [pool?.id, pool?.resetAt, coverReady])
 
   function dismissReveal() {
     try { if (pool?.id) localStorage.setItem(revealKey(pool), '1') } catch { /* ignore */ }
@@ -279,6 +305,8 @@ export default function TournamentPoolView({ title, load, reset, backTo = null }
           packs={revealPacks}
           hasBonus={bonusUniques.length > 0}
           sourceType={pool?.sourceType ?? 'set'}
+          coverImage={pool?.sourceType === 'cube' ? coverImage : undefined}
+          coverSublabel={pool?.sourceType === 'cube' ? t('packReveal.cubeBooster', { name: pool.cube?.name ?? '' }) : null}
           cardMap={cardMap}
           deck={deck}
           poolCounts={pool?.cards}
@@ -295,6 +323,12 @@ export default function TournamentPoolView({ title, load, reset, backTo = null }
         )}
         <div className="flex items-center gap-3 mb-3 flex-wrap">
           <h1 className="text-xl font-display">{pool?.tournamentName || title}</h1>
+          {pool?.sourceType === 'cube' && pool.tournamentRef && (
+            <Link to={`/tournament/t/${pool.tournamentRef}/cube`} data-testid="pool-cube-link"
+              className="text-xs text-accent-ink hover:underline">
+              {t('tournamentPoolView.cubeLink')}
+            </Link>
+          )}
           {loading ? (
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border-2 border-line bg-surface2 text-base font-semibold text-muted">
               <span className="w-4 h-4 rounded-full border-2 border-line border-t-accent animate-spin shrink-0" />
@@ -330,7 +364,16 @@ export default function TournamentPoolView({ title, load, reset, backTo = null }
             )}
           </div>
         </div>
-        {error && <p className="text-danger text-sm mb-2">{error}</p>}
+        {error && (
+          <p className="text-danger text-sm mb-2">
+            {error}
+            {retryLoad && (
+              <button onClick={loadPool} className="ml-2 text-xs px-2 py-0.5 rounded bg-surface2 hover:bg-surface3 text-ink transition-colors">
+                {t('cardImage.retry')}
+              </button>
+            )}
+          </p>
+        )}
 
         {/* Deckbuilding is always the full pool — the pack-by-pack experience is the
             first-open reveal overlay, not a persistent tab (avoids a "which tab?" step). */}

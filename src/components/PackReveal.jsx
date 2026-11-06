@@ -49,7 +49,7 @@ function singleSetOf(refs) {
  * @param {string[][]} packs - packs to reveal in order; when `hasBonus`, the LAST one is the
  *   guaranteed-unique "8th booster".
  */
-export default function PackReveal({ packs, hasBonus = false, sourceType = 'set', cardMap, deck, poolCounts, onAdd, onRemove, onClose }) {
+export default function PackReveal({ packs, hasBonus = false, sourceType = 'set', coverImage, coverSublabel = null, cardMap, deck, poolCounts, onAdd, onRemove, onClose }) {
   const [index, setIndex] = useState(0)
   const [ready, setReady] = useState(false)
   const packsRef = useRef(packs)
@@ -107,14 +107,18 @@ export default function PackReveal({ packs, hasBonus = false, sourceType = 'set'
   // straight-to-cards when the set has no pack photo yet (see BOOSTER_COVERS in assets.js).
   // The pack print itself is per-language (the box literally says "ENGLISH"/"FRANÇAIS"), so
   // it follows the UI language rather than the (currently EN-only) card data language.
-  const coverImage = (isBonusPack || sourceType === 'faction') ? null : boosterCoverFor(singleSetOf(currentPack), lang)
+  // `coverImage` prop: undefined = the set's pack photo, null = never a cover, string = that
+  // image for every real pack (the generated cube cover).
+  const cover = isBonusPack ? null
+    : coverImage !== undefined ? coverImage
+    : (sourceType === 'faction' ? null : boosterCoverFor(singleSetOf(currentPack), lang))
   // label/sublabel surface the same "Booster N/total" heading shown below — the always-open
   // full-screen zoom otherwise covers it, per PackReveal's own "Pack heading" block.
-  const zoomCover = coverImage ? {
-    image: coverImage,
+  const zoomCover = cover ? {
+    image: cover,
     openLabel: t('cardZoom.openBooster'),
     label: t('packReveal.boosterOf', { n: index + 1, total }),
-    sublabel: isBonusPack ? t('packReveal.guaranteedUnique') : null,
+    sublabel: isBonusPack ? t('packReveal.guaranteedUnique') : coverSublabel,
   } : null
 
   return (
@@ -128,6 +132,7 @@ export default function PackReveal({ packs, hasBonus = false, sourceType = 'set'
       <div className="px-4 pt-3 pb-2 text-center">
         <div className="text-sm text-ink2 tabular-nums">{t('packReveal.boosterOf', { n: index + 1, total })}</div>
         {isBonusPack && <div className="text-xs text-accent2 mt-0.5">{t('packReveal.guaranteedUnique')}</div>}
+        {!isBonusPack && coverSublabel && <div className="text-xs text-muted mt-0.5">{coverSublabel}</div>}
       </div>
 
       {/* Current pack — shown only once its images are ready (buffering spinner until then) */}

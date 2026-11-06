@@ -44,7 +44,8 @@ Two ways a sealed configuration is chosen:
 - **Declared tournaments** (§14): an organizer declares a BGA tournament on altered-draft with
   its own configuration (7 boosters of one set or split over several sets (§14.7), or of one
   faction over weighted sets (§14.6), heroes, exact or random uniques, ban list), public or
-  private (listed only to the people it concerns, §14.9). Its players get a pool built from that
+  private (listed only to the people it concerns, §14.9), optionally capped in players and, in V5,
+  dealing a cube once across its players (§14.10). Its players get a pool built from that
   configuration.
 - **The current competitive format** (a row in `current_format`, seeded by
   `sealed-pools-schema.sql`) for the two generic flows: the casual "normal" pool and the
@@ -108,10 +109,11 @@ All tournament pages require a Re:Union login, except the public list of declare
 | --- | --- | --- |
 | `/` | `Home.jsx` | A **"Sealed set 6"** block with two image buttons: **Tournaments** (→ `/tournament`) and **Normal mode** (→ `/tournament/normal`). |
 | `/tournament` | `TournamentMenu.jsx` | Public (Home's "Tournaments" opens it without login). Header (title, "Create a tournament", BGA registration notice); **"My ongoing tournaments"** (logged in, when any): a grid of the started tournaments the player has a pool in (minus the tournaments they hid, §14.8), each card opening the tournament page with a direct "Change my deck" button; then **tabs**, each with a one-line explanation, the active one kept in the URL (`?tab=upcoming|ongoing|pools|created`): **Upcoming** (default, public), **Ongoing** (public: pools can still be prepared until the end; logged in, each card has a "Hide" button and the hidden ones fold into "Hidden (N)" below, §14.8), **My pools** (every bound pool, declared tournaments first; a card opens the tournament page, or the pool itself for a BGA tournament nobody declared, plus "Change my deck"; the pools of ended / cancelled / detached tournaments and the ones hidden by hand fold into "Ended, cancelled and hidden (N)" below, their CTA reading "See my deck" once the tournament is over, §14.8), **My created tournaments** (`GET /api/tournaments?mine=1`, every status, grouped: ongoing then upcoming, each chronological, then a folded "Ended and cancelled (N)" block with the ended, cancelled and detached ones). The two personal tabs show a Connect box when logged out. **Below the tabs**, whatever tab is open, the generic "Tournament not listed here?" block: its button opens `/tournament/prep` (login first when logged out) and reads "Prepare my next tournament", or "See my pool and deck for my next tournament" once the player has a pending prep pool (`pending` from `GET /api/tournament-bound-pools`). The Upcoming and Ongoing lists only show what the caller may see, and a private tournament carries a "Private" pill on its cards (§14.9). |
-| `/tournament/new` | `TournamentForm.jsx` | Declare a tournament, public or private (§14, §14.9). |
-| `/tournament/t/:id` | `TournamentDetail.jsx` | A declared tournament: description, dates, 3-step checklist, share box, organizer panel (§14). Public, private ones included (§14.9). |
+| `/tournament/new` | `TournamentForm.jsx` | Declare a tournament, public or private (§14, §14.9). A third **Cube** source tab and a player cap (§14.10). |
+| `/tournament/t/:id` | `TournamentDetail.jsx` | A declared tournament: description, dates, 3-step checklist, share box, organizer panel (§14). Public, private ones included (§14.9). Players line ("N / M players"), **Full** pill and, for a cube, a link to its cube page (§14.10). |
 | `/tournament/t/:id/edit` | `TournamentForm.jsx` | Edit a declared tournament (organizer / moderator). |
 | `/tournament/t/:id/pool` | `TournamentPoolPage.jsx` → `TournamentPoolView` | The player's pool for a declared tournament (get-or-create). |
+| `/tournament/t/:id/cube` | `TournamentCubePage.jsx` | The cube of a cube tournament: heroes and every card, with counts, search and grouping (§14.10). Public. |
 | `/tournament/prep` | `TournamentPrep.jsx` → `TournamentPoolView` | The player's single *pending* tournament pool. **No reset button**: this is the one-shot commitment. |
 | `/tournament/normal` | `TournamentNormal.jsx` → `TournamentPoolView` | The player's single casual pool (for non-tournament BGA sealed games). Has a **"Reset pool"** button with a **30-minute cooldown** (live countdown). |
 | `/tournament/pools/:id` | `TournamentBoundDetail.jsx` → `TournamentPoolView` | One bound tournament pool, to edit the deck between games. Title = the tournament name. |
@@ -1144,6 +1146,9 @@ the raw frames BGA sent (with `decodedEnvelope` and `userId`). altered-draft log
 16. **Config-only options stay out of the snapshot columns and the seed** (`uniques.faction`
     today): `regeneratePool` rebuilds from the columns, so such an option is only valid on
     pools stored at creation, which every declared-tournament pool is.
+17. **A cube tournament is dealt once**: `tournament_cube_slots` is written at its first pool and
+    never rewritten (a config edit is refused once a pool exists, a detach deletes the slots with
+    the pools); every pool claims the lowest free slot under the tournament row lock (§14.10).
 
 ### 12.2 Pitfalls observed in history
 
@@ -1251,7 +1256,9 @@ choice, exact uniques inside boosters, guaranteed uniques outside, uniques restr
 faction, even factions, ban list); V2 (§14.6) adds `source.type = 'faction'`, mono-faction
 sealed over weighted sets; V3 (§14.7) adds `source.type = 'multiset'`, the 7 single-set boosters
 split over several sets, and random uniques (one booster in N) on every source; V4 (§14.9) adds a
-public / private visibility and the share box.
+public / private visibility and the share box; V5 (§14.10) adds `source.type = 'cube'`, a cube dealt
+once so that every copy of a card goes to at most one player, and a player cap (`max_players`) on
+every source.
 
 ### 14.1 Stored pools
 
@@ -1296,15 +1303,16 @@ pools created for the declaration.
 
 | Endpoint | Method | Auth | Purpose |
 | --- | --- | --- | --- |
-| `/api/tournaments` | GET | none (optional bearer) | List. `?status=upcoming\|ongoing\|open\|all` (`open` = upcoming + ongoing, the default), ordered by `starts_at`. `?bgaId=<numeric id>` instead returns the live (not detached) declaration of that BGA tournament whatever its status, 0 or 1 item, plus `legacy`: `null`, or `{ pools, mixed, config }` for the pools already bound to that BGA id without a declaration (the format a declaration must take): the form's duplicate-link and imposed-format check. `?mine=1` (bearer required, 401 otherwise) returns every tournament the caller organizes, whatever its status, most recent start first ("My created tournaments"). With a bearer: each item carries `viewer.hasPool` / `viewer.poolId`, and `viewer.hidden` (the caller hid this BGA tournament, §14.8). Every item carries `visibility`. The status lists are filtered by the caller (§14.9): a private tournament is listed only to its organizer, the players who have a pool on it and the moderators (anonymous callers get the public rows only). `?bgaId=` answers `{ visibility: 'private' }` alone when the declaration is private and the caller may not see it (`legacy` unchanged); `?mine=1` is unchanged. |
-| `/api/tournaments` | POST | required | Create. Enforces spec §9 (10 open tournaments per account, moderators exempt). `visibility` optional (`public` by default, or `private`; anything else → 400 `fields.visibility = 'invalid_visibility'`). Returns the tournament. If players already have pools bound to that BGA id without a declared tournament (they are already playing it with the default format), the declaration **takes their format** (the submitted config is replaced, the form shows it locked as soon as the link is pasted) and **adopts those pools in the same statement**, so the tournament is locked from the start. If those pools do not all share one format, the declaration is refused (409 `bga_tournament_mixed_formats`). |
+| `/api/tournaments` | GET | none (optional bearer) | List. `?status=upcoming\|ongoing\|open\|all` (`open` = upcoming + ongoing, the default), ordered by `starts_at`. `?bgaId=<numeric id>` instead returns the live (not detached) declaration of that BGA tournament whatever its status, 0 or 1 item, plus `legacy`: `null`, or `{ pools, mixed, config }` for the pools already bound to that BGA id without a declaration (the format a declaration must take): the form's duplicate-link and imposed-format check. `?mine=1` (bearer required, 401 otherwise) returns every tournament the caller organizes, whatever its status, most recent start first ("My created tournaments"). With a bearer: each item carries `viewer.hasPool` / `viewer.poolId`, and `viewer.hidden` (the caller hid this BGA tournament, §14.8). Every item carries `visibility`. The status lists are filtered by the caller (§14.9): a private tournament is listed only to its organizer, the players who have a pool on it and the moderators (anonymous callers get the public rows only). `?bgaId=` answers `{ visibility: 'private' }` alone when the declaration is private and the caller may not see it (`legacy` unchanged); `?mine=1` is unchanged. Every item carries `maxPlayers` (`null` = no limit). |
+| `/api/tournaments` | POST | required | Create. Enforces spec §9 (10 open tournaments per account, moderators exempt). `visibility` optional (`public` by default, or `private`; anything else → 400 `fields.visibility = 'invalid_visibility'`). Returns the tournament. If players already have pools bound to that BGA id without a declared tournament (they are already playing it with the default format), the declaration **takes their format** (the submitted config is replaced, the form shows it locked as soon as the link is pasted) and **adopts those pools in the same statement**, so the tournament is locked from the start. If those pools do not all share one format, the declaration is refused (409 `bga_tournament_mixed_formats`). `maxPlayers` is optional (absent, `null` or `''` → no limit; else an integer 2–256, `fields.maxPlayers = 'invalid_max_players'`). A `cube` config is verified server-side, after the open-tournaments quota (429 `too_many_open_tournaments` comes first) (§14.10): 400 `config: ['source.cards.unresolved' \| 'source.heroPool.unresolved']` + `unresolved: [refs]`, 400 `config: ['source.capacity']` + `capacity`, 400 `fields.maxPlayers = 'required_for_cube' \| 'above_capacity'`, 503 `{ error: 'cards_unavailable' }` when the card data (a set file or the cards API) could not be loaded (nothing stored, try again later). |
 | `/api/tournaments/:id` | GET | none (optional bearer) | Detail + `poolCount`, `locked`, `poolsByOrigin` (organizer/moderator only), `viewer` (bearer only). |
-| `/api/tournaments/:id` | PATCH | organizer / moderator | Partial update: `name`, `description`, `visibility` (every status but detached, never locked, §14.9), `startsAt`, `endsAt`, `bgaUrl` (unlocked only), `config` (unlocked only, atomic), `action: cancel\|restore\|close\|reopen\|detach` (`detach` moderator only, §14.5). 409 `tournament_locked` when a locked field is sent, `tournament_detached` on a detached tournament, `bga_tournament_taken` when the new link is already declared. A `bgaUrl` change to a BGA id already played with legacy pools follows the same rule as creation (their format imposed, pools adopted; mixed formats → 409 `bga_tournament_mixed_formats`). |
+| `/api/tournaments/:id` | PATCH | organizer / moderator | Partial update: `name`, `description`, `visibility` (every status but detached, never locked, §14.9), `startsAt`, `endsAt`, `bgaUrl` (unlocked only), `config` (unlocked only, atomic), `action: cancel\|restore\|close\|reopen\|detach` (`detach` moderator only, §14.5). 409 `tournament_locked` when a locked field is sent, `tournament_detached` on a detached tournament, `bga_tournament_taken` when the new link is already declared. A `bgaUrl` change to a BGA id already played with legacy pools follows the same rule as creation (their format imposed, pools adopted; mixed formats → 409 `bga_tournament_mixed_formats`). `maxPlayers`: **locked with the config** on a cube tournament (409 `tournament_locked` once a pool exists; `null` refused `required_for_cube`, a cube always has a cap); on the other sources editable in every status but detached, never below the pool count (400 `'below_pool_count'`, checked only when the cap actually changes: a rename of a tournament adopted above its cap passes), raising or clearing it always allowed. A config sent as a cube goes through the POST checks against the `maxPlayers` sent or stored (§14.10). |
 | `/api/tournaments/:id` | DELETE | organizer / moderator | 409 `tournament_has_pools` unless zero pools. |
-| `/api/tournaments/:id/pool` | GET | required | Get-or-create the caller's pool (`createdBy: 'page'`). 409 `tournament_closed` when cancelled/ended **and** no pool exists yet (with `status: 'detached'` when a detach won the race), 409 `pool_unavailable` when the config kept changing during generation (§5). `/api/tournament-bga-decklist` and `/api/tournament-pool-counts` answer the same two cases with a 409 too. |
+| `/api/tournaments/:id/pool` | GET | required | Get-or-create the caller's pool (`createdBy: 'page'`). 409 `tournament_closed` when cancelled/ended **and** no pool exists yet (with `status: 'detached'` when a detach won the race), 409 `pool_unavailable` when the config kept changing during generation (§5). `/api/tournament-bga-decklist` and `/api/tournament-pool-counts` answer the same two cases with a 409 too. 409 `{ error: 'tournament_full', maxPlayers }` when the caller has no pool yet and the cap is reached (an existing pool is always returned); `/api/tournament-bga-decklist` and `/api/tournament-pool-counts` answer it with the same 409 too, body `{ error: 'tournament_full' }` without `maxPlayers` (only this endpoint adds it), so BGA gets a refusal for a player beyond the cap. A cube whose refs no longer resolve at its first pool (`cube_unresolved`) or whose card data cannot be loaded then (`cards_unavailable`, a cards-API or set-file outage before the deal) is answered 409 `pool_unavailable` on all three (§14.10). |
 | `/api/tournament-hidden` | PATCH | required | Body `{ bgaTournamentId, hidden: boolean }`: hide / show that BGA tournament in the caller's hub (declared or legacy, with or without a pool; idempotent). 400 bad body (§14.8). |
 | `/api/tournament-bound-pools` | GET | required | Unchanged shape + `tournament: { id, name, startsAt, visibility, status } \| null` and `hidden` per pool, + top-level `pending: { id, deck } \| null` (the pending prep pool, read only). |
 | `/api/tournament-bga-decklist`, `/api/tournament-pool-counts`, `/api/tournament-pool-by-deck`, `/api/tournament-pool` | — | — | **Unchanged contracts.** Internally they go through §14.2 / `loadPool`. |
+| `poolResponse` (every `/api/tournament-pool*`) | — | — | Additive: `sourceType: 'cube'` and `cube: { name, cardCount }` for a cube pool (§14.10). |
 
 A public GET carrying an expired bearer gets the anonymous view, never a 401. Moderators: the
 access token's `realm_access.roles` contains `TOURNAMENT_MODERATOR_ROLE`, or the `sub` is in
@@ -1320,10 +1328,11 @@ with the query kept, so the testers' bookmarks still work.
 | Route | Page | Notes |
 | --- | --- | --- |
 | `/tournament` | `TournamentMenu.jsx` (reworked) | Header (title, "Create a tournament", BGA registration notice); **"My ongoing tournaments"** (logged in, when any): a grid of the started tournaments the player has a pool in (minus the tournaments they hid, §14.8), each card opening the tournament page with a direct "Change my deck" button; then **tabs**, each with a one-line explanation, the active one kept in the URL (`?tab=upcoming|ongoing|pools|created`): **Upcoming** (default, public), **Ongoing** (public: pools can still be prepared until the end; logged in, each card has a "Hide" button and the hidden ones fold into "Hidden (N)" below, §14.8), **My pools** (every bound pool, declared tournaments first; a card opens the tournament page, or the pool itself for a BGA tournament nobody declared, plus "Change my deck"; the pools of ended / cancelled / detached tournaments and the ones hidden by hand fold into "Ended, cancelled and hidden (N)" below, their CTA reading "See my deck" once the tournament is over, §14.8), **My created tournaments** (`GET /api/tournaments?mine=1`, every status, grouped: ongoing then upcoming, each chronological, then a folded "Ended and cancelled (N)" block with the ended, cancelled and detached ones). The two personal tabs show a Connect box when logged out. **Below the tabs**, whatever tab is open, the generic "Tournament not listed here?" block: its button opens `/tournament/prep` (login first when logged out) and reads "Prepare my next tournament", or "See my pool and deck for my next tournament" once the player has a pending prep pool (`pending` from `GET /api/tournament-bound-pools`). The Upcoming and Ongoing lists only show what the caller may see, and a private tournament carries a "Private" pill on its cards (§14.9). |
-| `/tournament/new` | `TournamentForm.jsx` | Create mode. A **Visibility** radio under the description (Public by default, or Private, §14.9). Live validation (`src/lib/tournamentForm.js` `tournamentFormIssues`, the API's own pure checks + a duplicate-link lookup, `GET /api/tournaments?bgaId=`, debounced while typing; the unique index + 409 on submit stay the real guard): the submit button sits in a bar stuck to the bottom of the screen, disabled while problems remain, with the list of problems next to it (each one jumps to its field; Enter in a field jumps to the first one, caught on the form's `keydown` since a disabled default button blocks implicit submission). Crossed dates are reported under the date field changed last: a start moved past the end says "The start must be before the end." under the start, an end moved before the start the reverse. A session expired while filling the form (401 on submit) shows "Reconnect (your input is kept)": the input is parked in `sessionStorage` (`tournament_form_draft:<id\|new>`) across the Keycloak round trip and put back when the form comes back (in edit mode over the server values, the config only while unlocked). |
-| `/tournament/t/:id` | `TournamentDetail.jsx` | Header (status pill, "Private" pill when private), description, 3-step checklist (register on BGA → open your pool → build your deck), the **share box** (link, Copy, Share…, QR code; every status but detached, §14.9), organizer panel. |
+| `/tournament/new` | `TournamentForm.jsx` | Create mode. A **Visibility** radio under the description (Public by default, or Private, §14.9). Live validation (`src/lib/tournamentForm.js` `tournamentFormIssues`, the API's own pure checks + a duplicate-link lookup, `GET /api/tournaments?bgaId=`, debounced while typing; the unique index + 409 on submit stay the real guard): the submit button sits in a bar stuck to the bottom of the screen, disabled while problems remain, with the list of problems next to it (each one jumps to its field; Enter in a field jumps to the first one, caught on the form's `keydown` since a disabled default button blocks implicit submission). Crossed dates are reported under the date field changed last: a start moved past the end says "The start must be before the end." under the start, an end moved before the start the reverse. A session expired while filling the form (401 on submit) shows "Reconnect (your input is kept)": the input is parked in `sessionStorage` (`tournament_form_draft:<id\|new>`) across the Keycloak round trip and put back when the form comes back (in edit mode over the server values, the config only while unlocked). A **Cube** tab next to Sets and Mono-faction mix, its own Settings section, and a **Maximum players** field on every source (§14.10). |
+| `/tournament/t/:id` | `TournamentDetail.jsx` | Header (status pill, "Private" pill when private), description, 3-step checklist (register on BGA → open your pool → build your deck), the **share box** (link, Copy, Share…, QR code; every status but detached, §14.9), organizer panel. The players line ("N / M players", **Full** pill once reached) and, for a cube, "View the cube (N cards) →" (§14.10); step 2 of the checklist reads "This tournament is full" with no button when full. |
 | `/tournament/t/:id/edit` | `TournamentForm.jsx` | Edit mode; BGA link + config disabled once a pool exists. Nothing of the form renders until `GET /api/tournaments/:id` (its `viewer` block) says the viewer may edit; anyone else goes straight to the tournament page (the PATCH is refused server-side anyway, 403). |
 | `/tournament/t/:id/pool` | `TournamentPoolPage.jsx` | `TournamentPoolView` with `load = fetchTournamentPool(id)`, back link to the tournament. |
+| `/tournament/t/:id/cube` | `TournamentCubePage.jsx` | Public. Tournament name, cube name, origin, summary line, players line, a Heroes section, then `CubeContents` (counts by faction / rarity / set, search, grouping, list or grid, hover preview). A non-cube tournament redirects to its page (§14.10). |
 
 Status is derived, never stored: `detached` (detached_at) > `cancelled` (cancelled_at) > `ended`
 (ended_at, or ends_at reached) > `ongoing` (starts_at reached) > `upcoming`. Cancelled and ended
@@ -1630,6 +1639,114 @@ four pages.
 **Merge.** Draft PR stacked on `feat/multiset-sealed` (#26), retargeted to `main` once #25 and #26
 merge; the branch is updated with merge commits, never rebased. Group K of the V4 recette runs on
 preprod before production.
+
+### 14.10 Cube sealed and the player cap (V5)
+
+Format: a fourth source, `source.type = 'cube'`: the organizer picks a cube (a community cube, their
+Re:Union decks, or a pasted list), and the boosters are **dealt from that fixed list so that every
+copy of a card goes to at most one player**. A **player cap** (`tournaments.max_players`) is
+optional on every source and required for a cube (the deal needs it). Scope: declared tournaments
+only; the Lobby's own cube sealed still deals every player from the same pool. Design approved
+2026-11-06 (spec §15); the spec's §15.9 lists what differs from the plan.
+
+**Config.** `{ type: 'cube', name, origin, cubeId, cards, heroPool, boosters, cardsPerBooster, perFaction }`:
+`name` 1–80 chars (editable), `origin` = `community` \| `reunion` \| `paste` (display only), `cubeId`
+the community cube's id (else `null`), `cards` = `{ ref: qty }` (qty 1–99, Σ ≤ 1500), the cube's
+non-hero cards in their **stored form** (the `B` printing of a known set, a unique, or a non-`B`
+printing kept as given when it has no `B` twin, e.g. the promo-only `ALT_BISE_P_BR_64_C`),
+`heroPool` = the selected hero refs (1–200), `boosters` 3–8 (default 7), `cardsPerBooster` 10–16
+(default 12, heroes not counted), `perFaction` 0 \| 1 \| 2 (default 1; 2 needs 12 cards or more).
+A ref's set is checked on its **base set** (`canonicalCardRef`): a promo / OP printing of a set code
+`SETS` does not know (e.g. `ALT_DUSTERTOP_P_AX_04_C` in Wozow's Common Cube) is accepted, and
+`configSetCodes` lists only the base sets `SETS` knows (`['DUSTER']` for it). At most **1000 distinct
+refs needing the cards API** (uniques and non-`B` printings, `CUBE_LIMITS.maxCardApiRefs`), else
+`source.cards`: it bounds the server-side fan-out and is above every community cube.
+Error codes: `source.name`, `source.origin`, `source.cubeId`, `source.cards`, `source.heroPool`,
+`source.boosters`, `source.cardsPerBooster`, `source.perFaction`, `source.poolSize`
+(`boosters × cardsPerBooster < 60`, reported only when both numbers are valid). `heroes: 'packs'`
+puts one hero of the pool in slot 0 of every booster, `free` adds the whole `heroPool` to each pool.
+The uniques block and the ban list do not apply: `uniques` is normalized to zeros and
+`excludeBanlist` to `false`. Rarity plays no part in the deal. Heroes are never cube cards and are
+not subject to "every copy once" (a hero may be in several players' pools).
+
+**Dealing.** `dealCubeSlots` (`src/lib/packGenerator.js`, pure, seeded): the total check runs before
+the per-faction checks (`cube too small: total|<faction> have/needed`); `stack[f]` = the copies of each
+faction shuffled in `FACTIONS` order; `rest` = every stack's leftovers in `FACTIONS` order, then the
+faction-less copies, **shuffled once**; booster `b` takes `perFaction` cards of each faction then the
+rest from `rest`; with heroes in boosters each lot shuffles the pool and booster `i` gets hero
+`i mod n` in slot 0 (`dealHeroSlots` takes an optional rng). Rng order is pinned by
+`src/lib/cubeDeal.golden.test.js`; the six digests of the pool builder did not move.
+`cubeCapacity` (`src/lib/cubeSealed.js`, shared by the form and the API) gives the number of players
+(`min(floor(total / per-player), floor(count_f / (boosters × perFaction)))`, capped at 256) and names
+the limiting term; a capacity under 2 refuses the config (`source.capacity`).
+`getOrCreateTournamentPool` keeps its three steps; the insert goes to **`insertCappedPool`** whenever
+the tournament has a `max_players`, else to `insertPool` (whose `FOR SHARE` also requires
+`max_players IS NULL`, so a cap added in flight re-routes the insert to `insertCappedPool`).
+`insertCappedPool` locks the tournament row `FOR UPDATE` (same conditions as `insertPool`), counts
+**every pool** of the tournament (adopted ones included) and throws `tournament_full` at
+`max_players`; for a cube it deals at the first pool (`max_players` lots into `tournament_cube_slots`,
+one row per lot) and the pool claims the lowest slot no pool holds (`sealed_pools.cube_slot`, unique
+per tournament). The cube is resolved before the lock only while it is not dealt yet: once the slots
+exist, a late pool skips the resolution (a cards-API outage no longer blocks it). Adoption is never
+refused by the cap (a pool already in play is kept), so an adopting declaration may show more pools
+than its cap. `updateTournament` and `detachTournament` lock the same row first; a detach deletes the
+slots, `buildPool` throws on a cube source (no per-player generation).
+
+**Data and server.** `sealed-pools-schema.sql` (idempotent): `tournaments.max_players int null check
+(between 2 and 256)`, `tournament_cube_slots (tournament_ref, slot, boosters jsonb)`,
+`sealed_pools.cube_slot int` with a unique partial index on `(tournament_ref, cube_slot)`.
+`resolveRefs` (`src/lib/cubeSource.js`, isomorphic, shared by the form and the server) maps a ref to
+its stored form: canonical `B` printing when it exists in the set data, else fetched **by reference**
+through the cards API for a unique or a non-`B` printing, else unresolved; `fetchUnique`'s synthetic
+fallback carries `synthetic: true` and is never cached (only real answers are). An unknown ref (404,
+empty `member`) counts as unresolved; an unavailable API (network error, 5xx, timeout) marks the
+synthetic card `unavailable: true` and `resolveRefs` throws `cards_unavailable`, as it does when a set
+file fails to load (`fetchSet` aborts when no response has started after 10 s). `fetchUniques` runs at
+most 8 requests at once and, for `resolveRefs`, starts no new ref once one comes back unavailable
+(`stopOnUnavailable`): an outage answers after one round of retries (about 25 s), whatever the
+cube's size. On POST and on a PATCH that sends a cube,
+`api/_lib/cubeChecks.js` resolves `cards` and `heroPool`, refuses unresolved refs (`source.cards.unresolved`
+/ `source.heroPool.unresolved`), a hero in `cards` or a non-hero in `heroPool`, and a merged quantity
+above 99 (`source.cards`), then stores the source re-keyed by stored forms; `cards_unavailable` answers
+503 `{ error: 'cards_unavailable' }` (the form shows `tournaments.cubeLoadFailed`), and at the first
+pool it is a 409 `pool_unavailable` like `cube_unresolved`, the next request resolving again. The JSON body limit of
+`server/index.js` is 1 MB (a maximal cube config is about 45 KB).
+
+**API.** The contracts of §14.3 gain `maxPlayers` on every tournament JSON, the cube checks on POST /
+PATCH, `fields.maxPlayers` = `invalid_max_players` / `required_for_cube` / `above_capacity` (+
+`capacity`) / `below_pool_count`, the 409 `tournament_full` on the pool and BGA endpoints, and
+`sourceType: 'cube'` + `cube` on the pool JSON. The cap of a cube is locked with its config (409
+`tournament_locked` once a pool exists, `null` refused `required_for_cube`); on the other sources it
+stays editable down to the pool count (checked only when the cap changes), and 1 is never valid (2–256).
+
+**UI.** Form: the **Cube** tab (`TournamentCardsSource` > `CubePicker`: community cubes with Preview,
+"Load from your Re:Union decks", "Paste your own cube", then a "Chosen cube" card with an editable
+name, counts by faction, the unresolved refs and Change cube, hidden once the config is locked); `TournamentCubeSettings` (boosters,
+cards per booster, faction guarantee, hero mode + `HeroPicker` over every hero of the game, live
+pool line) and `MaxPlayersField` (prefilled with the capacity, follows it until the organizer changes it, then only lowered by it; also the last
+field of the other sources' Settings, optional there). Editing an unlocked cube re-resolves the
+stored refs **keeping the stored quantities** and keeps unresolved refs in the config (they show in
+the unresolved callout; the server refuses them with `source.cards.unresolved` if they are truly
+unknown). `TournamentDetail` / hub / "My created tournaments": "N / M players" and `FullBadge`;
+`TournamentChecklist` step 2 "full" state; `TournamentCubePage` (`CubeContents`, extracted from
+`CubePreviewModal`, which is now a thin modal over it). The pool page shows a **generated booster
+cover** for a cube (`src/lib/cubeCover.js`, canvas, the bundled `public/images/altered-logo.png`;
+literal colours allowed) and `PackReveal` waits for it before opening (`coverImage` prop). The
+community cube is named "All Commons" (`src/lib/cubes.js`), 192 cards and 12 heroes. A non-empty cube
+refused on its cards shows the unresolved refs or the generic error, never "Choose a cube.". A direct
+link to the pool page of a full tournament shows `tournaments.step2Full`; a `pool_unavailable` shows
+`tournamentPoolView.couldNotLoadPool` with a Retry button.
+
+**Recette.** `docs/tournaments/acceptance-cube-sealed.html` ("Cube sealed and the player cap — V5", step
+ids `cu-<group>-<slug>`, BGA ids 123510–123517), 44 steps, replayed by
+`tests/e2e/specs/cube-sealed.spec.js`; `cu-g-lower`: with a cap of 2 and 2 pools, raise it to 3, a
+third pool is created, then lowering to 2 is refused (`below_pool_count`). E2E fixtures: CORE, BISE,
+DUSTER and ALIZE trimmed to the All Commons cube (`node scripts/e2e-card-fixtures.mjs --cube
+all-commons --keep ALT_DUSTER_B_AX_98_C`). `scripts/e2e-acceptance-coverage.mjs` reads the five pages.
+
+**Merge.** Draft PR on `main` (#25–#30 merged), branch `feat/cube-sealed` updated with merge commits,
+never rebased. Group M of the V5 recette (preprod, a cube tournament end to end and a full one) runs
+before production.
 
 ---
 

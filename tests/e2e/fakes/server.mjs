@@ -69,6 +69,12 @@ export function createFakeServer() {
     if (!persona) return res.status(404).json({ error: 'unknown_user' })
     res.json(decks.decksOf(persona.sub))
   })
+  app.post('/__control/decks', (req, res) => {
+    const { user, name, deckCards } = req.body ?? {}
+    const persona = PERSONAS[user]
+    if (!persona) return res.status(404).json({ error: 'unknown_user' })
+    res.status(201).json(decks.seed(persona.sub, { name, deckCards: deckCards ?? [] }))
+  })
   app.get('/__control/requests', (req, res) => res.json(decks.requests))
   // The 404s below since the last drain: the guard fixture drains before and after each test
   // and fails it on any, so a route the app needs but the fakes lack never goes unnoticed.

@@ -1,6 +1,6 @@
 # User-created sealed tournaments — design spec
 
-> Status: **validated design (2026-10-16); lot 1, V2, V3 and V4 implemented, lots 2–3 pending**. Companion to `README.md` in this
+> Status: **validated design (2026-10-16); lot 1, V2, V3 and V4 implemented, V5 (cube sealed, §15) designed 2026-11-06, lots 2–3 pending**. Companion to `README.md` in this
 > folder, which documents the tournament feature as it exists today (one global competitive
 > format, one pending pool per player, lazy binding on the first BGA call). This spec describes
 > how that model is extended so that **organizers declare their own tournaments** with their own
@@ -22,6 +22,7 @@ Table of contents
 12. [Risks, open verifications, non-goals](#12-risks-open-verifications-non-goals)
 13. [V3 — Multi-set sealed and random uniques](#13-v3--multi-set-sealed-and-random-uniques-design-2026-11-01)
 14. [V4 — Private tournaments and the share box](#14-v4--private-tournaments-and-the-share-box-design-2026-11-01)
+15. [V5 — Cube sealed and the player cap](#15-v5--cube-sealed-and-the-player-cap-design-2026-11-06)
 
 ---
 
@@ -226,8 +227,7 @@ One shape for tournaments, for the legacy format (converted on read), and later 
 }
 ```
 
-- `source.type`: lot 1 accepts `set`; **V2 (2026-10-30) accepts `faction`**: `{ type: 'faction', faction, sets: { CODE: 1..3 }, boosters: 7 }` (weights 1–3, zero dropped, COREKS refused, `uniques.faction` forced to `faction`, `evenFactions` false); **V3 (2026-11-01, §13) accepts `multiset`**: `{ type: 'multiset', sets: { CODE: boosters }, boosters: 7 }` (counts 0–7, zero dropped, Σ = 7, COREKS refused; a multiset left with one set is **normalized to `set`**). Lot 2 adds `cube` (`{ type, cubeId?, name, cards[],
-  heroes[] }` — built-in cubes are snapshotted by refs, not referenced by id).
+- `source.type`: lot 1 accepts `set`; **V2 (2026-10-30) accepts `faction`**: `{ type: 'faction', faction, sets: { CODE: 1..3 }, boosters: 7 }` (weights 1–3, zero dropped, COREKS refused, `uniques.faction` forced to `faction`, `evenFactions` false); **V3 (2026-11-01, §13) accepts `multiset`**: `{ type: 'multiset', sets: { CODE: boosters }, boosters: 7 }` (counts 0–7, zero dropped, Σ = 7, COREKS refused; a multiset left with one set is **normalized to `set`**); **V5 (2026-11-06, §15) accepts `cube`**: `{ type: 'cube', name, origin, cubeId, cards: { ref: qty }, heroPool: [refs], boosters: 3..8, cardsPerBooster: 10..16, perFaction: 0|1|2 }` (the cube's content snapshotted by refs, never referenced by id; `uniques` forced to none and `excludeBanlist` to `false`; the pool is not a function of `(sub, nonce)` any more but a slot of one deal per tournament, §15.3).
 - `uniques.randomOneIn` (V3, §13): `null` (default: the exact counts below) or an integer 1–10,
   "one unique in N boosters": every booster independently gets a unique in its last rare slot
   with probability 1/N. When set, `inBoosters` is forced to 0 and `evenFactions` to `false`
@@ -455,6 +455,7 @@ Theming: semantic tokens only (`surface`, `ink`, `accent`, …), as in `CLAUDE.m
 | **V2. Mono-faction sealed** | source.type = 'faction', weighted sets, exact quotas, nullable set_code, recette page + Playwright steps | After lot 1 | 3–4 days |
 | **V3. Multi-set sealed + random uniques** | source.type = 'multiset' (7 single-set boosters split over sets, normalized to `set` for one set), `uniques.randomOneIn` (one unique in N boosters, every source), the "Sets" tab with its disclosure, recette page + Playwright steps. Design in §13. Takes the "multi-set" and "random uniques" items out of lot 2. | After V2 (stacked on its branch) | 3–4 days |
 | **V4. Private tournaments + share box** | `tournaments.visibility` (public / private, listing only), the §14.3 listing rule, the redacted `?bgaId=` answer, the private badge, the share box (copy, native share, local QR code), the Lobby's QR code moved to the same local component, recette page + Playwright steps. Design in §14. | After V3 (stacked on its branch) | 2.5–3 days |
+| **V5. Cube sealed + player cap** | `source.type = 'cube'` (a community cube, the organizer's Re:Union decks or a pasted list, snapshotted in the config), one deal per tournament (every copy of a card given at most once across the players), cube booster settings (boosters per player, cards per booster, faction guarantee), a hero pool chosen in the form, `tournaments.max_players` (optional on every source, required for a cube), 409 `tournament_full`, the cube page, the generated booster cover, recette page + Playwright steps. Design in §15. Takes the "cubes" item out of lot 2. | After V4 (from `main`) | 5–7 days |
 
 Estimates are effective dev days with Claude Code, tests and review included, excluding time
 waiting on Re:Union.
@@ -831,3 +832,295 @@ methods → the URL selected, the label unchanged; Share… absent in Chromium,
 - The `QrCode` component's props (`value`, `size`, `label`, `className`, `testId`), as long as the
   Lobby and the share box both render through it. **As built:** exactly those, `size` = 120 and
   `testId` = `qr-code` by default (the share box passes `share-qr`).
+
+## 15. V5 — Cube sealed and the player cap (design, 2026-11-06)
+
+Approved 2026-11-06 after the V4 merge. Two additions to declared tournaments, shipped in one PR
+on `feat/cube-sealed` (from `main`, #27 merged): a **cube sealed** source (the boosters are dealt
+from a fixed card list, every copy of a card given to at most one player) and a **player cap**
+(`tournaments.max_players`, optional on every source, required for a cube, which the deal
+needs). Scope is declared tournaments only (`/tournament/new`, stored pools, the BGA path): not
+the Lobby's own cube sealed (which keeps dealing every player from the same pool, cards shared),
+not `current_format`, not the legacy pools, no change to the BGA-facing contracts beyond one new
+409 (`tournament_full`, below). Everything downstream of a stored pool (deck builder, Re:Union
+deck sync, BGA deck-list validation) is unchanged: a cube pool is a normal `sealed_pools` row
+with `cards` and `boosters`.
+
+**A cube pool is not a function of `(sub, config, nonce)`.** Every source so far builds each
+player's pool in isolation. "A card of the cube is given only once" is a property of the
+tournament, not of a pool, so a cube tournament is **dealt once**: at its first pool the whole
+cube is shuffled and cut into `max_players` lots of boosters (§15.3); every pool then claims the
+next free lot under a row lock. The lots are stored (`tournament_cube_slots`), the pools are
+stored as today, nothing is ever regenerated.
+
+### 15.1 Why
+
+Cube sealed is how playgroups play a curated list: the organizer builds the cube, every player
+opens boosters from it, and a card opened by one player is not opened by another, which is the
+whole point of a cube over a set. The Lobby offers cubes (community cubes, the player's Re:Union
+decks, a pasted list) but its sealed path deals every player from the same pool, so two players
+can open the same copy. Declared tournaments had no cube source at all. And a cube is finite:
+once its lots are dealt no new player can join, so tournaments need a player cap, which BGA
+cannot enforce for us (an organizer sets the same cap on BGA by hand).
+
+### 15.2 Decisions
+
+| Topic | Decision |
+| --- | --- |
+| Config of the source | A fourth `source.type`, **`cube`**: `{ type: 'cube', name, origin, cubeId, cards, heroPool, boosters, cardsPerBooster, perFaction }`. `name` 1–80 chars (trimmed; the organizer may edit it). `origin` ∈ `community` \| `reunion` \| `paste` (display only); `cubeId` the community cube's id (`src/lib/cubes.js`) when `origin === 'community'`, else `null`. `cards` = `{ ref: qty }` (qty 1–99, Σ ≤ **1500**), the cube's non-hero cards, every ref in its **stored form** (below): the `B` printing of a known set (hidden COREKS allowed), a unique `_U_<serial>`, or a non-`B` printing (`_A_` / `_P_`) of a known set that has no `B` twin, kept as given. `heroPool` = the distinct hero refs the organizer selected (1–200, sorted, same forms). Error codes: `source.name`, `source.origin`, `source.cubeId`, `source.cards` (shape, a bad ref, a bad qty, Σ > 1500 or empty), `source.heroPool` (shape, empty, a bad ref), `source.boosters` (not 3–8), `source.cardsPerBooster` (not 10–16), `source.perFaction` (not 0, 1 or 2, or 2 with fewer than 12 cards per booster), `source.poolSize` (`boosters × cardsPerBooster < 60`). The pure validator checks shapes and ranges only; whether a ref exists, is a hero or not, and the capacity are server checks (§15.4). |
+| Booster composition | `cardsPerBooster` non-hero cards (10–16, default 12): first `perFaction` cards of each faction in `FACTIONS` order (`perFaction` = 0 none, 1 one of each = 6 cards, 2 two of each = 12 cards, which needs `cardsPerBooster ≥ 12`), then the rest drawn at random from what is left. **Rarity plays no part**: commons, rares, exalted and uniques of the cube are all dealt the same way. `heroes: 'packs'` adds one hero in slot 0 (so a booster shows 13 cards at the default), `free` adds every hero of `heroPool` to each pool and no hero in the boosters. Defaults in the form: 7 boosters, 12 cards, one of each faction, heroes in boosters. The faction of a card is the card object's `faction` (`mainFaction`), so an out-of-faction `_R2` print counts for its real faction and a unique for its own. |
+| Every copy once | The cube is a multiset (`qty` copies of a ref are `qty` distinct copies). Over the whole deal a copy is used at most once. Two copies of the same card **may** land in the same booster when the cube lists several copies (no intra-booster dedup: a cube that lists duplicates means it). |
+| Heroes | Heroes are **never cube cards** and are **not** subject to "every copy once". The hero refs found in a pasted list or an imported deck are split out (as the Lobby does) and become the preselected `heroPool`; a community cube's `heroes` likewise. The organizer edits the selection from **every hero of the game** (the `HERO` cards of every visible set, `B` printings, deduplicated by reference), grouped by faction with a search box and per-faction "All" / "None". At least one hero. `packs`: for each lot, the pool is shuffled and booster *i* gets hero `i mod n`, so a player's boosters hold distinct heroes until the pool is exhausted, and the draw is independent between players (a hero may appear in every player's boosters). `free`: `heroPool` appended once to each pool's `cards`. |
+| Settings hidden for a cube | The whole uniques block (exact / random, guaranteed, faction, even factions) and the ban list: `uniques` is normalized to `{ inBoosters: 0, guaranteed: 0, evenFactions: false, faction: null, randomOneIn: null }` and `excludeBanlist` to `false` (no `banlist` key), client values ignored, never an error. The cube's own uniques are ordinary cards. The summary line never shows those parts for a cube. |
+| Player cap | New column `tournaments.max_players int null check (max_players between 2 and 256)`. API field `maxPlayers`: `null` = no limit (the default, and the only possible value before V5), else an integer 2–256 (`fields.maxPlayers = 'invalid_max_players'`). **Required for a cube** (`'required_for_cube'`) and **at most the cube's capacity** (`'above_capacity'`, the 400 body also carries `capacity`). Shown everywhere as "N / M players" next to the pool count, with a **Full** pill once `poolCount ≥ maxPlayers`. |
+| Capacity | Pure, shared by the form (live) and the API: `players = min(floor(total / (boosters × cardsPerBooster)), min over factions of floor(count_f / (boosters × perFaction)))` (the faction term only when `perFaction > 0`), capped at 256, with the limiting term named (`total` or a faction). A capacity below 2 refuses the config (`source.capacity`, the body carries `capacity`): "This cube cannot serve 2 players with these boosters". The form prefills `maxPlayers` with the capacity and follows it, up and down, until the organizer changes the field; after that it is only lowered when the capacity falls below it (never raised, never refilled). |
+| Editing the cap | A cube's `maxPlayers` sizes the deal: **locked with the config** (409 `tournament_locked` once a pool exists; the form disables it with the rest). On the other sources it is editable in every status but detached, with or without pools, but never below the current pool count (`fields.maxPlayers = 'below_pool_count'`); raising it or clearing it is always allowed. |
+| Full | Creating the `(max_players + 1)`-th pool is refused with **409 `tournament_full`** (`{ error: 'tournament_full', maxPlayers }`) on `/api/tournaments/:id/pool`, and the same 409 on `/api/tournament-bga-decklist` and `/api/tournament-pool-counts` (so BGA gets a 409 for that player; altered-bga-api relays it and the game cannot fetch a deck list: a player beyond the cap cannot play, which is the right outcome and the reason for the "set the same limit on BGA" hint). An **existing** pool is always returned. The count is every pool of the tournament, adopted legacy pools included; **adoption itself is never refused by the cap** (a pool already in play is kept, spec §2 "Declared after BGA started"), so a tournament declared after BGA started may show more pools than its cap, and an adopted pool of a cube tournament (only reachable through the race window of §6 step 2) holds its legacy contents and no slot: the deal always produces `max_players` lots, of which at most `max_players − adopted` get claimed. The check runs under the same row lock as the insert (§15.3), so two players racing for the last place never both get one. The checklist's step 2 reads "This tournament is full (M players)" with no button; the hub and the page show the Full pill. |
+| The deal | At the first pool of a cube tournament, inside the transaction that inserts it: the cube's card objects are loaded before the lock (sets + uniques), the tournament row is locked `FOR UPDATE` (config still equal, not detached), `dealCubeSlots` (§15.3) cuts the cube into `max_players` lots of `boosters` boosters with a seeded rng, the lots are inserted into `tournament_cube_slots (tournament_ref, slot, boosters jsonb)`, and the pool takes slot 0. Every later pool, under the same lock, takes the lowest slot no pool holds (`sealed_pools.cube_slot`, unique per tournament). A detach deletes the slots with the pools; a delete (zero pools, so no deal yet) cascades. Nothing is regenerated: `buildPool` throws on a cube source (no per-player generation exists). |
+| Resolving a ref, its stored form (builder check, 2026-11-06) | **One algorithm, `resolveRefs`, shared by the form and the server** (`src/lib/cubeSource.js`, isomorphic: `fetchSet` / `fetchUniques` are). For a ref as given: `canon = canonicalCardRef(ref)` (an alt-art, promo or promo-set-code ref rewritten to the `B` printing of its base set); when `canon` is in that set's data the card is **stored as `canon`** (the same gameplay card); otherwise, when the given ref is a unique or a non-`B` printing (`needsCardApi`), it is fetched **by reference** through the cards API, as the Lobby does for its built-in cubes, and **stored as given** (so the promo-only "Sofia, First Outpost", `ALT_BISE_P_BR_64_C`, which has no `B` twin, is an eligible cube card: "All commons" counts **192** in a tournament as in the Lobby); otherwise it is **unresolved**, listed under the ref as given and left out. `fetchUnique` never fails (after 3 tries it returns a bundled snapshot or a synthetic card): the synthetic fallback now carries `synthetic: true` and counts as unresolved, so a mistyped serial is refused instead of dealt as a faction-less card. Every card map that reads a pool (`buildCardMap` server-side, the pool page client-side) resolves the `needsCardApi` refs by reference too, not only the uniques. |
+| Verifying the cube server-side | On POST and on a PATCH that sends a cube config, the server runs `resolveRefs` over `cards` and `heroPool`, refuses a ref it cannot resolve (400 `config: ['source.cards.unresolved']` or `['source.heroPool.unresolved']`, the body carries `unresolved: [refs]`), a `heroPool` ref that is not a hero, a `cards` ref that is a hero (`source.heroPool` / `source.cards`), then **stores the source re-keyed by stored forms** (quantities merged; a no-op for what the form sends, since the form resolves first), computes the capacity and checks `maxPlayers`. The same resolver feeds the deal, so a cube that was accepted always deals; should the cards API be down at deal time, the first pool fails with 409 `pool_unavailable` (try again later), never a degraded deal. The form resolves on the client first (unresolved refs are shown and left out before anything is sent). The JSON body limit of `server/index.js` is raised to 1 MB (a maximal cube config is about 45 KB, the Express default is 100 KB). |
+| Cube tab (Cards section) | A third tab **"Cube"** next to "Sets" and "Mono-faction mix", holding `CubePicker`: the three ways of the Lobby in the same order, **community cubes** (one card per cube with name, author, card count, description, a **Preview** button opening `CubePreviewModal`), **"Load from your Re:Union decks"** (load, name search, format chips, tick one or several decks, merged into one cube), **"Paste your own cube"** (name, textarea, Parse). Once a cube is chosen the three panels give way to one **"Chosen cube"** card: an editable name, the origin, "N cards (D distinct) · H heroes found in the list", one count per faction (icon + number), the unresolved refs (left out, never silently dropped), **Preview** and **Change cube** (back to the three panels; the pasted text is kept). Locked: the chosen-cube card only, Preview still works. `CubePicker` is a dedicated component built for the form; the Lobby keeps its inline code unless swapping it in is a drop-in (last, optional task of the plan). |
+| Settings section for a cube | Replaces `SettingsFields` + `TournamentUniqueFields` entirely (`TournamentCubeSettings`). **Boosters**: "Boosters per player" stepper 3–8, "Cards per booster" stepper 10–16 with the hint "Not counting the hero", "Faction guarantee" as three option cards (none / one of each faction / two of each faction, the third disabled under 12 cards), a live line "84 cards per player (7 × 12), plus a hero in each booster" and the rarity note. **Heroes**: the two option cards of today's sealed settings (in boosters / free choice, cube wording), then `HeroPicker`: a closed summary "N heroes selected" and a **Choose heroes** button that opens an inline panel (search, per-faction groups with counts and All / None, chips with the faction icon, the name and the set abbreviation), the cube's heroes preselected. **Players**: `MaxPlayersField` ("Maximum players", a number input, the capacity line "This cube allows up to N players with these boosters. Limiting: Yzmir, 56 cards." or the too-small message, and the BGA hint). The same `MaxPlayersField` closes the Settings section of the other sources, optional there ("No limit" when empty). |
+| Summary line | `7 boosters of 12 · cube “All commons” (192 cards) · 1 of each faction per booster` (`summaryCube`, then `summaryPerFaction1` / `summaryPerFaction2`, then `summaryHeroesFree` when free). The player cap is not part of the config: the cards and the page print `3 / 8 players` after the pool count, with the Full pill. |
+| Cube page | `/tournament/t/:id/cube` (`TournamentCubePage.jsx`), public like the tournament page, linked from the tournament header ("View the cube (192 cards) →") and from the pool page's title bar. Header: tournament name, cube name, origin, the summary line, the players line; a **Heroes** section (chips, mode text); then `CubeContents`, the body of today's `CubePreviewModal` extracted (sidebar counts by faction / rarity / set, search, group by faction / set / rarity, list or grid, hover preview), over the cube's cards. `CubePreviewModal` becomes a thin modal around `CubeContents`. A non-cube tournament redirects to its page. |
+| Pool page and reveal | `poolResponse.sourceType = 'cube'` and a new `cube: { name, cardCount }` block. `PackReveal`: no set photo for a cube; instead a **generated booster cover**, drawn in a canvas from the bundled Altered logo (`public/images/altered-logo.png`, 512 × 512 with alpha, added by this PR) on a deep blue ground with the tournament name and "Cube · <cube name>" in the display face, exported as a PNG data URL (`cubeBoosterCover`, memoized per name pair) and handed to the existing `zoomCover.image`. Literal colours are allowed there (content, like the QR code). The heading's sublabel is the cube name; the bonus pack never appears (no unique outside the boosters). The pool's card map follows the refs' sets (COREKS included, `SETS` knows it) and resolves the `needsCardApi` refs (uniques and non-`B` printings) by reference. |
+| Hub and page | "N pools prepared" becomes "N / M players" when `maxPlayers` is set (hub cards, "My created tournaments", the tournament header), plus `FullBadge` (a pill like `PrivateBadge`, `data-testid="tournament-full"`) once full. The organizer panel is unchanged. |
+| Determinism | The deal rng is `mulberry32(hashSeed(`${tournament.id}|cube|${nonce}`))` with a fresh nonce (not stored: the lots are). `dealCubeSlots` takes the rng, so a golden (its own file, `src/lib/cubeDeal.golden.test.js`) pins the deal of a fake cube; the six existing golden digests of `poolBuilder.golden.test.js` must not move (the cube path touches none of the shared draw code). Rng order is a contract (§15.3). |
+| Size | A 360-card cube is about 10 KB of jsonb and 2 KB gzipped on the wire; the config travels whole in the lists (no stripping in V5; Σ ≤ 1500 bounds it). The lots: `max_players × boosters × (cardsPerBooster + 1)` refs, under 20 KB for 8 players. |
+| Recette | A new page `docs/tournaments/acceptance-cube-sealed.html` ("Cube sealed and the player cap — V5", ids `cu-<group>-<slug>`, BGA ids 123510–123519, preprod 999510–999511), fifth entry of `scripts/e2e-acceptance-coverage.mjs`'s `ACCEPTANCE_PAGES`. Playwright `tests/e2e/specs/cube-sealed.spec.js` on the e2e card fixtures extended with the sets of the "All commons" community cube, trimmed to its refs. |
+| Branch | `feat/cube-sealed` from `main` (#25–#28, #30 merged), draft PR until group M of the recette runs on preprod; updated with merge commits, never rebased. |
+
+### 15.3 Dealing (`dealCubeSlots`, `insertCappedPool`)
+
+**Pure** (`src/lib/packGenerator.js`):
+
+```
+dealCubeSlots({ cards, heroPool, slots, boosters, cardsPerBooster, perFaction, heroesInBoosters }, rng)
+  → string[][][]   // slots × boosters × refs
+```
+
+`cards` is the cube expanded to one entry per copy, `[{ ref, faction }]` (`expandCube(cards)` in
+`src/lib/cubeSealed.js` turns `{ ref: qty }` plus a card map into that list). Rng order, pinned
+by the golden:
+
+1. For each faction in `FACTIONS` order: `stack[f] = shuffle(copies of faction f, rng)`.
+2. `rest = shuffle(every copy not taken by step 3, rng)`: the stacks are cut first (step 3 is a
+   count, not a draw), then everything left over, every faction mixed, is shuffled once.
+3. `totalBoosters = slots × boosters`. Booster `b` (`b = s × boosters + i`): for each faction in
+   `FACTIONS` order, `perFaction` refs from `stack[f]` (positions `b × perFaction …`), then
+   `cardsPerBooster − 6 × perFaction` refs from `rest`, in stack order. Throws
+   `cube too small: <faction|total> <have>/<needed>` when a stack is short (the capacity check
+   makes it unreachable).
+4. `heroesInBoosters`: for each slot in order, `bag = shuffle(heroPool, rng)`; booster `i` of the
+   slot gets `bag[i mod bag.length]` **prepended** (slot 0). `dealHeroSlots` gains an optional
+   `rng` parameter for that (the Lobby keeps calling it without one).
+
+The refs of a booster stay in draw order (the guaranteed cards first, faction by faction, then the
+random ones).
+
+**Capacity** (`src/lib/cubeSealed.js`, pure, used by the form and the API):
+
+```
+cubeCapacity({ cards: [{ ref, qty, faction }], boosters, cardsPerBooster, perFaction })
+  → { players, total, byFaction: { AX, BR, LY, MU, OR, YZ }, limit: { by: 'total' | <faction>, have, needed } }
+```
+
+`needed` is per player (`boosters × cardsPerBooster` for `total`, `boosters × perFaction` for a
+faction). A copy whose faction is unknown counts in `total` only. `players` is capped at 256.
+
+**Server** (`src/lib/poolStore.js`): `getOrCreateTournamentPool` keeps its three steps (existing
+pool, adoption, insert); the insert goes to **`insertCappedPool`** whenever the tournament has a
+`max_players` (every cube tournament has one), to `insertPool` otherwise (unchanged, `FOR SHARE`).
+
+```
+insertCappedPool(sub, { config, tournament, createdBy }):
+  cube      = source.type === 'cube' ? await resolveCubeSource(config)      // before the lock
+  built     = source.type !== 'cube' ? await buildPool(sub, { config, nonce }) : null
+  withTransaction(q):
+    row = SELECT * FROM tournaments WHERE id = $1 AND bga_tournament_id = $2 AND config = $3::jsonb
+          AND detached_at IS NULL FOR UPDATE                     → none: return null (caller re-reads, retries)
+    n   = count(*) FROM sealed_pools WHERE tournament_ref = $1   → n >= row.max_players: throw tournament_full
+    if cube:
+      if no row in tournament_cube_slots for $1:
+        lots = dealCubeSlots({ …, slots: row.max_players, … }, mulberry32(hashSeed(`${row.id}|cube|${nonce}`)))
+        INSERT INTO tournament_cube_slots (tournament_ref, slot, boosters) one row per lot
+      free = SELECT slot, boosters FROM tournament_cube_slots s WHERE s.tournament_ref = $1
+             AND NOT EXISTS (SELECT 1 FROM sealed_pools p WHERE p.tournament_ref = $1 AND p.cube_slot = s.slot)
+             ORDER BY slot LIMIT 1                                → none: throw tournament_full
+      cards = counts of free.boosters (+ heroPool × 1 each when heroes === 'free'); boosters = free.boosters
+    INSERT INTO sealed_pools (…, cube_slot) … ON CONFLICT (sub, tournament_ref) … DO NOTHING RETURNING *   (through q)
+```
+
+A synthetic unique in `resolved` (the cards API unreachable) throws `cube_unresolved` before the
+lock; the pool handlers answer 409 `pool_unavailable` for it. `updateTournament` (`requireUnlocked`) and `detachTournament` lock the same row `FOR UPDATE` first,
+so a config edit, a detach and the pool creations of one tournament serialize without deadlock;
+`insertPool`'s `FOR SHARE` stays compatible with all of them. `detachTournament` also deletes the
+tournament's `tournament_cube_slots`. `resolveRefs(refs, { fetchSet, fetchUniques, lang })`
+(`src/lib/cubeSource.js`, isomorphic, fetchers injectable for tests) maps each ref as given to its
+stored form and card, or to `unresolved` (§15.2 "Resolving a ref"); `resolveCubeSource(source,
+deps)` runs it over a stored cube and returns `{ cards: [{ ref, qty, faction, cardType }], heroes:
+[{ ref, faction }], unresolved: [refs], stored: { cards, heroPool } }` (`stored` = the source
+re-keyed by stored forms). The form's `resolveCubeCards` (raw refs with duplicates, heroes split
+out) is built on the same `resolveRefs`.
+
+### 15.4 Config, rules, API
+
+- `validateTournamentConfig` (pure): the `cube` branch of §15.2; `configSetCodes` returns the
+  distinct sets of `cards` and `heroPool` in `SETS` order; `legacyColumnsFromConfig` gives
+  `set_code: null, unique_count: 0, even_factions: false, heroes_in_pool: heroes === 'packs',
+  guaranteed_uniques: 0`. `SOURCE_TYPES` gains `'cube'`; `CUBE_LIMITS` (`src/lib/cubeSealed.js`) holds
+  the ranges: boosters 3–8, cards per booster 10–16, per faction 0–2, 1500 cards, 60 cards per
+  player, 256 players.
+- `validateTournamentFields`: `maxPlayers`, optional on create (absent, `null` or `''` → `null`),
+  validated on a PATCH only when the key is sent; integer 2–256 else `invalid_max_players`.
+- Cross-field, in the handlers and in `tournamentFormIssues` (which receives `capacity` and
+  `poolCount`): cube without `maxPlayers` → `fields.maxPlayers = 'required_for_cube'`; above
+  the capacity → `'above_capacity'`; capacity < 2 → `config: ['source.capacity']`; on a PATCH of a
+  non-cube tournament a `maxPlayers` under the pool count → `'below_pool_count'`.
+
+| Endpoint | Change |
+| --- | --- |
+| `GET /api/tournaments`, `GET /api/tournaments/:id` | Every item carries `maxPlayers` (`null` or the cap). |
+| `POST /api/tournaments` | Accepts `maxPlayers` and the `cube` source. Cube: 400 `config: ['source.cards.unresolved' \| 'source.heroPool.unresolved']` + `unresolved: [refs]`, 400 `config: ['source.capacity']` + `capacity`, 400 `fields.maxPlayers = 'required_for_cube' \| 'above_capacity'` (+ `capacity`). The imposed legacy format (§6) replaces a cube config like any other; `maxPlayers` is then just optional. |
+| `PATCH /api/tournaments/:id` | `maxPlayers`: locked with the config when the effective source (sent or stored) is a cube (409 `tournament_locked`); otherwise editable in every status but detached, 400 `'below_pool_count'` under the pool count. A config sent as a cube goes through the same cube checks as POST, against `maxPlayers` sent or stored (`'required_for_cube'` when neither). |
+| `GET /api/tournaments/:id/pool` | New 409 `{ error: 'tournament_full', maxPlayers }` when no pool exists for the caller and the cap is reached. An existing pool is always returned. |
+| `/api/tournament-bga-decklist`, `/api/tournament-pool-counts` | The same 409 `{ error: 'tournament_full' }` (next to the existing `tournament_unavailable` / `pool_unavailable`). |
+| `poolResponse` (every `/api/tournament-pool*`) | `sourceType: 'cube'` and `cube: { name, cardCount }` for a cube pool; additive. |
+| `/api/tournament-bound-pools` | Unchanged. |
+
+### 15.5 Form, pages
+
+**Form state.** `sourceType` ∈ `set` \| `faction` \| `cube`; `cube` (null, or `CubePicker`'s
+value: `{ name, origin, cubeId, cards: [{ ref, qty, faction, cardType }], heroesFound: [{ ref,
+faction, name }], unresolved: [refs], resolved: true }`); `cubeSettings` `{ boosters: 7,
+cardsPerBooster: 12, perFaction: 1 }`; `heroPool: string[]` (reset to the cube's heroes whenever
+a cube is chosen); `maxPlayers` (`''` or a number, every source). The config sent for a cube is
+`{ type: 'cube', name, origin, cubeId, cards: { ref: qty }, heroPool, ...cubeSettings }` with
+`heroes`, zeroed `uniques` and `excludeBanlist: false`; the body carries `maxPlayers` (`null`
+when empty) on create and on every PATCH that may send it (unlocked, or a non-cube source).
+Capacity is computed live from `cube.cards` and `cubeSettings` once the cube is resolved; the
+`maxPlayers` prefill rule of §15.2 applies only then. Edit prefill of a cube tournament rebuilds
+`cube` from the stored refs and, while unlocked, re-resolves them to get the factions back
+(`resolveCubeCards`); locked, the card is read-only and no capacity is needed. The
+`sessionStorage` draft and the imposed legacy format cover the new state like the rest.
+`tournamentFormIssues` maps the new codes to the fields `cube` (`source.cards`, `source.capacity`),
+`cubeSettings` (`source.poolSize`, `source.perFaction`), `heroPool` (`source.heroPool`) and
+`maxPlayers` (`fields.maxPlayers`), placed after `uniques` in `FIELD_ORDER`.
+
+**Cards section.** `TournamentCardsSource` adds the `cube` tab (`t('tournaments.sourceCube')`) with
+the hint "Every card of the cube is dealt at most once across all players. Pick a community cube,
+load your Re:Union decks, or paste a list." and `<CubePicker value onChange disabled lang />`.
+Test ids: `cube-community-<id>` (the select button), `cube-preview-<id>`, `cube-reunion-load`,
+`cube-reunion-deck-<id>`, `cube-reunion-import`, `cube-paste-name`, `cube-paste-text`,
+`cube-paste-parse`, the chosen card `cube-chosen` with `cube-name`, `cube-count`,
+`cube-faction-<F>`, `cube-unresolved`, `cube-preview`, `cube-change`.
+
+**Settings section.** `TournamentCubeSettings` (test ids `cube-boosters`, `cube-cards-per-booster`,
+the `Stepper` ones, `cube-per-faction-0|1|2`, `cube-pool-line`, `hero-mode-packs`, `hero-mode-free`,
+`hero-pool-count`, `hero-pool-open`, `hero-pool-search`, `hero-faction-all-<F>`,
+`hero-faction-none-<F>`, `hero-chip-<REF>`, `hero-pool-close`) and `MaxPlayersField`
+(`max-players`, `max-players-capacity`, `max-players-limit`). The other sources keep their
+Settings and gain `MaxPlayersField` at the end.
+
+**Pages.** `TournamentDetail`: the players line and `FullBadge` in the header, the cube link
+(`cube-link`) under the summary; `TournamentChecklist`: step 2 "full" state (`step2Full`, also on
+a 409 `tournament_full` from "Open my pool"); `TournamentMenu`: players line + `FullBadge` on the
+cards; `TournamentCubePage` (route `/tournament/t/:id/cube`, `cube-page`, `cube-page-heroes`);
+`TournamentPoolView`: the generated cover (`cubeBoosterCover({ title, subtitle, logoUrl })` in
+`src/lib/cubeCover.js`, a `Promise<string | null>`, null when the canvas or the logo fails so the
+reveal goes straight to the cards) passed to `PackReveal`'s new `coverImage` prop (`undefined` =
+today's behaviour, `null` = no cover, a string = that image) and a "Cube" link in the title bar.
+
+**i18n** (`tournaments.*` and `packReveal.*`, EN + FR): the keys are listed in the plan (Task 3) so
+every UI task reads them from one place.
+
+### 15.6 Tests and recette
+
+- Unit: `tournamentConfig` (the cube branch, every code, the forced uniques and ban list,
+  `configSetCodes`, `legacyColumnsFromConfig`), `tournamentRules` (`maxPlayers`), `cubeSealed`
+  (`cubeCapacity`: total-bound, faction-bound, unknown faction, the 256 cap, below 2; `expandCube`),
+  `packGenerator` (`dealCubeSlots`: sizes, every copy at most once, the faction guarantee, heroes
+  distinct per lot and independent between lots, throws when short, determinism; `dealHeroSlots`
+  with an rng), `cubeDeal.golden` (one digest), `poolBuilder` (throws on a cube source, the six
+  digests unchanged), `cubeSource` (resolver with injected fetchers: unresolved, a hero in `cards`,
+  a non-hero in `heroPool`), `tournamentForm` (the new issues and their order), `TournamentBits`
+  (the cube summary, `FullBadge`), `cubeCover` (the pure text wrapping).
+- Integration (new files next to `tournaments.test.js`, same mocks): the schema (`max_players`,
+  `tournament_cube_slots`, `cube_slot`); POST / PATCH `maxPlayers` on a set tournament (invalid,
+  below pool count, raised, cleared) and the cube checks (unresolved, hero in cards, capacity,
+  required, above capacity, the forced uniques); the deal (first pool deals `max_players` lots,
+  every copy once across the lots, pools claim slots 0, 1, 2 in order, `cards` = booster counts
+  plus free heroes); concurrency (`Promise.all` of three creators on a cap of 2 → two pools, one
+  `tournament_full`); BGA path on a cube tournament (a "Random …" deck from the pool) and its 409
+  when full; detach deletes the slots; a cube `maxPlayers` PATCH is 409 locked once a pool exists.
+- E2E (`cube-sealed.spec.js`; fixtures: the "All commons" cube's sets CORE, BISE, DUSTER, ALIZE
+  trimmed to its refs, every printing of those refs kept (so BISE's holds `ALT_BISE_P_BR_64_C`),
+  next to the three full ones; the fake cards API answers `?reference=` for a non-unique ref from
+  the fixture files, in the alteredcore shape it already uses for uniques; `harness.spec.js`'s
+  "another set answers 404" check moves to a set that has no fixture; card data is read in EN by
+  the form's resolver, as the pool page and the preview already do, since only `_EN.json`
+  fixtures exist): the Cube tab (community select + preview, the
+  Re:Union import from a deck seeded through the fakes, paste with an unresolved ref, the chosen
+  card, change, tab switch keeps the state), the Settings (steppers, the faction guarantee, the
+  pool line, the hero picker, the capacity line and the prefilled cap, the issues), create
+  ("Commons cube", 123510: All commons, 6 × 10, one of each faction, heroes in boosters, cap 3;
+  stored config, summary, "0 / 3 players"), the cube page, three pools (alice, bob, carol: 6
+  boosters of 11, slot 0 a hero of the pool, one card of each faction in slots 1–6, no ref dealt
+  twice across the three pools, every ref in the cube with its qty, the generated cover in the
+  reveal), full ("Full cup" 123511, cap 2: carol's page says full, her BGA call is 409), the cap
+  on a set tournament ("Capped set cup" 123512: the third player blocked, raise, lower below the
+  pools refused), the API guards, the lock on edit, FR, 375 px.
+- Recette groups: 0 setup (branch, `make dev` with the schema check, suites, coverage with five
+  pages, clean ids), A the Cube tab, B the cube Settings, C create, D the cube page, E the pools
+  and the reveal, F full and the BGA 409, G the cap on a set tournament, H API guards, I edit
+  (unlocked: change the cube; locked), J BGA path, K FR / theme / mobile / console, L the Lobby's
+  cubes tab unchanged (only when the optional task ran), M before production (preprod
+  999510–999511: a cube tournament end to end, a full one).
+
+### 15.7 Non-goals and what was weighed
+
+- **Dealing on demand** (each pool drawn from what is left) was weighed and dropped: the faction
+  guarantee of a late player depends on what the random slots of the earlier players consumed, so
+  it needs a reservation computed against the cap anyway; one deal up front gives the same
+  distribution per player, lets the form state the capacity exactly, and keeps one invariant
+  (every copy once) trivially true.
+- **Raising a cube's cap after the deal** (a second deal from the leftovers), several copies of
+  the cube ("2 × the cube"), reopening a place when a player leaves, a cap for the Lobby, a
+  BGA-side enforcement of the cap: later, if asked.
+- **The Lobby's cube sealed** keeps dealing every player from the full pool.
+- **A standalone Altered logo on the CDN**: none exists (checked 2026-11-06); the PNG from
+  altered.re is bundled instead.
+
+### 15.8 Left to the builder
+
+- The exact Tailwind layout of the Cube tab's panels, the chosen-cube card, the hero picker and
+  the cube page (semantic tokens only; the generated cover is the one place with literal colours).
+- Whether `resolveCubeRefs` (the Lobby's) delegates to the new `resolveRefs` or stays as is (it
+  would then resolve a pasted promo-only ref too; a behaviour change for the Lobby, so only with
+  the optional last task).
+- The cover's exact composition (sizes, wrapping) as long as it reads the tournament name and the
+  cube name and uses the bundled logo; `cubeBoosterCover` must never throw (a failure returns
+  `null`).
+- Whether the Lobby adopts `CubePicker` (last task, optional: only if it is a drop-in with no
+  visible change; otherwise the Lobby is left alone).
+
+### 15.9 As built (2026-11-06)
+
+What differs from §15.2–§15.8 once built; the rest stands.
+
+- **Name.** The community cube is "All Commons" (`src/lib/cubes.js`), not "All commons" (a tournament seeded through the API's `cubeTournamentBody` keeps the lowercase name it was given).
+- **Editing an unlocked cube.** The form re-resolves the stored refs **keeping the stored quantities** (not one copy per ref) and keeps unresolved refs in the config, shown in the unresolved callout; the server refuses them with `source.cards.unresolved` when they are truly unknown.
+- **Cap of a cube.** A PATCH `maxPlayers: null` on a cube tournament is refused `required_for_cube` (a cube always has a cap). The cap is locked with the config (409 `tournament_locked` once a pool exists); on the set / faction / multiset sources it stays editable down to the pool count (`below_pool_count`), and 1 is never valid (2–256). So "cap 1 → `below_pool_count`" is unreachable: the recette's `cu-g-lower` runs cap 2 with 2 pools, raise to 3, a third pool, then lowering to 2 is refused (`below_pool_count`, n = 3).
+- **Reveal.** The pool reveal waits for the generated cover (cube pools) before opening; a failed cover (`null`) goes straight to the cards.
+- **`dealCubeSlots`.** The total check runs before the per-faction checks; `rest` = each faction stack's leftovers in `FACTIONS` order, then the faction-less copies, shuffled once (§15.3 step 2 in practice).
+- **`source.poolSize`** is reported only when `boosters` and `cardsPerBooster` are both valid.
+- **Inserts.** `insertPool`'s `FOR SHARE` also requires `max_players IS NULL` (a cap added in flight re-routes the insert to `insertCappedPool`); `insertCappedPool` resolves the cube before the lock only while it is not dealt: once `tournament_cube_slots` has rows a late pool skips the resolution, so a cards-API outage no longer blocks late joiners (§15.2 "Verifying the cube" still holds for the first pool).
+- **Quantities.** After the resolver re-keys the cube by stored forms, a merged quantity above 99 is refused with `source.cards`.
+- **Recette.** `acceptance-cube-sealed.html` has 44 steps over BGA ids 123510–123517.
+- **Base set of a ref.** The config check takes a ref's set from `canonicalCardRef` (its base set): a promo / OP printing of a set code `SETS` does not know (`ALT_DUSTERTOP_P_AX_04_C`, Wozow's Common Cube) is accepted and resolved by reference; `configSetCodes` lists only the base sets `SETS` knows, in `SETS` order. A non-empty cube refused on its cards shows the unresolved refs or the generic error in the form, never "Choose a cube.".
+- **Card data unavailable.** `fetchUnique` never caches its synthetic fallback; an unknown ref (404, empty `member`) is unresolved, an unavailable cards API (network error, 5xx, timeout) or a set file that does not load (`fetchSet` aborts when no response has started after 10 s) makes `resolveRefs` throw `cards_unavailable`: 503 `{ error: 'cards_unavailable' }` on POST / PATCH (the form shows `tournaments.cubeLoadFailed`), 409 `pool_unavailable` on the three pool endpoints at the first pool; the next request resolves again, no restart needed.
+- **Fan-out.** At most 1000 distinct refs needing the cards API (uniques, non-`B` printings; `CUBE_LIMITS.maxCardApiRefs`), else `source.cards` — far above every community cube; `fetchUniques` runs at most 8 requests at once and, for `resolveRefs`, starts no new ref once one comes back unavailable (`stopOnUnavailable`), so an outage answers 503 after one round of retries (~25 s) whatever the cube's size. Refs the community set files hold (`B` printings) are not counted.
+- **Cap prefill (`followCapacity`, `tournamentForm.js`).** The cap follows the capacity up and down until the organizer changes the field once; then a rising capacity no longer raises it, a falling one still lowers it. A stored cap (edit mode) counts as changed.
+- **Locked cube.** The read-only chosen-cube card hides "Change cube" (`CubePicker` `readOnly`); the cube name stays visible, disabled.
+- **Pool page.** A direct link `/tournament/t/:id/pool` on a full tournament shows `tournaments.step2Full`; a `pool_unavailable` shows `tournamentPoolView.couldNotLoadPool` with a Retry button.
+- **Cap edit on set / faction / multiset.** `below_pool_count` is checked only when `maxPlayers` actually changes: a rename of a tournament adopted above its cap passes.

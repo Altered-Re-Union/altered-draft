@@ -19,4 +19,13 @@ Why these three sets:
 | `EOLE` | Roots of Corruption | the active format seeded by `sealed-pools-schema.sql`: normal / preparation pools and the "imposed format" steps draw it |
 | `FUGUE` | Neverending Journey | no faction-range data, which the "uniques unsupported" steps depend on |
 
+Cube sets, for the V5 cube-sealed steps (the All commons community cube and its alt-art paste case):
+
+| Set | Content |
+|---|---|
+| `CORE`, `BISE`, `DUSTER`, `ALIZE` | the All commons cube's refs only, every printing (no `B` filter: BISE holds the promo-only `ALT_BISE_P_BR_64_C`), plus the kept refs |
+
+Refresh: `node scripts/e2e-card-fixtures.mjs --cube all-commons --keep ALT_DUSTER_B_AX_98_C`
+(the full sets above are left as they are).
+
 Any other set answers 404 from the fake, so a pool of that set fails to generate — intended.

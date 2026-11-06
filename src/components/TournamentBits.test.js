@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { configSummaryParts, PrivateBadge } from './TournamentBits.jsx'
+import { configSummaryParts, PrivateBadge, PlayersLine, FullBadge, isFull } from './TournamentBits.jsx'
 import { SETS } from '../lib/cardData.js'
 const t = (key, vars = {}) => `${key}${Object.keys(vars).length ? ' ' + JSON.stringify(vars) : ''}`
 const tc = (key, n) => `${key} ${n}`
@@ -56,5 +56,28 @@ describe('PrivateBadge', () => {
     expect(html).toContain('title="tournaments.privateBadgeTitle"')
     expect(html).toContain('aria-hidden="true"')
     expect(html).toContain('tournaments.privateBadge<')
+  })
+})
+
+describe('cube summary, players line, full pill', () => {
+  const cube = { v: 1, format: 'sealed', source: { type: 'cube', name: 'All commons', origin: 'community', cubeId: 'all-commons', cards: { A: 1, B: 2 }, heroPool: ['H'], boosters: 6, cardsPerBooster: 10, perFaction: 1 }, heroes: 'free', uniques: { inBoosters: 0, guaranteed: 0, evenFactions: false, faction: null, randomOneIn: null }, excludeBanlist: false }
+  it('summarizes a cube: boosters of N, the cube name and size, the faction guarantee, free heroes', () => {
+    expect(configSummaryParts(cube, t, tc).map(p => p.text)).toEqual(['tournaments.summaryCube {"n":6,"cards":10,"name":"All commons","total":3}', 'tournaments.summaryPerFaction1', 'tournaments.summaryHeroesFree'])
+    expect(configSummaryParts({ ...cube, source: { ...cube.source, perFaction: 0 }, heroes: 'packs' }, t, tc)).toHaveLength(1)
+  })
+  it('isFull and PlayersLine', () => {
+    expect(isFull({ poolCount: 2, maxPlayers: 2 })).toBe(true)
+    expect(isFull({ poolCount: 1, maxPlayers: 2 })).toBe(false)
+    expect(isFull({ poolCount: 9, maxPlayers: null })).toBe(false)
+    const capped = renderToStaticMarkup(createElement(PlayersLine, { tournament: { poolCount: 1, maxPlayers: 2 }, t, tc }))
+    expect(capped).toContain('data-testid="tournament-players"')
+    expect(capped).toContain('tournaments.playersOf {&quot;n&quot;:1,&quot;max&quot;:2}')
+    const open = renderToStaticMarkup(createElement(PlayersLine, { tournament: { poolCount: 3, maxPlayers: null }, t, tc }))
+    expect(open).toContain('tournaments.poolsPrepared 3')
+  })
+  it('FullBadge renders the pill', () => {
+    const html = renderToStaticMarkup(createElement(FullBadge, { t }))
+    expect(html).toContain('data-testid="tournament-full"')
+    expect(html).toContain('tournaments.fullBadge')
   })
 })

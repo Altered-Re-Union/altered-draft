@@ -234,3 +234,20 @@ create table if not exists hidden_tournaments (
   hidden_at         timestamptz not null default now(),
   primary key (sub, bga_tournament_id)
 );
+
+-- V5 (cube sealed + player cap): optional cap on the number of players, the per-slot cube
+-- boosters dealt once and kept (one slot = one player seat), and the slot a pool took.
+alter table tournaments add column if not exists max_players int check (max_players between 2 and 256);
+
+create table if not exists tournament_cube_slots (
+  tournament_ref uuid not null references tournaments(id) on delete cascade,
+  slot           int not null,
+  boosters       jsonb not null,
+  dealt_at       timestamptz not null default now(),
+  primary key (tournament_ref, slot)
+);
+
+alter table sealed_pools add column if not exists cube_slot int;
+
+create unique index if not exists sealed_pools_one_pool_per_cube_slot
+  on sealed_pools (tournament_ref, cube_slot) where cube_slot is not null;

@@ -129,6 +129,7 @@ no longer need a manual pass; the items below are the smoke check on a real depl
 - [ ] **BGA path**: a deck-list call (`/api/tournament-bga-decklist?tournamentId=…`) for a declared tournament creates or returns the player's pool for it ("Random <tournament name>" deck when none was built), for an undeclared id binds the generic preparation pool; the organizer panel counts pools "created by BGA games".
 - [ ] **Declared after BGA started**: declaring (or relinking to) a BGA id that players already play with pools in the default format shows, as soon as the link is pasted, that the format is imposed (set and settings locked to theirs); the created tournament adopts their pools at once (they see it on the tournament page, it is locked). Pools of different formats on that id → the declaration is refused (message under the link, 409 server-side).
 - [ ] A pool bound before the stored-pools migration still opens from "My pools" and its deck validates on BGA.
+- [ ] **Cube sealed + player cap**: `/tournament/new` > Cube tab, create from a community cube (e.g. "All Commons"), a cap and a cube page link on the tournament page; each player's pool is a different lot (no card dealt twice, the generated cover in the reveal); the next player after the cap sees "full" and BGA gets a 409 `tournament_full`.
 
 ## 9. Cross-cutting
 - [ ] **FR UI**: no English leftovers or raw keys on the pages touched by the change.

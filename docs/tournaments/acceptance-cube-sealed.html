@@ -1,0 +1,977 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cube Sealed Acceptance</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #f6f5f2;
+  --surface: #ffffff;
+  --surface-2: #f0eee9;
+  --border: #e3e0d8;
+  --text: #1d1b16;
+  --muted: #6b675d;
+  --accent: #4f46e5;
+  --accent-soft: #eceafe;
+  --ok: #15803d;
+  --ok-soft: #e3f4e8;
+  --ko: #c2410c;
+  --ko-soft: #fdebe1;
+  --skip: #7c7768;
+  --skip-soft: #ecebe6;
+  --shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 16px rgba(0,0,0,.04);
+  --radius: 14px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141310;
+    --surface: #1c1b17;
+    --surface-2: #25231e;
+    --border: #34312a;
+    --text: #ece9e1;
+    --muted: #9c978a;
+    --accent: #8b85ff;
+    --accent-soft: #26244a;
+    --ok: #4ade80;
+    --ok-soft: #173322;
+    --ko: #fb923c;
+    --ko-soft: #3a2316;
+    --skip: #a8a394;
+    --skip-soft: #2a2823;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 4px 16px rgba(0,0,0,.25);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #141310;
+  --surface: #1c1b17;
+  --surface-2: #25231e;
+  --border: #34312a;
+  --text: #ece9e1;
+  --muted: #9c978a;
+  --accent: #8b85ff;
+  --accent-soft: #26244a;
+  --ok: #4ade80;
+  --ok-soft: #173322;
+  --ko: #fb923c;
+  --ko-soft: #3a2316;
+  --skip: #a8a394;
+  --skip-soft: #2a2823;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 4px 16px rgba(0,0,0,.25);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.55 Inter, system-ui, sans-serif;
+}
+code, .mono { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: .86em; }
+a { color: var(--accent); }
+.wrap { max-width: 920px; margin: 0 auto; padding: 0 16px 120px; }
+
+header.top {
+  position: sticky; top: 0; z-index: 10;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border);
+}
+header.top .inner { max-width: 920px; margin: 0 auto; padding: 12px 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+header.top h1 { font-size: 17px; margin: 0; font-weight: 700; letter-spacing: -.01em; flex: 1 1 auto; }
+.progress { flex: 1 1 220px; display: flex; align-items: center; gap: 10px; }
+.bar { flex: 1; height: 8px; border-radius: 99px; background: var(--surface-2); overflow: hidden; display: flex; }
+.bar span { height: 100%; transition: width .3s ease; }
+.bar .b-ok { background: var(--ok); }
+.bar .b-ko { background: var(--ko); }
+.bar .b-skip { background: var(--skip); }
+.count { font-size: 13px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.filters { display: flex; gap: 4px; background: var(--surface-2); padding: 3px; border-radius: 10px; }
+.filters button { border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 13px; padding: 4px 10px; border-radius: 8px; cursor: pointer; }
+.filters button.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+.tabs button { font-weight: 600; }
+.badge { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; margin-left: 4px; border-radius: 99px; background: var(--ko); color: #fff; font-size: 11px; font-weight: 700; }
+.new-tag { display: inline-block; font-size: 11px; font-weight: 700; padding: 0 6px; border-radius: 99px; background: var(--accent); color: #fff; vertical-align: 2px; }
+.new-tag.v11 { background: #6d5bd0; }
+.new-tag.auto { background: #2f7d4f; }
+.icon-btn { border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 10px; padding: 5px 9px; cursor: pointer; font: inherit; font-size: 13px; }
+
+.hero { padding: 36px 0 8px; }
+.hero h2 { font-size: 28px; line-height: 1.2; margin: 0 0 8px; letter-spacing: -.02em; }
+.hero p { color: var(--muted); margin: 0; max-width: 680px; }
+
+.cast { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; margin: 24px 0 8px; }
+.persona { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; box-shadow: var(--shadow); min-width: 0; }
+.persona .tag { display: inline-block; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; padding: 2px 8px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); margin-bottom: 6px; }
+.persona .org { font-weight: 600; }
+.persona .meta { color: var(--muted); font-size: 13px; }
+
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; max-width: 100%;
+  border: 1px dashed var(--border); background: var(--surface-2); color: var(--text);
+  border-radius: 8px; padding: 1px 8px; font-family: "JetBrains Mono", monospace; font-size: 12.5px;
+  cursor: pointer; word-break: break-all; text-align: left;
+}
+.chip:hover { border-color: var(--accent); }
+.chip.copied { border-color: var(--ok); color: var(--ok); }
+
+section.group { margin-top: 36px; }
+section.group > h3 { display: flex; align-items: baseline; gap: 10px; font-size: 19px; margin: 0 0 4px; letter-spacing: -.01em; }
+section.group > h3 .letter { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 8px; background: var(--text); color: var(--bg); font-size: 14px; flex: none; }
+section.group > h3 .gcount { margin-left: auto; font-size: 13px; color: var(--muted); font-weight: 500; }
+section.group > .intro { color: var(--muted); margin: 0 0 14px 38px; font-size: 14px; }
+section.group > h3 { cursor: pointer; user-select: none; border-radius: 8px; }
+section.group > h3:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+section.group > h3 .chev { flex: none; align-self: center; color: var(--muted); font-size: 12px; transition: transform .2s; }
+section.group.collapsed > h3 .chev { transform: rotate(-90deg); }
+section.group.collapsed > :not(h3) { display: none; }
+.fold { display: flex; gap: 6px; justify-content: flex-end; margin: 24px 0 -16px; }
+.fold button { border: 1px solid var(--border); background: var(--surface); color: var(--muted); font: inherit; font-size: 13px; padding: 4px 10px; border-radius: 8px; cursor: pointer; }
+.fold button:hover { color: var(--text); }
+
+.step {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  margin-bottom: 10px; box-shadow: var(--shadow); overflow: hidden;
+  transition: border-color .2s, opacity .2s;
+}
+.step[data-status="ok"] { border-color: color-mix(in srgb, var(--ok) 40%, var(--border)); }
+.step[data-status="ok"] .s-title { color: var(--muted); }
+.step[data-status="ko"] { border-color: var(--ko); }
+.step[data-status="skip"] { opacity: .65; }
+.s-head { display: flex; gap: 12px; padding: 14px 16px; align-items: flex-start; }
+.s-num { flex: none; font-size: 12px; font-weight: 600; color: var(--muted); padding-top: 3px; width: 30px; font-variant-numeric: tabular-nums; }
+.s-body { flex: 1; min-width: 0; }
+.s-title { font-weight: 600; margin: 0 0 4px; }
+.s-who { font-size: 13px; color: var(--muted); margin-bottom: 6px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.s-body ul { margin: 6px 0 0; padding-left: 18px; }
+.s-body li { margin: 2px 0; }
+.s-body li::marker { color: var(--muted); }
+.s-body .note { font-size: 13px; color: var(--muted); margin-top: 6px; }
+.s-body pre { background: var(--surface-2); border-radius: 10px; padding: 10px 12px; overflow-x: auto; font-size: 12.5px; margin: 8px 0 0; white-space: pre-wrap; word-break: break-word; position: relative; }
+.s-body pre .copy-pre { position: absolute; top: 6px; right: 6px; }
+
+.status { display: flex; gap: 4px; flex: none; }
+.status button {
+  width: 34px; height: 34px; border-radius: 10px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--muted); cursor: pointer; display: grid; place-items: center;
+  transition: background .15s, color .15s, border-color .15s, transform .1s;
+}
+.status button:active { transform: scale(.94); }
+.status button svg { width: 17px; height: 17px; }
+.status button.on[data-v="ok"] { background: var(--ok-soft); color: var(--ok); border-color: var(--ok); }
+.status button.on[data-v="ko"] { background: var(--ko-soft); color: var(--ko); border-color: var(--ko); }
+.status button.on[data-v="skip"] { background: var(--skip-soft); color: var(--skip); border-color: var(--skip); }
+
+.issue { display: none; border-top: 1px dashed var(--ko); background: color-mix(in srgb, var(--ko-soft) 55%, var(--surface)); padding: 12px 16px 14px 58px; }
+.step[data-status="ko"] .issue, .step.has-note .issue { display: block; }
+.issue label { font-size: 12px; font-weight: 600; color: var(--ko); text-transform: uppercase; letter-spacing: .04em; }
+.issue textarea {
+  width: 100%; min-height: 84px; margin-top: 6px; resize: vertical;
+  border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px;
+  background: var(--surface); color: var(--text); font: inherit; font-size: 14px;
+}
+.issue textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.drop { margin-top: 8px; border: 1.5px dashed var(--border); border-radius: 10px; padding: 10px; font-size: 13px; color: var(--muted); text-align: center; cursor: pointer; }
+.drop.over { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.thumbs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.thumb { position: relative; width: 112px; height: 76px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); background: var(--surface-2); }
+.thumb img { width: 100%; height: 100%; object-fit: cover; cursor: zoom-in; }
+.thumb button { position: absolute; top: 3px; right: 3px; width: 22px; height: 22px; border-radius: 6px; border: 0; background: rgba(0,0,0,.6); color: #fff; cursor: pointer; font-size: 13px; line-height: 1; }
+.thumb .fname { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,.55); color: #fff; font-size: 9.5px; padding: 1px 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: "JetBrains Mono", monospace; }
+
+.callout { background: var(--accent-soft); border-radius: var(--radius); padding: 14px 16px; margin: 14px 0; font-size: 14px; }
+.callout strong { color: var(--accent); }
+details.callout summary { cursor: pointer; font-weight: 600; }
+
+.recap { margin-top: 48px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+.recap-head { display: flex; gap: 10px; align-items: center; padding: 14px 16px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.recap-head h3 { margin: 0; font-size: 17px; flex: 1; }
+.btn { border: 0; background: var(--accent); color: #fff; font: inherit; font-weight: 600; font-size: 14px; padding: 8px 14px; border-radius: 10px; cursor: pointer; }
+.btn.secondary { background: var(--surface-2); color: var(--text); }
+.btn:disabled { opacity: .5; cursor: default; }
+.recap pre { margin: 0; padding: 16px; font-size: 12.5px; white-space: pre-wrap; word-break: break-word; max-height: 460px; overflow: auto; }
+.empty { padding: 20px 16px; color: var(--muted); font-size: 14px; }
+
+.toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(20px); opacity: 0; background: var(--text); color: var(--bg); padding: 8px 14px; border-radius: 10px; font-size: 13px; transition: .2s; pointer-events: none; z-index: 50; }
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.lightbox { position: fixed; inset: 0; background: rgba(0,0,0,.8); display: none; place-items: center; z-index: 40; padding: 16px; cursor: zoom-out; }
+.lightbox.show { display: grid; }
+.lightbox img { max-width: 100%; max-height: 100%; border-radius: 8px; }
+.hidden { display: none !important; }
+
+@media (max-width: 600px) {
+  .s-head { flex-wrap: wrap; }
+  .s-num { width: auto; }
+  .status { width: 100%; justify-content: flex-end; order: 3; }
+  .issue { padding-left: 16px; }
+  section.group > .intro { margin-left: 0; }
+  .hero h2 { font-size: 23px; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="inner">
+    <h1>Acceptance — cube sealed and the player cap · V5</h1>
+    <div class="progress">
+      <div class="bar"><span class="b-ok"></span><span class="b-ko"></span><span class="b-skip"></span></div>
+      <span class="count" id="count">0 / 0</span>
+    </div>
+    <div class="filters tabs" id="tabs">
+      <button data-tab="steps" class="active">Steps</button>
+      <button data-tab="recap">Recap to paste <span class="badge hidden" id="tabBadge"></span></button>
+    </div>
+    <div class="filters" id="filters">
+      <button data-f="all" class="active">All</button>
+      <button data-f="todo">To do</button>
+      <button data-f="ko">Problems</button>
+      <button data-f="manual">Manual only</button>
+    </div>
+    <button class="icon-btn" id="themeBtn" title="Theme">◐</button>
+  </div>
+</header>
+
+<main class="wrap">
+ <div id="viewSteps">
+  <div class="hero">
+    <h2>Cube sealed and the player cap — V5</h2>
+    <p>A declared tournament can deal a <strong>cube</strong>: the organizer picks a community cube, loads their Re:Union decks or pastes a list, and every card of it is given to <strong>at most one player</strong> (the cube is dealt once, at the first pool, into as many lots of boosters as the tournament has places). That needs a <strong>player cap</strong> (“Maximum players”), which every other source can now use too: once it is reached nobody else can open a pool, from the site or from a BGA game (409 <code>tournament_full</code>).</p>
+    <p>Spec: <code>docs/tournaments/user-tournaments-spec.md</code> §15 · doc: <code>docs/tournaments/README.md</code>. Do the groups <strong>in the order shown</strong>: C creates “Commons cube”, D to E use it (D before any pool, E opens the three pools), F to J create their own tournaments. Group L only applies when the optional Task 15 ran; group M runs on preprod before production.</p>
+    <p>Tick ✓ or ✗ on each step. The ✗ button opens a text field where you can paste screenshots (Ctrl+V). Copy the recap from the tab at the top. The state is kept in this browser (IndexedDB), apart from the earlier pages’ state.</p>
+    <p>Steps marked <span class="new-tag auto">auto</span> are replayed by the Playwright suite (<code>make e2e</code>, <code>tests/e2e</code>) on its own card fixtures: no need to run them by hand. An “auto (partial)” badge says what the suite does not check.</p>
+  </div>
+
+  <div class="cast" id="cast"></div>
+
+  <div class="fold"><button type="button" id="foldAll">Collapse all</button><button type="button" id="unfoldAll">Expand all</button></div>
+  <div id="groups"></div>
+
+  <p style="margin-top:32px;text-align:center">
+    <button class="btn" data-goto="recap">See the recap to paste →</button>
+  </p>
+ </div>
+
+ <div id="viewRecap" class="hidden">
+  <div class="hero">
+    <h2>Recap to paste</h2>
+    <p>Paste it as is in the chat. If you attached screenshots, download them first: the recap gives their path in <code>~/Downloads</code>.</p>
+  </div>
+  <div class="recap" style="margin-top:20px">
+    <div class="recap-head">
+      <h3>Recap to paste</h3>
+      <button class="btn secondary" id="dlImages">Download the screenshots</button>
+      <button class="btn" id="copyRecap">Copy</button>
+    </div>
+    <pre id="recapText"></pre>
+  </div>
+
+  <p style="margin-top:24px;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap">
+    <button class="icon-btn" data-goto="steps">← Back to the steps</button>
+    <button class="icon-btn" id="resetAll">Reset everything</button>
+  </p>
+ </div>
+</main>
+
+<div class="toast" id="toast"></div>
+<div class="lightbox" id="lightbox"><img alt=""></div>
+
+<script>
+const WEB = 'http://localhost:5173';
+const API = 'http://localhost:8080';
+const KC = 'http://auth.altered.local.gd:18080';
+const PWD = 'TestPassword1234';
+const ALICE_SUB = '11111111-1111-1111-1111-111111111111';
+
+const PERSONAS = {
+  alice: { tag: 'Organizer, first player', org: 'alice (sub 1111…)', email: 'alice', meta: 'Creates every tournament of this page and opens the first pool of each (slot 0). Not a moderator.' },
+  bob:   { tag: 'Second player, moderator', org: 'bob (TOURNAMENT_MODERATORS)', email: 'bob', meta: 'Opens the second pool (slot 1).' },
+  carol: { tag: 'Third player, then “too late”', org: 'carol (created by make dev)', email: 'carol@example.test', meta: 'Opens the third pool (slot 2) of “Commons cube”; is refused on the full tournaments (F, G).' },
+  anon:  { tag: 'Logged out', org: 'private window', email: '—', meta: 'No Re:Union session.' },
+};
+
+const chip = (txt) => `<button class="chip" data-copy="${txt.replace(/"/g,'&quot;')}">${txt}</button>`;
+const who = (k) => k === 'anon' ? '<span>Logged out (private window)</span>' : (k ? `${chip(PERSONAS[k].email)} ${chip(PWD)} <span>${PERSONAS[k].meta}</span>` : '');
+const url = (u) => chip(u);
+const block = (txt) => `<pre><button class="chip copy-pre" data-copy-pre>copy</button>${txt.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</pre>`;
+// A shell command, preceded by the token export of every $TOKEN_X it uses.
+const pre = (cmd) => {
+  const users = [...new Set([...cmd.matchAll(/\$TOKEN_([A-Z]+)/g)].map(m => m[1]))].filter(u => !cmd.includes('export TOKEN_' + u))
+  return block([...users.map(u => TOKEN(u.toLowerCase())), cmd].join('\n'))
+}
+// A snippet for the DevTools console (JavaScript, not a shell command).
+const jsPre = (code) => block(code);
+const LOGIN = { carol: 'carol@example.test' }
+const TOKEN = (u) => `export TOKEN_${u.toUpperCase()}=$(curl -s -X POST "${KC}/realms/players/protocol/openid-connect/token" -d grant_type=password -d client_id=altered-draft -d client_secret=dev-altered-draft-secret -d username=${LOGIN[u] ?? u} -d password=${PWD} -d 'scope=openid profile' | node -pe 'JSON.parse(require("fs").readFileSync(0)).access_token'); [ -n "$TOKEN_${u.toUpperCase()}" ] && [ "$TOKEN_${u.toUpperCase()}" != undefined ] && echo "TOKEN_${u.toUpperCase()} ok" || echo "TOKEN_${u.toUpperCase()} EMPTY: credentials refused by Keycloak"`;
+// Every command runs from any directory: the compose file and make/npm are reached through REPO.
+const REPO = '~/Perso/altered-reunion/altered-draft';
+const DB = `docker compose -f ${REPO}/docker-compose.yml exec -T postgres psql -U altered-draft -d altered-draft`;
+// Unaligned, tuples only, ' | ' between columns: the output is exactly the Expected lines.
+const PSQL = (sql) => pre(`${DB} -At -F ' | ' -c "${sql}"`);
+
+// Helpers that only shorten this file: every step still prints its whole command.
+const IDS = `'^12351[0-9]$'`;
+// The tournament id of a BGA id of this page, in $TID.
+const TID = (bga) => `TID=$(${DB} -At -c "SELECT id FROM tournaments WHERE bga_tournament_id = '${bga}'")`;
+// The page link of a tournament of this page.
+const TURL = (bga) => PSQL(`SELECT '${WEB}/tournament/t/' || id FROM tournaments WHERE bga_tournament_id = '${bga}'`);
+// The raw ?bgaId= answer to a persona.
+// What a persona gets from GET /api/tournaments/:id/pool: only the HTTP status (the body is the whole pool).
+const POOLCODE = (tok, bga) => pre(`${TID(bga)}
+curl -s -o /dev/null -w 'pool %{http_code}\\n' -H "Authorization: Bearer $TOKEN_${tok}" "${API}/api/tournaments/$TID/pool"`);
+// The same call when a 409 is expected: the (short) body is printed too.
+const POOLBODY = (tok, bga) => pre(`${TID(bga)}
+curl -s -w ' %{http_code}\\n' -H "Authorization: Bearer $TOKEN_${tok}" "${API}/api/tournaments/$TID/pool"`);
+// Declares a tournament from the "All Commons" community cube through the API (the refs and the 12 heroes are read from
+// src/lib/cubes.js), starting tomorrow. Defaults = “Commons cube”: 6 boosters of 10, one card of each faction, heroes in the
+// boosters, cap 3. over / src / cfg = JS object-literal text merged into the body, the source and the config.
+const CREATE_CUBE = (tok, name, bga, over = '', src = '', cfg = '') => pre(`cd ${REPO} && T=$TOKEN_${tok} node -e '(async () => { const { COMMUNITY_CUBES } = await import("./src/lib/cubes.js"); const c = COMMUNITY_CUBES.find(x => x.id === "all-commons"); const h = { Authorization: "Bearer " + process.env.T, "Content-Type": "application/json" }; const body = { name: "${name}", bgaUrl: "https://boardgamearena.com/tournament?id=${bga}", startsAt: new Date(Date.now() + 864e5).toISOString(), maxPlayers: 3, config: { source: { type: "cube", name: "All commons", origin: "community", cubeId: "all-commons", cards: Object.fromEntries(c.refs.map(r => [r, 1])), heroPool: c.heroes, boosters: 6, cardsPerBooster: 10, perFaction: 1${src ? ', ...' + src : ''} }, heroes: "packs", uniques: { inBoosters: 0, guaranteed: 0 }, excludeBanlist: false${cfg ? ', ...' + cfg : ''} }${over ? ', ...' + over : ''} }; const r = await fetch("${API}/api/tournaments", { method: "POST", headers: h, body: JSON.stringify(body) }); const tn = await r.json(); console.log(r.status, tn.id ? "${WEB}/tournament/t/" + tn.id : JSON.stringify(tn)) })()'`);
+// Declares a Skybound Odyssey tournament (7 boosters, no unique) with a player cap through the API, starting tomorrow.
+const CREATE_SET = (tok, name, bga, cap) => pre(`T=$TOKEN_${tok} node -e '(async () => { const h = { Authorization: "Bearer " + process.env.T, "Content-Type": "application/json" }; const r = await fetch("${API}/api/tournaments", { method: "POST", headers: h, body: JSON.stringify({ name: "${name}", bgaUrl: "https://boardgamearena.com/tournament?id=${bga}", startsAt: new Date(Date.now() + 864e5).toISOString(), maxPlayers: ${cap}, config: { source: { type: "multiset", sets: { CYCLONE: 7 } }, heroes: "packs", uniques: { inBoosters: 0, guaranteed: 0 } } }) }); const tn = await r.json(); console.log(r.status, tn.id ? "${WEB}/tournament/t/" + tn.id : JSON.stringify(tn)) })()'`);
+// The booster shape and slot of every pool of a tournament, in slot order.
+const SLOTS = (bga) => PSQL(`SELECT p.cube_slot, jsonb_array_length(p.boosters) AS boosters, (SELECT string_agg(DISTINCT jsonb_array_length(b)::text, ',') FROM jsonb_array_elements(p.boosters) b) AS sizes FROM tournaments t JOIN sealed_pools p ON p.tournament_ref = t.id WHERE t.bga_tournament_id = '${bga}' ORDER BY p.cube_slot`);
+const LOGOUT_ALICE = `ADMIN=$(curl -s -X POST "${KC}/realms/master/protocol/openid-connect/token" -d grant_type=password -d client_id=admin-cli -d username=admin -d password=admin | node -pe 'JSON.parse(require("fs").readFileSync(0)).access_token')
+curl -s -o /dev/null -w 'logout %{http_code}\\n' -X POST -H "Authorization: Bearer $ADMIN" "${KC}/admin/realms/players/users/${ALICE_SUB}/logout"`;
+// A pasted list for the Cube tab: an alt-art ref, the promo-only ref, an unknown ref, a mistyped unique serial and a hero.
+const PASTE_LIST = `3 ALT_DUSTER_A_AX_98_C
+1 ALT_BISE_P_BR_64_C
+1 ALT_CORE_B_AX_99_C
+1 ALT_CORE_B_AX_04_U_ZZZZ
+2 ALT_CORE_B_AX_08_C
+2 ALT_CORE_B_BR_08_C
+1 ALT_CORE_B_AX_03_C`;
+
+// Steps replayed by the Playwright suite. Rewritten by `npm run test:e2e:coverage -- --write`
+// (scripts/e2e-acceptance-coverage.mjs) from the tests' tags: do not edit this line by hand.
+const AUTO_STEPS = ['cu-a-community', 'cu-a-paste', 'cu-a-reunion', 'cu-a-switch', 'cu-a-tab', 'cu-b-boosters', 'cu-b-capacity', 'cu-b-heroes', 'cu-b-too-small', 'cu-c-create', 'cu-c-summary', 'cu-d-link', 'cu-d-page', 'cu-d-redirect', 'cu-e-composition', 'cu-e-deck', 'cu-e-first', 'cu-e-others', 'cu-e-reveal', 'cu-f-api', 'cu-f-free', 'cu-f-page', 'cu-g-create', 'cu-g-full', 'cu-g-lower', 'cu-h-api', 'cu-h-locked', 'cu-i-locked', 'cu-i-unlocked', 'cu-j-bga', 'cu-k-fr', 'cu-k-mobile'];
+// Steps the suite covers with a narrower assertion than the acceptance steps (hand-maintained).
+const AUTO_PARTIAL = { 'cu-e-reveal': 'the suite checks the generated cover is shown on the 6 boosters, the sublabel and no bonus pack; the drawing itself (logo, title, subtitle) stays a human check', 'cu-k-fr': 'no raw key and sample French strings on the form, the tournament page and the cube page; no English leftovers, the hub cards and the cover’s subtitle stay a human check', 'cu-k-mobile': 'no horizontal scroll on the Cube tab, the chosen cube, the hero picker, the tournament page, the cube page and the reveal; nothing cut off and the bottom bar stay a human check' };
+
+const GROUPS = [
+  {
+    letter: '0', title: 'Setup',
+    intro: 'Same local stack as lot 1 and V2 to V4. Browser: Chrome or Firefox (Safari rejects Secure cookies on http://localhost).',
+    steps: [
+      { id: 'cu-0-lot1', title: 'Lot 1 setup done once',
+        html: `<p>This page reuses the lot 1 stack and accounts. If this machine never ran it, do group 0 of <code>docs/tournaments/acceptance-user-tournaments.html</code> first: altered-dev-environment, bob moderator through <code>TOURNAMENT_MODERATORS</code>, carol. alice must have Re:Union decks (needed in A: <code>cu-a-reunion</code>). Nothing to run here.</p>` },
+      { id: 'cu-0-branch', title: 'The branch',
+        html: `${pre(`cd ${REPO} && git fetch && git switch feat/cube-sealed && git pull && make install`)}<p>V5 adds no dependency. Once the PR is merged, use <code>main</code> instead of the branch.</p>` },
+      { id: 'cu-0-dev', title: 'Start the stack: the cap column, the slot table, the pool slot',
+        html: `<p>V5 adds <code>tournaments.max_players</code>, the table <code>tournament_cube_slots</code> and <code>sealed_pools.cube_slot</code>; <code>make dev</code> replays the idempotent schema, so earlier tournaments get <code>max_players</code> NULL (no limit).</p>${pre(`cd ${REPO} && make dev`)}<p>Check, in another terminal:</p>${pre(`${DB} -At -c "SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'tournaments' AND column_name = 'max_players'" -c "SELECT to_regclass('tournament_cube_slots')" -c "SELECT column_name FROM information_schema.columns WHERE table_name = 'sealed_pools' AND column_name = 'cube_slot'" -c "SELECT count(*) FROM tournaments WHERE max_players IS NOT NULL"`)}<p>Expected: <code>max_players|integer</code>, <code>tournament_cube_slots</code>, <code>cube_slot</code>, then <code>0</code> (no earlier tournament has a cap).</p>` },
+      { id: 'cu-0-tests', title: 'Automated suites green',
+        html: `${pre(`cd ${REPO} && npm test && npm run test:integration`)}<p>Expected: everything green (Docker needed for the second). The deal itself (every copy once across the lots, slots claimed in order, the race for the last place) is only covered there.</p>` },
+      { id: 'cu-0-e2e', title: 'Playwright suite green, the five acceptance pages read',
+        html: `${pre(`cd ${REPO} && make e2e && npm run test:e2e:coverage`)}<p>Expected: the suite passes; the coverage report lists the five acceptance pages (<code>acceptance-user-tournaments.html</code>, <code>acceptance-mono-faction-sealed.html</code>, <code>acceptance-multiset-sealed.html</code>, <code>acceptance-private-tournaments.html</code>, <code>acceptance-cube-sealed.html</code>) and exits without error. The steps of this page it replays carry the <span class="new-tag auto">auto</span> badge.</p>` },
+      { id: 'cu-0-clean', title: 'Start without the tournaments of this page, alice under the cap',
+        html: `<p>This page uses the BGA ids 123510 to 123517: 123510 “Commons cube”, 123511 “Full cup”, 123512 “Capped set cup”, 123513 “Deck cube”, 123514 “Pasted cube”, 123515 the API throwaway (never created), 123516 the form draft of cu-a-draft (never created), 123517 “Free heroes cube”. 123518 and 123519 are kept free.</p>${PSQL(`SELECT count(*) FROM tournaments WHERE bga_tournament_id ~ ${IDS}`)}<p>Expected: <code>0</code>. To start over on them only (the slots go with the pools):</p>${PSQL(`DELETE FROM sealed_pools WHERE tournament_id ~ ${IDS} OR tournament_ref IN (SELECT id FROM tournaments WHERE bga_tournament_id ~ ${IDS}); DELETE FROM tournaments WHERE bga_tournament_id ~ ${IDS}`)}
+<p>alice creates 5 open tournaments on this page (123510, 123511, 123512, 123514, 123517), and an organizer has 10 open at most. Her open tournaments now (the ones of this page were deleted above):</p>${pre(`${DB} -At -c "SELECT count(*) FROM tournaments WHERE organizer_sub = '${ALICE_SUB}' AND detached_at IS NULL AND cancelled_at IS NULL AND ended_at IS NULL AND (ends_at IS NULL OR ends_at > now())"`)}<p>Expected: <code>5</code> or less (5 + the 5 of this page = 10). Otherwise cancel her older ones (earlier runs; a cancelled tournament keeps its pools):</p>${PSQL(`UPDATE tournaments SET cancelled_at = now() WHERE organizer_sub = '${ALICE_SUB}' AND NOT bga_tournament_id ~ ${IDS} AND detached_at IS NULL AND cancelled_at IS NULL AND ended_at IS NULL`)}` },
+    ],
+  },
+  {
+    letter: 'A', title: 'Form: the Cube tab (/tournament/new)',
+    intro: 'As alice, on a blank form. Nothing is created in this group. The community cube is called “All Commons” in the picker (its name in the Lobby data): the tournaments created through the API below call it “All commons”, the name field being editable.',
+    steps: [
+      { id: 'cu-a-tab', who: 'alice', title: 'The third tab “Cube”, its hint and the three panels',
+        html: `<ul><li>${url(WEB + '/tournament/new')}, section Cards: three tabs, <strong>“Sets”</strong>, the mono-faction one and <strong>“Cube”</strong> (third).</li>
+<li>Click “Cube”. Expected: the hint <strong>“Every card of the cube is dealt at most once across all players. Pick a community cube, load your Re:Union decks, or paste a list.”</strong> and three panels in this order: <strong>“Community cubes”</strong> (“Curated card pools, ready to play.”, one card per cube with its name, author, card count, description, a “Preview” and a “Use this cube” button), <strong>“Load from your Re:Union decks”</strong> and <strong>“Paste your own cube”</strong>.</li>
+<li>The bottom bar lists “Choose a cube.” as long as nothing is chosen.</li></ul>` },
+      { id: 'cu-a-community', who: 'alice', title: 'Select “All Commons”: the chosen card, Preview, Change cube',
+        html: `<ul><li>On the “Cube” tab, “Use this cube” on “All Commons”. Expected: the three panels give way to one <strong>“Chosen cube”</strong> card: the name field “Cube name” prefilled, the origin <strong>“Community cube”</strong>, <strong>“192 cards (192 distinct)”</strong>, <strong>“12 heroes found in the list, preselected below”</strong>, six faction counts (icon and number, summing to 192: 32 each) and <strong>no</strong> “references could not be resolved” callout: the promo-only “Sofia, First Outpost” (<code>ALT_BISE_P_BR_64_C</code>) resolves by reference.</li>
+<li>“Preview”: the cube modal opens (192 cards, Sofia, First Outpost among the Bravos cards); close it.</li>
+<li>“Change cube”: the three panels are back, nothing chosen (“Choose a cube.” again in the bottom bar). Choose “All Commons” again.</li></ul>
+<p class="note">The cube card loads the sets live: a few seconds the first time.</p>` },
+      { id: 'cu-a-reunion', who: 'alice', title: 'Load alice’s Re:Union decks: search, tick two, import',
+        html: `<ul><li>Change cube, then in “Load from your Re:Union decks” click <strong>“Load my decks”</strong>. Expected: the list of alice’s decks, a search field “Search by name…” and format chips.</li>
+<li>Type part of a deck name: the list narrows; a gibberish text shows “No deck matches.”. Clear the search.</li>
+<li>Tick <strong>two</strong> decks: the button reads <strong>“Use 2 decks as the cube”</strong> (before any tick: “Use the ticked decks”, disabled). Click it.</li>
+<li>Expected: the “Chosen cube” card, origin <strong>“From your Re:Union decks”</strong>, the name <strong>“2 decks”</strong>, the card count, the heroes found in the two decks, no silent loss (unknown refs, if any, are listed).</li>
+<li>If alice has no deck: “No deck in your Re:Union account.” (create two on ${url('https://deckbuilder.alteredcore.org')} first, then redo the step).</li></ul>` },
+      { id: 'cu-a-paste', who: 'alice', title: 'Paste a list: alt-art, promo-only, unknown, bad serial, hero',
+        html: `<p>Change cube, open “Paste your own cube”, name ${chip('Pasted test')}, paste (copy the block below, the first column is the quantity):</p>${block(PASTE_LIST)}<ul><li>Click <strong>“Parse the list”</strong>. Expected, in the “Chosen cube” card (origin “Pasted list”, name “Pasted test”):
+<ul><li>the alt-art <code>ALT_DUSTER_A_AX_98_C</code> is stored under its <code>B</code> printing <code>ALT_DUSTER_B_AX_98_C</code> (3 copies);</li>
+<li>the promo-only <code>ALT_BISE_P_BR_64_C</code> is kept <strong>as given</strong> (it has no <code>B</code> twin);</li>
+<li>the unknown <code>ALT_CORE_B_AX_99_C</code> and the mistyped unique serial <code>ALT_CORE_B_AX_04_U_ZZZZ</code> are listed under <strong>“2 references could not be resolved and are left out:”</strong>, as given;</li>
+<li>the hero <code>ALT_CORE_B_AX_03_C</code> is split out: “1 hero found in the list, preselected below”, and it is not counted among the cards.</li></ul></li>
+<li>Change cube: the pasted text and the name are still in the paste panel.</li></ul>
+<p class="note">The stored refs themselves are checked in <code>cu-h-api</code> (the server re-keys the same way).</p>` },
+      { id: 'cu-a-switch', who: 'alice', title: 'Cube ↔ Sets keeps each tab’s state',
+        html: `<ul><li>With “All Commons” chosen, click “Sets”, pick another set, click “Cube” again: “All Commons” is still the chosen cube (same name field).</li>
+<li>Back on “Sets”: the set you picked is still picked.</li>
+<li>Edit the cube name to ${chip('My commons')}, switch to “Sets” and back: the edited name is still there.</li></ul>` },
+      { id: 'cu-a-draft', who: 'alice', title: 'The form draft keeps the chosen cube across a reconnect',
+        html: `<p>The draft is only parked when the session expires and “Reconnect” is clicked (the lot 1 b-session-expired flow).</p>
+<ul><li>As alice, ${url(WEB + '/tournament/new')}: name ${chip('Draft cube')}, link ${chip('https://boardgamearena.com/tournament?id=123516')}, start tomorrow, Cards › “Cube” › “Use this cube” on “All Commons”, Settings: Maximum players 2. <strong>Do not submit.</strong></li>
+<li>End alice's session on the Keycloak side, either through ${url(KC + '/admin')} (admin / admin) › realm <strong>players</strong> › Users › alice › Sessions › “Sign out”, or with the command below.</li></ul>
+${pre(LOGOUT_ALICE)}
+<p>Expected: <code>logout 204</code>.</p>
+<ul><li>Click “Create the tournament”. Expected: the “Your Re:Union session has expired…” message and a “Reconnect” button. Click it, log in again as alice.</li>
+<li>Expected: back on the form, the “Cube” tab selected and “All Commons” chosen (192 cards, 12 heroes), the 12 heroes still preselected, Maximum players 2, name and link as before.</li>
+<li>Do not create: leave the form.</li></ul>` },
+    ],
+  },
+  {
+    letter: 'B', title: 'Form: the cube Settings',
+    intro: 'As alice, on a blank form with “All Commons” chosen in the Cube tab. Nothing is created in this group.',
+    steps: [
+      { id: 'cu-b-boosters', who: 'alice', title: 'Steppers, the pool line, the faction guarantee',
+        html: `<ul><li>Settings, section <strong>“Boosters”</strong> (the unique and ban-list options of the set sources are gone): <strong>“Boosters per player”</strong> stepper (default 7) and <strong>“Cards per booster”</strong> stepper (default 12) with the hint “Not counting the hero.”.</li>
+<li>Boosters per player: the stepper stops at <strong>3</strong> (minus disabled) and at <strong>8</strong> (plus disabled). Cards per booster: stops at <strong>10</strong> and <strong>16</strong>.</li>
+<li>“Faction guarantee”: three option cards, “None”, <strong>“One of each faction”</strong> (selected by default) and “Two of each faction”.</li>
+<li>The live line: at 7 × 12, <strong>“84 cards per player (7 × 12), plus a hero in each booster”</strong>, then the rarity note “Rarity plays no part…”. Move a stepper: the line follows (e.g. 6 × 10 gives “60 cards per player (6 × 10)…”).</li>
+<li>Cards per booster 11 or less: “Two of each faction” is <strong>disabled</strong>; with 12 or more it is enabled. If it was selected when you go below 12, the bottom bar says “Two of each faction needs at least 12 cards per booster.”.</li>
+<li>Boosters 3 and cards 10: “A player must receive at least 60 cards (30 now): add boosters or cards per booster.” in the bottom bar.</li></ul>` },
+      { id: 'cu-b-heroes', who: 'alice', title: 'The heroes: the two modes and the hero picker',
+        html: `<ul><li>Section <strong>“Heroes”</strong>: two option cards, <strong>“In boosters”</strong> (default; “One hero per booster, drawn from the selected heroes…”) and <strong>“Free choice”</strong> (“Every selected hero goes into each player’s pool.”).</li>
+<li>“Available heroes”: <strong>“12 heroes selected”</strong> and a <strong>“Choose heroes”</strong> button; the line “The heroes found in the cube are preselected.”.</li>
+<li>Click “Choose heroes”: an inline panel with a search field “Search a hero…”, one group per faction with its count and <strong>“All”</strong> / <strong>“None”</strong>, and a chip per hero (faction icon, name, set abbreviation). The cube’s 12 heroes are ticked (two per faction).</li>
+<li>Search a faction or a hero name: the chips narrow. “All” on a faction ticks every hero of that faction (heroes of every set, not only the cube’s): the count rises. “None” on a faction unticks them.</li>
+<li>Untick everything (“None” on each faction): <strong>“0 heroes selected”</strong> and in the bottom bar <strong>“Select at least one hero.”</strong>. Tick one: the message goes. “Done” closes the panel.</li></ul>` },
+      { id: 'cu-b-capacity', who: 'alice', title: 'The player cap: the capacity line, the prefill, the ceiling',
+        html: `<ul><li>Section <strong>“Players”</strong>: “Maximum players” (a number field), the hint “Required for a cube: it is dealt once into that many sets of boosters.” and the BGA hint “Once reached, nobody else can open a pool… Set the same limit on the BGA tournament.”.</li>
+<li>All Commons at <strong>7 × 12</strong>: <strong>“This cube allows up to 2 players with these boosters.”</strong>, <strong>“Limiting: 192 cards, 84 needed per player.”</strong> after it (a faction-bound cube reads “Limiting: 56 Yzmir cards, … needed per player.”), the field <strong>prefilled with 2</strong>.</li>
+<li>Set <strong>6 × 10</strong>: the line says <strong>3</strong> players and the field follows to <strong>3</strong>; back to 7 boosters it follows down to 2. Type 2 in the field yourself, then set 6 × 10 again: the line says 3 but the field <strong>stays 2</strong> (once changed by hand, it is only lowered, never raised).</li>
+<li>Type <strong>4</strong> in the field: <strong>“At most 3 players with this cube and these boosters.”</strong> in the bottom bar. Type <strong>2</strong>: no issue (the cap can be lowered). Empty the field: “Set the maximum number of players.”.</li>
+<li>Type 1: “The maximum must be a whole number between 2 and 256.”.</li></ul>` },
+      { id: 'cu-b-too-small', who: 'alice', title: 'A cube too small for the boosters',
+        html: `<ul><li>Boosters <strong>8</strong>, cards per booster <strong>16</strong> (128 cards per player): in the bottom bar <strong>“This cube cannot serve 2 players with these boosters (192 cards, 128 needed per player).”</strong> and the capacity line says the cube is too small (no prefilled cap to keep).</li>
+<li>Back to 7 × 12 (or 6 × 10): the issue goes, the cap is prefilled again.</li></ul>` },
+    ],
+  },
+  {
+    letter: 'C', title: 'Creating “Commons cube”',
+    intro: 'As alice. BGA id 123510, All Commons, 6 boosters of 10, one of each faction, heroes in boosters, cap 3. Groups D to F reuse it.',
+    steps: [
+      { id: 'cu-c-create', who: 'alice', title: 'Create “Commons cube”: the stored config',
+        html: `<ul><li>${url(WEB + '/tournament/new')}: name ${chip('Commons cube')}, link ${chip('https://boardgamearena.com/tournament?id=123510')}, start tomorrow, no end. Cards: Cube › “All Commons”; Settings: 6 boosters, 10 cards, “One of each faction”, “In boosters”, Maximum players 3 (the prefill). Create. Expected: redirect to <code>/tournament/t/&lt;id&gt;</code>.</li>
+<li>Equivalent through the API (use it only if you skip the form; a second POST on the same BGA id answers 409 <code>bga_tournament_taken</code>). The cube’s refs are read from <code>src/lib/cubes.js</code>:</li></ul>
+${CREATE_CUBE('ALICE', 'Commons cube', '123510')}
+<p>Expected: <code>201 ${WEB}/tournament/t/&lt;id&gt;</code>. The stored config, through <code>?bgaId=</code>:</p>
+${pre(`curl -s -H "Authorization: Bearer $TOKEN_ALICE" "${API}/api/tournaments?bgaId=123510" | node -pe 'const t = JSON.parse(require("fs").readFileSync(0)).tournaments[0]; const s = t.config.source; JSON.stringify({ type: s.type, name: s.name, origin: s.origin, cubeId: s.cubeId, boosters: s.boosters, cardsPerBooster: s.cardsPerBooster, perFaction: s.perFaction, sum: Object.values(s.cards).reduce((a, b) => a + b, 0), heroPool: s.heroPool.length, uniques: t.config.uniques, excludeBanlist: t.config.excludeBanlist, maxPlayers: t.maxPlayers })'`)}
+<p>Expected (the <code>uniques</code> are forced to zero for a cube): <code>{"type":"cube","name":"All commons","origin":"community","cubeId":"all-commons","boosters":6,"cardsPerBooster":10,"perFaction":1,"sum":192,"heroPool":12,"uniques":{"inBoosters":0,"guaranteed":0,"evenFactions":false,"faction":null,"randomOneIn":null},"excludeBanlist":false,"maxPlayers":3}</code>. Created through the form, <code>name</code> is the one typed in “Cube name” (prefilled “All Commons”).</p>
+${PSQL(`SELECT name, max_players, set_code IS NULL AS no_set FROM tournaments WHERE bga_tournament_id = '123510'`)}
+<p>Expected: <code>Commons cube | 3 | t</code>.</p>` },
+      { id: 'cu-c-summary', who: 'alice', title: 'The summary line and “0 / 3 players”',
+        html: `<ul><li>On the tournament page, under the title: <strong>“6 boosters of 10 · cube “All Commons” (192 cards) · 1 of each faction per booster”</strong> (created through the form: the cube name is the one typed, prefilled “All Commons”; with the API command of C it reads “All commons”) (no unique or ban-list part), and next to the pool count <strong>“0 / 3 players”</strong>. No “Full” pill.</li>
+<li>${url(WEB + '/tournament?tab=upcoming')}: the “Commons cube” card shows the same summary and <strong>“0 / 3 players”</strong>; the organizer’s tab ${url(WEB + '/tournament?tab=created')} too.</li></ul>` },
+    ],
+  },
+  {
+    letter: 'D', title: 'The cube page',
+    intro: 'On “Commons cube”, before any pool exists (the page is public).',
+    steps: [
+      { id: 'cu-d-link', who: 'alice', title: 'The link “View the cube (192 cards) →” and the pool page’s “Cube” link',
+        html: `<p>The link of the tournament:</p>${TURL('123510')}<ul><li>On the tournament page, under the summary: <strong>“View the cube (192 cards) →”</strong>. Click it: <code>/tournament/t/&lt;id&gt;/cube</code>.</li>
+<li>The pool page of the tournament (“Open my pool”, once D and E are done; or <code>/tournament/t/&lt;id&gt;/pool</code> as a player): a <strong>“Cube”</strong> link in the title bar leads to the same page.</li></ul>` },
+      { id: 'cu-d-page', title: 'The cube page: header, heroes, contents',
+        html: `<ul><li>Header: the title <strong>“Cube of “Commons cube””</strong> (the tournament’s name), under it the cube’s own name (<strong>All Commons</strong>, or “All commons” if the tournament came from the API command), the origin (“Community cube”), the summary line and the players line (“0 / 3 players”).</li>
+<li><strong>“Available heroes (12)”</strong>: 12 chips with the faction icon and the hero name, and the mode text <strong>“One of them in each booster.”</strong>.</li>
+<li>Then the cube contents: a sidebar with counts by faction / rarity / set, a search field, a group-by choice (faction, set, rarity), list or grid, hover preview. 192 cards in total.</li>
+<li>Search <code>Sofia</code>: <strong>“Sofia, First Outpost”</strong> is there; group by faction, it sits in the <strong>Bravos</strong> group.</li>
+<li>Logged out (private window), same link: the page is public, it loads the same way.</li></ul>` },
+      { id: 'cu-d-redirect', title: 'A set tournament’s /cube redirects to its page',
+        html: `<p>Create “Capped set cup” first (G, <code>cu-g-create</code>), or any set tournament of yours, then:</p>${PSQL(`SELECT '${WEB}/tournament/t/' || id || '/cube' FROM tournaments WHERE NOT config->'source'->>'type' = 'cube' ORDER BY created_at DESC LIMIT 1`)}<ul><li>Open that link: you land on <code>/tournament/t/&lt;id&gt;</code>, the tournament’s own page (no cube page, no error).</li></ul>` },
+      { id: 'cu-d-mobile', title: 'The cube page at 375 px',
+        html: `<ul><li>DevTools at 375 px on the cube page: no horizontal scroll, the hero chips wrap, the sidebar filters stay reachable (stacked or in a drawer), the card grid shows 2 or 3 columns, the search field is usable.</li></ul>` },
+    ],
+  },
+  {
+    letter: 'E', title: 'The pools of “Commons cube” and the reveal',
+    intro: 'The first pool deals the whole cube into 3 lots (one per player). alice, bob and carol open one pool each, in this order.',
+    steps: [
+      { id: 'cu-e-first', who: 'alice', title: 'alice opens her pool: the deal, slot 0, 6 boosters of 11',
+        html: `<ul><li>As alice on the tournament page: step 2 “Open my pool”, click it. (The pool page opens; do the reveal in <code>cu-e-reveal</code>.)</li></ul>
+<p>Without the page, the same call:</p>${POOLCODE('ALICE', '123510')}<p>Expected: <code>pool 200</code>. Then the deal:</p>
+${PSQL(`SELECT (SELECT count(*) FROM tournament_cube_slots s WHERE s.tournament_ref = t.id) AS lots, p.cube_slot, jsonb_array_length(p.boosters) AS boosters, (SELECT string_agg(DISTINCT jsonb_array_length(b)::text, ',') FROM jsonb_array_elements(p.boosters) b) AS sizes FROM tournaments t JOIN sealed_pools p ON p.tournament_ref = t.id WHERE t.bga_tournament_id = '123510' AND p.sub = '${ALICE_SUB}'`)}
+<p>Expected: <code>3 | 0 | 6 | 11</code> (3 lots dealt at the first pool, alice holds slot 0, 6 boosters of 10 cards plus the hero). No <code>8th booster</code>: there is no bonus pack for a cube.</p>` },
+      { id: 'cu-e-reveal', who: 'alice', title: 'The reveal: the generated cover, the cards, no 8th booster',
+        html: `<ul><li>On alice’s pool page (the reveal plays once per pool and browser, a <code>pool_reveal_seen:…</code> flag in localStorage: if you already closed it, open the page in a private window): the first cover is <strong>generated</strong>: the Altered logo on a deep blue ground, the tournament name <strong>“Commons cube”</strong> as the title and <strong>“Cube “All Commons””</strong> as the subtitle (“All commons” for an API-created tournament; no set photo).</li>
+<li>Open the 6 boosters one after the other: each shows 11 cards, a <strong>hero first</strong>, then 10 cards; the heading’s sublabel is <strong>“Cube “All Commons””</strong> (the cube’s name between quotes; “All commons” for an API-created tournament).</li>
+<li>After the 6th booster the reveal ends on the pool (<strong>no 7th, no 8th pack</strong>, no bonus pack).</li>
+<li>If the logo image failed to load, the reveal goes straight to the cards (acceptable: report it).</li></ul>` },
+      { id: 'cu-e-composition', who: 'alice', title: 'The composition: heroes, one card per faction, every copy once',
+        html: `<p>bob and carol must have opened their pools (<code>cu-e-others</code>) for the last three queries; the first two hold for alice alone.</p>
+<p>Slot 0 of every booster is a hero of the cube’s hero pool (expected one line per pool, all <code>t</code>):</p>${PSQL(`SELECT p.cube_slot, bool_and(b->>0 IN (SELECT jsonb_array_elements_text(t.config->'source'->'heroPool'))) AS hero_first FROM tournaments t JOIN sealed_pools p ON p.tournament_ref = t.id, jsonb_array_elements(p.boosters) b WHERE t.bga_tournament_id = '123510' GROUP BY p.cube_slot ORDER BY p.cube_slot`)}
+<p>Expected: <code>0 | t</code>, then <code>1 | t</code> and <code>2 | t</code> once bob and carol opened theirs. Slots 1 to 6 hold one card of each faction, in the order AX BR LY MU OR YZ (the cube’s commons carry their faction in the reference, so it is read from it here):</p>${PSQL(`SELECT DISTINCT f FROM (SELECT string_agg(split_part(c.r, '_', 4), ' ' ORDER BY c.n) AS f FROM tournaments t JOIN sealed_pools p ON p.tournament_ref = t.id, jsonb_array_elements(p.boosters) WITH ORDINALITY AS bo(b, bi), jsonb_array_elements_text(bo.b) WITH ORDINALITY AS c(r, n) WHERE t.bga_tournament_id = '123510' AND c.n BETWEEN 2 AND 7 GROUP BY p.id, bo.bi) x`)}
+<p>Expected exactly one line: <code>AX BR LY MU OR YZ</code>. No card dealt twice across the pools, every card of the cube (non-hero cards: <code>n &gt; 1</code>, 6 × 10 per pool):</p>${PSQL(`SELECT count(*) AS dealt, count(DISTINCT c.r) AS distinct_refs, count(*) FILTER (WHERE NOT (t.config->'source'->'cards' ? c.r)) AS outside_cube FROM tournaments t JOIN sealed_pools p ON p.tournament_ref = t.id, jsonb_array_elements(p.boosters) b, jsonb_array_elements_text(b) WITH ORDINALITY AS c(r, n) WHERE t.bga_tournament_id = '123510' AND c.n > 1`)}
+<p>Expected, with the three pools: <code>180 | 180 | 0</code> (3 × 6 × 10 cards, all distinct, none outside the cube: each of the 192 copies is used at most once). Heroes of one pool are distinct (6 boosters, 12 heroes):</p>${PSQL(`SELECT p.cube_slot, count(*) AS heroes, count(DISTINCT b->>0) AS distinct_heroes FROM tournaments t JOIN sealed_pools p ON p.tournament_ref = t.id, jsonb_array_elements(p.boosters) b WHERE t.bga_tournament_id = '123510' GROUP BY p.cube_slot ORDER BY p.cube_slot`)}
+<p>Expected: <code>0 | 6 | 6</code> (and the same for slots 1 and 2).</p>` },
+      { id: 'cu-e-others', title: 'bob and carol open theirs: slots 1 and 2, “3 / 3 players”, the Full pill',
+        html: `<p>bob (second), then carol (third), through the page (“Open my pool”) or the API:</p>${POOLCODE('BOB', '123510')}${POOLCODE('CAROL', '123510')}<p>Expected: <code>pool 200</code> twice. After bob’s: the tournament page shows “2 / 3 players”, no pill. After carol’s:</p>${SLOTS('123510')}<p>Expected: <code>0 | 6 | 11</code>, <code>1 | 6 | 11</code>, <code>2 | 6 | 11</code> (alice, bob, carol in this order).</p>
+<ul><li>Tournament page and hub card now read <strong>“3 / 3 players”</strong> with a <strong>“Full”</strong> pill (hover: “Every place is taken”).</li>
+<li>A pool already opened is still returned once the tournament is full: alice reloads her pool page, it opens (no “full” message).</li></ul>` },
+      { id: 'cu-e-deck', who: 'alice', title: 'A deck saves and syncs; the BGA deck list gives a deck of her pool',
+        html: `<ul><li>On alice’s pool page, build a deck (the deck builder: pick cards from the pool, one hero, at most 3 factions). Reload: the deck is still there. It is saved to alice’s Re:Union account (the deck link of the page opens it on the deck builder).</li></ul>
+<p>What BGA gets for alice:</p>${pre(`curl -s -H "Authorization: Bearer $TOKEN_ALICE" "${API}/api/tournament-bga-decklist?tournamentId=123510&tournamentName=Commons%20cube&gameId=1" | node -pe 'JSON.parse(require("fs").readFileSync(0))["hydra:member"].map(d => [d.name, d.cardQuantity, d.format].join(" | ")).join("\\n")'`)}
+<p>Expected: one line, the deck’s name (the saved one), its card count and <code>sealed</code>. The deck only holds cards of alice’s pool (the builder and the decks API refuse any other copy: try adding more copies than the pool holds, the + stops).</p>` },
+    ],
+  },
+  {
+    letter: 'F', title: 'A full tournament (“Full cup”, cap 2) and free heroes',
+    intro: 'BGA id 123511, same cube, cap 2; BGA id 123517 “Free heroes cube”, free heroes. Both through the API (the form was exercised in C).',
+    steps: [
+      { id: 'cu-f-page', who: 'carol', title: 'Full cup: carol’s page says full, no button',
+        html: `<p>alice creates “Full cup” (cap 2: with 6 × 10 the capacity is 3, so 2 is allowed), alice and bob open their pools:</p>${CREATE_CUBE('ALICE', 'Full cup', '123511', '{ maxPlayers: 2 }')}${POOLCODE('ALICE', '123511')}${POOLCODE('BOB', '123511')}<p>Expected: <code>201 …</code>, then <code>pool 200</code> twice. The tournament page and hub card read “2 / 2 players” with the “Full” pill.</p>
+<ul><li>As carol, the tournament page: checklist step 2 reads <strong>“This tournament is full: 2 players already have a pool.”</strong> and has <strong>no “Open my pool” button</strong>.</li></ul>` },
+      { id: 'cu-f-api', who: 'carol', title: 'Full cup: 409 tournament_full on the pool and the BGA calls',
+        html: `<p>carol:</p>${POOLBODY('CAROL', '123511')}<p>Expected: <code>{"error":"tournament_full","maxPlayers":2} 409</code>.</p>${pre(`curl -s -w ' %{http_code}\\n' -H "Authorization: Bearer $TOKEN_CAROL" "${API}/api/tournament-bga-decklist?tournamentId=123511&tournamentName=Full%20cup"`)}<p>Expected: <code>{"error":"tournament_full"} 409</code> (BGA relays it: carol cannot play). alice, who already has a pool:</p>${pre(`curl -s -o /dev/null -w 'alice decklist %{http_code}\\n' -H "Authorization: Bearer $TOKEN_ALICE" "${API}/api/tournament-bga-decklist?tournamentId=123511&tournamentName=Full%20cup"`)}<p>Expected: <code>alice decklist 200</code> (an existing pool is always returned). No third pool was created:</p>${PSQL(`SELECT count(*) FROM sealed_pools p JOIN tournaments t ON t.id = p.tournament_ref WHERE t.bga_tournament_id = '123511'`)}<p>Expected: <code>2</code>.</p>` },
+      { id: 'cu-f-free', who: 'alice', title: 'Free heroes cube: the 3 selected heroes in every pool, boosters of 10',
+        html: `<p>alice creates “Free heroes cube” (3 heroes in the pool, free choice), alice and bob open their pools:</p>${CREATE_CUBE('ALICE', 'Free heroes cube', '123517', '', '{ heroPool: c.heroes.slice(0, 3) }', '{ heroes: "free" }')}${POOLCODE('ALICE', '123517')}${POOLCODE('BOB', '123517')}<p>Expected: <code>201 …</code>, <code>pool 200</code> twice. Every pool holds the 3 heroes and the boosters have 10 cards (no hero in the boosters):</p>${PSQL(`SELECT p.cube_slot, (SELECT string_agg(DISTINCT jsonb_array_length(b)::text, ',') FROM jsonb_array_elements(p.boosters) b) AS sizes, (SELECT count(*) FROM jsonb_object_keys(p.cards) k WHERE t.config->'source'->'heroPool' ? k) AS heroes_in_pool FROM tournaments t JOIN sealed_pools p ON p.tournament_ref = t.id WHERE t.bga_tournament_id = '123517' ORDER BY p.cube_slot`)}<p>Expected: <code>0 | 10 | 3</code> and <code>1 | 10 | 3</code>. The summary line ends with “free hero choice”; the cube page says <strong>“All of them in every pool, free choice.”</strong> under “Available heroes (3)”.</p>` },
+    ],
+  },
+  {
+    letter: 'G', title: 'The cap on a set tournament (“Capped set cup”)',
+    intro: 'As alice. BGA id 123512, Skybound Odyssey, cap 2. The cap exists on every source, and can be edited with pools.',
+    steps: [
+      { id: 'cu-g-create', who: 'alice', title: 'Create “Capped set cup”: cap 2, “0 / 2 players”',
+        html: `<ul><li>${url(WEB + '/tournament/new')}: name ${chip('Capped set cup')}, link ${chip('https://boardgamearena.com/tournament?id=123512')}, start tomorrow, Cards: Sets › Skybound Odyssey (7 boosters). Settings: at the end, <strong>“Maximum players”</strong> (optional here: empty reads <strong>“No limit”</strong>), type <strong>2</strong>. Create.</li>
+<li>The page and the hub card read <strong>“0 / 2 players”</strong>.</li></ul>
+${PSQL(`SELECT name, max_players FROM tournaments WHERE bga_tournament_id = '123512'`)}
+<p>Expected: <code>Capped set cup | 2</code>. (API alternative if you skip the form:)</p>${CREATE_SET('ALICE', 'Capped set cup', '123512', 2)}` },
+      { id: 'cu-g-full', title: 'Two pools, carol is refused',
+        html: `${POOLCODE('ALICE', '123512')}${POOLCODE('BOB', '123512')}${POOLBODY('CAROL', '123512')}<p>Expected: <code>pool 200</code>, <code>pool 200</code>, then <code>{"error":"tournament_full","maxPlayers":2} 409</code>. On the page: “2 / 2 players”, the “Full” pill, and for carol “This tournament is full: 2 players already have a pool.” without a button.</p>` },
+      { id: 'cu-g-lower', who: 'alice', title: 'Edit the cap with pools: raise, below the pool count refused, clear',
+        html: `<p>Sequence: raise first (carol is blocked at 2), carol opens her pool, then try to go below.</p>
+<ul><li>“Capped set cup” (2 pools) › Edit: the Cards and Settings are locked (pools exist) <strong>but “Maximum players” stays editable</strong>.</li>
+<li>Type <strong>3</strong>, save: it works; the page reads “2 / 3 players” and the Full pill is gone (raising is always allowed).</li></ul>
+<p>carol can now open her pool (3 pools):</p>${POOLCODE('CAROL', '123512')}<p>Expected: <code>pool 200</code>; the page reads “3 / 3 players” with the Full pill.</p>
+<ul><li>alice › Edit, type <strong>2</strong>: the bottom bar says <strong>“3 players already have a pool: the maximum cannot go below.”</strong> and the save button is blocked.</li>
+<li>Type <strong>1</strong>: the bar now says <strong>“The maximum must be a whole number between 2 and 256.”</strong> instead (the range is checked first).</li></ul>
+<p>The same rules through the API:</p>${pre(`${TID('123512')}
+curl -s -w ' %{http_code}\\n' -X PATCH -H "Authorization: Bearer $TOKEN_ALICE" -H "Content-Type: application/json" -d '{"maxPlayers":2}' "${API}/api/tournaments/$TID"
+curl -s -w ' %{http_code}\\n' -X PATCH -H "Authorization: Bearer $TOKEN_ALICE" -H "Content-Type: application/json" -d '{"maxPlayers":1}' "${API}/api/tournaments/$TID"`)}<p>Expected: first a 400 <code>invalid_request</code> with <code>"maxPlayers":"below_pool_count"</code>, then a 400 with <code>"maxPlayers":"invalid_max_players"</code>.</p>
+<ul><li>Finally empty the field (it reads <strong>“No limit”</strong>), save: the page shows the pool count without “/ M”.</li></ul>
+${PSQL(`SELECT max_players IS NULL AS no_limit FROM tournaments WHERE bga_tournament_id = '123512'`)}
+<p>Expected: <code>t</code> (<code>maxPlayers</code> is null).</p>` },
+    ],
+  },
+  {
+    letter: 'H', title: 'API guards and the lock',
+    intro: 'curl only, as alice. Nothing is created: every case below is refused (BGA id 123515).',
+    steps: [
+      { id: 'cu-h-api', who: 'alice', title: 'Every refusal and its code',
+        html: `<p>One command, one line per case: <code>case | status | {fields, config, unresolved, capacity}</code>:</p>${pre(`cd ${REPO} && T=$TOKEN_ALICE node -e '(async () => { const { COMMUNITY_CUBES } = await import("./src/lib/cubes.js"); const c = COMMUNITY_CUBES.find(x => x.id === "all-commons"); const base = () => ({ name: "Guard", bgaUrl: "https://boardgamearena.com/tournament?id=123515", startsAt: new Date(Date.now() + 864e5).toISOString(), maxPlayers: 3, config: { source: { type: "cube", name: "All commons", origin: "community", cubeId: "all-commons", cards: Object.fromEntries(c.refs.map(r => [r, 1])), heroPool: c.heroes, boosters: 6, cardsPerBooster: 10, perFaction: 1 }, heroes: "packs", uniques: { inBoosters: 0, guaranteed: 0 }, excludeBanlist: false } }); const cases = { "boosters 2": b => { b.config.source.boosters = 2 }, "cards per booster 9": b => { b.config.source.cardsPerBooster = 9 }, "perFaction 2, 11 cards": b => { b.config.source.perFaction = 2; b.config.source.cardsPerBooster = 11 }, "3 x 10 (pool size)": b => { b.config.source.boosters = 3 }, "unknown ref": b => { b.config.source.cards["ALT_CORE_B_AX_99_C"] = 1 }, "a hero in cards": b => { b.config.source.cards[c.heroes[0]] = 1 }, "a non-hero in heroPool": b => { b.config.source.heroPool = [c.refs[0]] }, "no cap": b => { delete b.maxPlayers }, "cap 9": b => { b.maxPlayers = 9 }, "cap 1": b => { b.maxPlayers = 1 }, "capacity below 2": b => { b.config.source.boosters = 8; b.config.source.cardsPerBooster = 16; b.maxPlayers = 2 }, "unknown origin": b => { b.config.source.origin = "nowhere" }, "sum over 1500": b => { for (const k of Object.keys(b.config.source.cards)) b.config.source.cards[k] = 99 } }; for (const [label, f] of Object.entries(cases)) { const b = base(); f(b); const r = await fetch("${API}/api/tournaments", { method: "POST", headers: { Authorization: "Bearer " + process.env.T, "Content-Type": "application/json" }, body: JSON.stringify(b) }); const j = await r.json(); console.log(label.padEnd(24), r.status, JSON.stringify({ f: j.fields, c: j.config, u: j.unresolved?.slice(0, 2), cap: j.capacity?.players ?? j.capacity })) } })()'`)}
+<p>Expected, every line a <code>400</code>:</p>
+<ul><li><code>boosters 2</code>: <code>source.boosters</code>; <code>cards per booster 9</code>: <code>source.cardsPerBooster</code>; <code>perFaction 2, 11 cards</code>: <code>source.perFaction</code>; <code>3 x 10</code>: <code>source.poolSize</code>;</li>
+<li><code>unknown ref</code>: <code>source.cards.unresolved</code> and <code>u</code> lists <code>ALT_CORE_B_AX_99_C</code>;</li>
+<li><code>a hero in cards</code>: <code>source.cards</code>; <code>a non-hero in heroPool</code>: <code>source.heroPool</code>;</li>
+<li><code>no cap</code>: <code>maxPlayers: "required_for_cube"</code>; <code>cap 9</code>: <code>maxPlayers: "above_capacity"</code> with <code>cap</code> = 3; <code>cap 1</code>: <code>maxPlayers: "invalid_max_players"</code>;</li>
+<li><code>capacity below 2</code>: <code>source.capacity</code> with <code>cap</code> = 1; <code>unknown origin</code>: <code>source.origin</code>; <code>sum over 1500</code>: <code>source.cards</code>.</li></ul>
+${PSQL(`SELECT count(*) FROM tournaments WHERE bga_tournament_id = '123515'`)}
+<p>Expected: <code>0</code> (nothing was created).</p>` },
+      { id: 'cu-h-locked', who: 'alice', title: 'Once a pool exists: the cap is locked, the name is not',
+        html: `${pre(`${TID('123510')}
+curl -s -w ' %{http_code}\\n' -X PATCH -H "Authorization: Bearer $TOKEN_ALICE" -H "Content-Type: application/json" -d '{"maxPlayers":2}' "${API}/api/tournaments/$TID"
+curl -s -o /dev/null -w 'rename %{http_code}\\n' -X PATCH -H "Authorization: Bearer $TOKEN_ALICE" -H "Content-Type: application/json" -d '{"name":"Commons cube"}' "${API}/api/tournaments/$TID"`)}<p>Expected: <code>{"error":"tournament_locked"} 409</code>, then <code>rename 200</code>. (“Commons cube” has 3 pools since E.)</p>` },
+    ],
+  },
+  {
+    letter: 'I', title: 'Editing a cube tournament',
+    intro: 'As alice. “Pasted cube” (123514) has no pool: everything can change. “Commons cube” (123510) is locked.',
+    steps: [
+      { id: 'cu-i-unlocked', who: 'alice', title: 'Pasted cube, no pool: change the cube, the settings, the cap',
+        html: `<p>Create “Pasted cube” first through the API (a pasted cube holding the All Commons cards; the paste panel itself is exercised in A):</p>${CREATE_CUBE('ALICE', 'Pasted cube', '123514', '', '{ origin: "paste", cubeId: null, name: "Pasted cube" }')}<p>Expected: <code>201 …</code>. Then:</p>
+<ul><li>“Pasted cube” › Edit: the “Cube” tab is selected, the chosen cube shown (origin “Pasted list”, name “Pasted cube”; its refs are re-resolved, the six faction counts are back), all fields editable.</li>
+<li>Change the cube: “Change cube” › “Use this cube” on <strong>“All Commons”</strong>; the heroes are reset to the cube’s 12; Settings: 5 boosters of 12, “Two of each faction”; the capacity line follows (5 × 12 = 60 cards: 3 players) and the cap is at most 3. Set the cap to 2. Save.</li>
+<li>Back on the page: the summary line reads <strong>“5 boosters of 12 · cube “All Commons” (192 cards) · 2 of each faction per booster”</strong> and “0 / 2 players”.</li></ul>
+${PSQL(`SELECT max_players, config->'source'->>'boosters', config->'source'->>'perFaction', config->'source'->>'cubeId' FROM tournaments WHERE bga_tournament_id = '123514'`)}
+<p>Expected: <code>2 | 5 | 2 | all-commons</code>.</p>` },
+      { id: 'cu-i-locked', who: 'alice', title: '“Commons cube” (3 pools): the edit page is locked',
+        html: `<ul><li>${url(WEB + '/tournament?tab=created')} › “Commons cube” › Edit.</li>
+<li>The lock notice names the cap: it says the cards, the settings <strong>and the maximum number of players</strong> are locked because pools exist.</li>
+<li>Cards: the chosen cube is <strong>read-only</strong> (the cube name greyed out, no “Change cube”), <strong>“Preview”</strong> still opens the modal.</li>
+<li>Settings: the steppers, the faction guarantee, the hero mode cards, the hero picker and “Maximum players” are <strong>disabled</strong>.</li>
+<li>The <strong>name</strong> of the tournament stays editable: change it to ${chip('Commons cube')} + a space and back, save (works).</li></ul>` },
+    ],
+  },
+  {
+    letter: 'J', title: 'The BGA path on a cube',
+    intro: 'A player who never opened a pool in the app gets one when the game asks for a deck list.',
+    steps: [
+      { id: 'cu-j-bga', who: 'carol', title: 'carol’s BGA deck-list call on “Free heroes cube”: a Random deck from a slot',
+        html: `<p>“Free heroes cube” has cap 3 and two pools (alice, bob, in F). carol, who has no pool there:</p>${pre(`curl -s -H "Authorization: Bearer $TOKEN_CAROL" "${API}/api/tournament-bga-decklist?tournamentId=123517&tournamentName=Free%20heroes%20cube&gameId=1" | node -pe 'JSON.parse(require("fs").readFileSync(0))["hydra:member"].map(d => [d.name, d.cardQuantity, d.format].join(" | ")).join("\\n")'`)}<p>Expected: one line <code>Random Free heroes cube … | &lt;n&gt; | sealed</code> (a legal deck minted from her pool; the name starts with “Random”). If it is empty, the decks API is not reachable from <code>make dev</code>: report it. Her pool took the third slot:</p>${SLOTS('123517')}<p>Expected: <code>0 | 6 | 10</code>, <code>1 | 6 | 10</code>, <code>2 | 6 | 10</code>.</p>` },
+    ],
+  },
+  {
+    letter: 'K', title: 'Cross-cutting',
+    intro: 'The new screens in French, both themes, at phone width, and the console.',
+    steps: [
+      { id: 'cu-k-fr', title: 'French',
+        html: `<p>UI language FR, then the form (Cube tab, the three panels, the chosen card, the cube Settings, the hero picker, “Nombre maximum de joueurs” and its “Sans limite”), the tournament page of “Commons cube”, the hub cards (“N / M joueurs”, the “Complet” pill, “Toutes les places sont prises” on hover), the cube page, the pool reveal cover. Expected: no English text left, no raw key (<code>tournaments.…</code>, <code>packReveal.…</code>); the cover’s subtitle follows the language.</p>` },
+      { id: 'cu-k-theme', title: 'Light and dark themes',
+        html: `<p>Toggle ☀/☾ on the form (Cube tab, the chosen card, the option cards, the hero picker panel, the capacity line), the tournament page (the Full pill), the cube page and the pool page. Expected: everything readable in both themes, the “Full” pill and the cap line included; only the generated cover (a canvas) keeps its own colours.</p>` },
+      { id: 'cu-k-mobile', title: 'Phone width',
+        html: `<p>DevTools at 375 px: the form (the three Cube panels stacked, the chosen card, the steppers and option cards, the hero picker panel and its chips wrapping, the “Maximum players” field), the tournament page (summary line wrapping, the players line, the Full pill), the cube page, the pool reveal. Expected: no horizontal scroll, nothing cut off, the bottom bar usable.</p>` },
+      { id: 'cu-k-console', title: 'The browser console stays clean',
+        html: `<p>DevTools open, console filtered on Errors, walk through A (Cube tab, preview), B, C, D and E (the reveal and its cover). Expected: no red error and no <code>endpoints()</code> warning (a 4xx on an expected refusal, such as the full tournament, is fine).</p>` },
+    ],
+  },
+  {
+    letter: 'L', title: 'The Lobby’s Cubes tab (optional task)',
+    intro: 'Only when the optional Task 15 (swapping the Lobby’s inline cube code for the new CubePicker) ran. Otherwise mark the step skipped (⊘).',
+    steps: [
+      { id: 'cu-l-lobby', title: 'The Lobby’s Cubes tab looks and behaves as before',
+        html: `<p><strong>Skip this step if Task 15 did not run</strong> (the Lobby code is then untouched).</p><ul><li>${url(WEB)}: create a room, Sealed mode, tab <strong>“Cubes”</strong>: the community cubes with Preview, “Load from your Re:Union decks” (tick several, “Load N decks as cube”), “＋ Paste your own cube” (Parse, the loaded line, unresolved refs listed), the “Use this cube” choice and the player limit message (“This cube supports 2-N players.”).</li>
+<li>Start a cube sealed: every player is dealt from the same pool as before (cards shared: this is not the tournament deal).</li>
+<li>Draft mode, tab “Cubes”: unchanged (hero draft, preview).</li></ul>` },
+    ],
+  },
+  {
+    letter: 'M', title: 'Before production (preprod)',
+    intro: 'Preprod https://altered-draft-preprod.altered.re, two real accounts. BGA ids 999510 and 999511. Preprod must not hold earlier tournaments with these ids.',
+    steps: [
+      { id: 'cu-m-preprod', title: 'A cube tournament end to end, a full one, clean-up',
+        html: `<ul><li>Account 1 declares <strong>“Cube preprod”</strong> (link <code>https://boardgamearena.com/tournament?id=999510</code>): Cube tab, “All Commons”, 6 × 10, one of each faction, “In boosters”, Maximum players <strong>2</strong>. The summary reads “6 boosters of 10 · cube “…” (192 cards) · 1 of each faction per booster”, “0 / 2 players”.</li>
+<li>Account 1 opens the cube page (“View the cube (192 cards) →”: 192 cards, Sofia, First Outpost listed, 12 heroes), then “Open my pool”: the generated cover, 6 boosters of 11 (hero first), no 8th pack. It builds a deck and saves it to Re:Union.</li>
+<li>Account 2 opens its pool: “2 / 2 players” and the “Full” pill appear; its boosters share no card with account 1’s (compare a few). A third account, or a logged-out visit followed by login, sees “This tournament is full: 2 players already have a pool.” and no button.</li>
+<li>With the BGA game (if available): the deck-list call of a player beyond the cap fails (409 relayed), the two players’ calls give their decks.</li>
+<li>Declares <strong>“Full preprod”</strong> (<code>999511</code>), the same cube, cap 1: account 1 opens a pool, account 2 is refused at once (full).</li>
+<li>Clean-up: a moderator detaches both tournaments (the pools and the dealt lots go with them), then Delete each (a detached tournament without pools can be deleted).</li></ul>` },
+    ],
+  },
+];
+
+
+/* ---------- state (IndexedDB, in-memory fallback) ---------- */
+// Same IndexedDB database as the lot 1 page, its own key: the two runs never mix.
+const DB_NAME = 'tournois-recette', STORE = 'kv', KEY = 'state-v5-cube';
+let state = { steps: {} };
+let dbp = null;
+function openDb() {
+  if (dbp) return dbp;
+  dbp = new Promise((res) => {
+    try {
+      const r = indexedDB.open(DB_NAME, 1);
+      r.onupgradeneeded = () => r.result.createObjectStore(STORE);
+      r.onsuccess = () => res(r.result);
+      r.onerror = () => res(null);
+    } catch (e) { res(null); }
+  });
+  return dbp;
+}
+async function load() {
+  const db = await openDb();
+  if (!db) return;
+  await new Promise((res) => {
+    try {
+      const t = db.transaction(STORE).objectStore(STORE).get(KEY);
+      t.onsuccess = () => { if (t.result) state = t.result; res(); };
+      t.onerror = () => res();
+    } catch (e) { res(); }
+  });
+}
+let saveTimer = null;
+function save() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(async () => {
+    const db = await openDb();
+    if (!db) return;
+    try { db.transaction(STORE, 'readwrite').objectStore(STORE).put(state, KEY); } catch (e) {}
+  }, 250);
+}
+const st = (id) => (state.steps[id] ||= { status: null, note: '', images: [] });
+
+/* ---------- render ---------- */
+const ICONS = {
+  ok: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+  ko: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+  skip: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 6l7 6-7 6M13 6l7 6-7 6"/></svg>',
+};
+const allSteps = GROUPS.flatMap((g) => g.steps.map((s, i) => ({ ...s, group: g, num: `${g.letter}${i + 1}` })));
+
+function renderCast() {
+  document.getElementById('cast').innerHTML = Object.values(PERSONAS).map((p) => `
+    <div class="persona"><span class="tag">${p.tag}</span>
+      <div class="org">${p.org}</div>
+      <div style="margin:4px 0">${chip(p.email)}</div>
+      <div class="meta">${p.meta}</div></div>`).join('');
+}
+
+const FOLD_KEY = 'tournois-recette-v5-cube-collapsed';
+let collapsed = new Set();
+try { collapsed = new Set(JSON.parse(localStorage.getItem(FOLD_KEY) || '[]')); } catch (e) {}
+function saveFold() { try { localStorage.setItem(FOLD_KEY, JSON.stringify([...collapsed])); } catch (e) {} }
+function setFold(letter, isCollapsed) {
+  isCollapsed ? collapsed.add(letter) : collapsed.delete(letter);
+  const sec = document.querySelector(`section.group[data-g="${letter}"]`);
+  if (sec) {
+    sec.classList.toggle('collapsed', isCollapsed);
+    sec.querySelector('h3').setAttribute('aria-expanded', String(!isCollapsed));
+  }
+}
+document.addEventListener('click', (e) => {
+  const h = e.target.closest('section.group > h3');
+  if (h) { const l = h.parentElement.dataset.g; setFold(l, !collapsed.has(l)); saveFold(); return; }
+  if (e.target.id === 'foldAll' || e.target.id === 'unfoldAll') {
+    GROUPS.forEach((g) => setFold(g.letter, e.target.id === 'foldAll')); saveFold();
+  }
+});
+document.addEventListener('keydown', (e) => {
+  const h = e.target.closest && e.target.closest('section.group > h3');
+  if (h && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); h.click(); }
+});
+
+function renderGroups() {
+  document.getElementById('groups').innerHTML = GROUPS.map((g) => `
+    <section class="group${collapsed.has(g.letter) ? ' collapsed' : ''}" data-g="${g.letter}">
+      <h3 tabindex="0" role="button" aria-expanded="${!collapsed.has(g.letter)}"><span class="letter">${g.letter}</span>${g.title}<span class="gcount" data-gcount="${g.letter}"></span><span class="chev" aria-hidden="true">▼</span></h3>
+      ${g.intro ? `<p class="intro">${g.intro}</p>` : ''}
+      ${g.steps.map((s, i) => stepHtml(s, `${g.letter}${i + 1}`)).join('')}
+    </section>`).join('');
+  allSteps.forEach((s) => paintStep(s.id));
+}
+
+function stepHtml(s, num) {
+  return `<article class="step" data-id="${s.id}">
+    <div class="s-head">
+      <div class="s-num">${num}</div>
+      <div class="s-body">
+        <p class="s-title">${s.v11 ? '<span class="new-tag v11">v1.1</span> ' : s.v2 ? '<span class="new-tag">new</span> ' : ''}${s.title}${AUTO_STEPS.includes(s.id) ? ` <span class="new-tag auto" title="${AUTO_PARTIAL[s.id] ? 'Partial: ' + AUTO_PARTIAL[s.id] : 'Replayed by the Playwright suite'}">auto${AUTO_PARTIAL[s.id] ? ' (partial)' : ''}</span>` : ''}</p>
+        ${s.who ? `<div class="s-who">${who(s.who)}</div>` : ''}
+        ${s.html || ''}
+      </div>
+      <div class="status">
+        <button data-v="ok" title="OK">${ICONS.ok}</button>
+        <button data-v="ko" title="Problem">${ICONS.ko}</button>
+        <button data-v="skip" title="Skip">${ICONS.skip}</button>
+      </div>
+    </div>
+    <div class="issue">
+      <label>What is wrong</label>
+      <textarea placeholder="What you saw, what you expected… (Ctrl+V to paste a screenshot)"></textarea>
+      <div class="drop">Drop or paste a screenshot here, or <u>click to choose one</u></div>
+      <input type="file" accept="image/*" multiple hidden>
+      <div class="thumbs"></div>
+    </div>
+  </article>`;
+}
+
+function imgName(id, i) { return `cube-acceptance-${id}-${i + 1}.png`; }
+
+function paintStep(id) {
+  const el = document.querySelector(`.step[data-id="${id}"]`);
+  if (!el) return;
+  const s = st(id);
+  el.dataset.status = s.status || '';
+  el.classList.toggle('has-note', !!(s.note || s.images.length));
+  el.querySelectorAll('.status button').forEach((b) => b.classList.toggle('on', b.dataset.v === s.status));
+  const ta = el.querySelector('textarea');
+  if (document.activeElement !== ta) ta.value = s.note;
+  el.querySelector('.thumbs').innerHTML = s.images.map((src, i) => `
+    <div class="thumb"><img src="${src}" data-i="${i}" alt=""><button data-del="${i}" title="Remove">×</button><span class="fname">${imgName(id, i)}</span></div>`).join('');
+}
+
+function refreshMeta() {
+  const total = allSteps.length;
+  const c = { ok: 0, ko: 0, skip: 0 };
+  allSteps.forEach((s) => { const v = st(s.id).status; if (v) c[v]++; });
+  const done = c.ok + c.ko + c.skip;
+  document.getElementById('count').textContent = `${done} / ${total}` + (c.ko ? ` · ${c.ko} ✗` : '');
+  document.querySelector('.b-ok').style.width = (c.ok / total * 100) + '%';
+  document.querySelector('.b-ko').style.width = (c.ko / total * 100) + '%';
+  document.querySelector('.b-skip').style.width = (c.skip / total * 100) + '%';
+  GROUPS.forEach((g) => {
+    const d = g.steps.filter((s) => st(s.id).status).length;
+    document.querySelector(`[data-gcount="${g.letter}"]`).textContent = `${d}/${g.steps.length}`;
+  });
+  applyFilter();
+  renderRecap();
+}
+
+let filter = 'all';
+function applyFilter() {
+  document.querySelectorAll('.step').forEach((el) => {
+    const v = st(el.dataset.id).status;
+    const show = filter === 'all' || (filter === 'todo' && !v) || (filter === 'ko' && v === 'ko')
+      || (filter === 'manual' && (!AUTO_STEPS.includes(el.dataset.id) || el.dataset.id in AUTO_PARTIAL));
+    el.classList.toggle('hidden', !show);
+  });
+  document.querySelectorAll('section.group').forEach((g) => {
+    g.classList.toggle('hidden', !g.querySelector('.step:not(.hidden)'));
+  });
+}
+
+function stripHtml(h) {
+  const d = document.createElement('div');
+  d.innerHTML = h;
+  d.querySelectorAll('.copy-pre').forEach((b) => b.remove());
+  return d.textContent.replace(/\s+/g, ' ').trim();
+}
+
+function renderRecap() {
+  const ko = allSteps.filter((s) => st(s.id).status === 'ko' || (st(s.id).status !== 'ok' && (st(s.id).note || st(s.id).images.length)));
+  const c = { ok: 0, ko: 0, skip: 0, todo: 0 };
+  allSteps.forEach((s) => { c[st(s.id).status || 'todo']++; });
+  let out = `Cube sealed and the player cap acceptance, V5\n`;
+  out += `Result: ${c.ok} OK · ${c.ko} problem(s) · ${c.skip} skipped · ${c.todo} not done\n`;
+  const skipped = allSteps.filter((s) => st(s.id).status === 'skip').map((s) => s.num);
+  if (skipped.length) out += `Skipped: ${skipped.join(', ')}\n`;
+  if (!ko.length) {
+    out += `\nNo problem reported.`;
+  } else {
+    ko.forEach((s) => {
+      const x = st(s.id);
+      out += `\n— ${s.num} · ${s.group.title} · ${s.title}\n`;
+      if (s.who) out += `  Account: ${PERSONAS[s.who].email} (${PERSONAS[s.who].tag})\n`;
+      out += `  Expected: ${stripHtml(s.html || '').slice(0, 400)}\n`;
+      out += `  Seen: ${x.note ? x.note.replace(/\n/g, '\n    ') : '(no note)'}\n`;
+      if (x.images.length) out += `  Screenshots: ${x.images.map((_, i) => '~/Downloads/' + imgName(s.id, i)).join(', ')}\n`;
+    });
+  }
+  document.getElementById('recapText').textContent = out;
+  const badge = document.getElementById('tabBadge');
+  badge.textContent = ko.length;
+  badge.classList.toggle('hidden', ko.length === 0);
+  const n = allSteps.reduce((a, s) => a + st(s.id).images.length, 0);
+  const b = document.getElementById('dlImages');
+  b.disabled = n === 0;
+  b.textContent = n ? `Download the screenshots (${n})` : 'Download the screenshots';
+}
+
+/* ---------- interactions ---------- */
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), 1400);
+}
+async function copy(text) {
+  try { await navigator.clipboard.writeText(text); }
+  catch (e) {
+    const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); } catch (_) {} ta.remove();
+  }
+}
+
+function addImages(id, files) {
+  [...files].filter((f) => f.type.startsWith('image/')).forEach((f) => {
+    const r = new FileReader();
+    r.onload = () => { st(id).images.push(r.result); paintStep(id); save(); refreshMeta(); };
+    r.readAsDataURL(f);
+  });
+}
+
+document.addEventListener('click', async (e) => {
+  const c = e.target.closest('.chip');
+  if (c) {
+    let text = c.dataset.copy;
+    if (c.hasAttribute('data-copy-pre')) {
+      const pre = c.closest('pre').cloneNode(true); pre.querySelector('.copy-pre').remove(); text = pre.textContent.trim();
+    }
+    await copy(text);
+    c.classList.add('copied'); setTimeout(() => c.classList.remove('copied'), 900);
+    toast('Copied');
+    return;
+  }
+  const sb = e.target.closest('.status button');
+  if (sb) {
+    const id = sb.closest('.step').dataset.id;
+    const s = st(id);
+    s.status = s.status === sb.dataset.v ? null : sb.dataset.v;
+    paintStep(id); save(); refreshMeta();
+    if (s.status === 'ko') sb.closest('.step').querySelector('textarea').focus();
+    return;
+  }
+  const del = e.target.closest('[data-del]');
+  if (del) {
+    const id = del.closest('.step').dataset.id;
+    st(id).images.splice(+del.dataset.del, 1); paintStep(id); save(); refreshMeta();
+    return;
+  }
+  const img = e.target.closest('.thumb img');
+  if (img) {
+    const lb = document.getElementById('lightbox'); lb.querySelector('img').src = img.src; lb.classList.add('show');
+    return;
+  }
+  if (e.target.closest('#lightbox')) { document.getElementById('lightbox').classList.remove('show'); return; }
+  const drop = e.target.closest('.drop');
+  if (drop) { drop.parentElement.querySelector('input[type=file]').click(); return; }
+  const tab = e.target.closest('#tabs button, [data-goto]');
+  if (tab) { showTab(tab.dataset.tab || tab.dataset.goto); return; }
+  const f = e.target.closest('#filters button');
+  if (f) {
+    filter = f.dataset.f;
+    document.querySelectorAll('#filters button').forEach((b) => b.classList.toggle('active', b === f));
+    applyFilter();
+  }
+});
+
+document.addEventListener('input', (e) => {
+  if (e.target.matches('.issue textarea')) {
+    const id = e.target.closest('.step').dataset.id;
+    st(id).note = e.target.value; save(); renderRecap();
+  }
+});
+document.addEventListener('change', (e) => {
+  if (e.target.matches('.issue input[type=file]')) {
+    addImages(e.target.closest('.step').dataset.id, e.target.files); e.target.value = '';
+  }
+});
+document.addEventListener('paste', (e) => {
+  const stepEl = e.target.closest && e.target.closest('.step');
+  if (!stepEl) return;
+  const files = [...(e.clipboardData?.items || [])].filter((i) => i.type.startsWith('image/')).map((i) => i.getAsFile());
+  if (files.length) { e.preventDefault(); addImages(stepEl.dataset.id, files); toast('Screenshot added'); }
+});
+['dragover', 'dragleave', 'drop'].forEach((ev) => document.addEventListener(ev, (e) => {
+  const d = e.target.closest && e.target.closest('.drop');
+  if (!d) return;
+  e.preventDefault();
+  d.classList.toggle('over', ev === 'dragover');
+  if (ev === 'drop') addImages(d.closest('.step').dataset.id, e.dataTransfer.files);
+}));
+
+document.getElementById('copyRecap').addEventListener('click', async () => {
+  await copy(document.getElementById('recapText').textContent); toast('Recap copied');
+});
+document.getElementById('dlImages').addEventListener('click', () => {
+  let delay = 0;
+  allSteps.forEach((s) => st(s.id).images.forEach((src, i) => {
+    setTimeout(() => {
+      const a = document.createElement('a'); a.href = src; a.download = imgName(s.id, i); document.body.appendChild(a); a.click(); a.remove();
+    }, delay);
+    delay += 250;
+  }));
+  toast('Downloading to ~/Downloads');
+});
+document.getElementById('resetAll').addEventListener('click', () => {
+  if (!confirm('Clear every tick, note and screenshot?')) return;
+  state = { steps: {} }; save(); renderGroups(); refreshMeta();
+});
+
+function showTab(name) {
+  const recap = name === 'recap';
+  document.getElementById('viewSteps').classList.toggle('hidden', recap);
+  document.getElementById('viewRecap').classList.toggle('hidden', !recap);
+  document.getElementById('filters').classList.toggle('hidden', recap);
+  document.querySelectorAll('#tabs button').forEach((b) => b.classList.toggle('active', b.dataset.tab === name));
+  try { history.replaceState(null, '', recap ? '#recap' : '#'); } catch (e) {}
+  window.scrollTo({ top: 0 });
+}
+
+const themeBtn = document.getElementById('themeBtn');
+function setTheme(t) {
+  if (t) document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme;
+  try { t ? localStorage.setItem('tournois-recette-theme', t) : localStorage.removeItem('tournois-recette-theme'); } catch (e) {}
+}
+try { const t = localStorage.getItem('tournois-recette-theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+themeBtn.addEventListener('click', () => {
+  const cur = document.documentElement.dataset.theme
+    || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  setTheme(cur === 'dark' ? 'light' : 'dark');
+});
+
+(async () => {
+  renderCast();
+  await load();
+  renderGroups();
+  refreshMeta();
+  if (location.hash === '#recap') showTab('recap');
+})();
+</script>
+</body>
+</html>

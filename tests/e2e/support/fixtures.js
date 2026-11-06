@@ -5,7 +5,7 @@ import { test as base, expect } from '@playwright/test'
 import { apiAs, makeSeed } from './api.js'
 import { loginAs } from './auth.js'
 import { closeDb, query, resetDb } from './db.js'
-import { fakesDecks, fakesDrainUnmatched, fakesRequests, fakesReset, fakesRevoke, fakesSession } from './fakes-client.js'
+import { fakesDecks, fakesDrainUnmatched, fakesRequests, fakesReset, fakesRevoke, fakesSeedDeck, fakesSession } from './fakes-client.js'
 import { assertClean, attachGuards, newBucket, pending } from './guards.js'
 import { installNetworkRules } from './network.js'
 
@@ -53,7 +53,7 @@ export const test = base.extend({
   },
 
   fakes: async ({}, use) => {
-    await use({ reset: fakesReset, revoke: fakesRevoke, session: fakesSession, decks: fakesDecks, requests: fakesRequests })
+    await use({ reset: fakesReset, revoke: fakesRevoke, session: fakesSession, decks: fakesDecks, seedDeck: fakesSeedDeck, requests: fakesRequests })
   },
 
   db: [async ({}, use) => {

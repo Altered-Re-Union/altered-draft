@@ -29,7 +29,7 @@ describe('validateTournamentFields (create)', () => {
     expect(r.ok).toBe(true)
     expect(r.values).toEqual({
       name: 'Winter Cup', description: 'd', startsAt: new Date(later), endsAt: null,
-      bgaUrl: 'https://boardgamearena.com/tournament?id=7', bgaTournamentId: '7', visibility: 'public',
+      bgaUrl: 'https://boardgamearena.com/tournament?id=7', bgaTournamentId: '7', visibility: 'public', maxPlayers: null,
     })
   })
 
@@ -130,5 +130,26 @@ describe('splitBoundPools', () => {
     const { visible, archived } = splitBoundPools(pools)
     expect(visible.map(p => p.id)).toEqual(['ongoing', 'upcoming', 'legacy'])
     expect(archived.map(p => p.id)).toEqual(['cancelled', 'ended', 'detached', 'legacy-hidden', 'ongoing-hidden'])
+  })
+})
+
+describe('validateTournamentFields maxPlayers', () => {
+  const base = { name: 'Winter Cup', bgaUrl: 'https://boardgamearena.com/tournament?id=7', startsAt: later }
+  const run = (extra, opts = { isCreate: true }) => validateTournamentFields({ ...base, ...extra }, { now: NOW, ...opts })
+  it('is null when absent, null or empty on create', () => {
+    expect(run({}).values.maxPlayers).toBeNull()
+    expect(run({ maxPlayers: null }).values.maxPlayers).toBeNull()
+    expect(run({ maxPlayers: '' }).values.maxPlayers).toBeNull()
+  })
+  it('parses an integer 2-256', () => {
+    expect(run({ maxPlayers: '8' }).values.maxPlayers).toBe(8)
+    expect(run({ maxPlayers: 256 }).values.maxPlayers).toBe(256)
+  })
+  it('refuses anything else', () => {
+    for (const v of [1, 257, 2.5, 'x', true]) expect(run({ maxPlayers: v }).errors.maxPlayers, String(v)).toBe('invalid_max_players')
+  })
+  it('on a patch only validates the key when sent', () => {
+    expect(validateTournamentFields({ name: 'Winter Cup' }, { now: NOW, isCreate: false, current: {} }).values.maxPlayers).toBeUndefined()
+    expect(validateTournamentFields({ maxPlayers: null }, { now: NOW, isCreate: false, current: {} }).values.maxPlayers).toBeNull()
   })
 })

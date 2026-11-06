@@ -3,16 +3,17 @@ import { SEALED_BOOSTERS } from '../lib/tournamentConfig.js'
 import SetPresetGrid from './SetPresetGrid.jsx'
 import FactionPills from './FactionPills.jsx'
 import SetWeightsList from './SetWeightsList.jsx'
+import CubePicker from './CubePicker.jsx'
 
-// The Cards section of the tournament form (spec §8.1, §13.4): "Sets" (the 7 boosters split
-// over one or more sets) or "Mono-faction mix" (one faction, several weighted sets). Both
-// sources' values live in the form, so flipping back and forth loses nothing; only the
-// active one is sent. The Sets tab has one model, `setCounts` ({ CODE: n }, n > 0 only), and
+// The Cards section of the tournament form (spec §8.1, §13.4, §15.2): "Sets" (the 7 boosters
+// split over one or more sets), "Mono-faction mix" (one faction, several weighted sets) or
+// "Cube" (a fixed card list, every copy dealt once). Every source's values live in the form, so
+// flipping back and forth loses nothing; only the active one is sent. The Sets tab has one model, `setCounts` ({ CODE: n }, n > 0 only), and
 // two views: the grid (one click = all 7 boosters of that set) and the "Mix several sets"
 // disclosure, one stepper per set.
 export default function TournamentCardsSource({
   sourceType, onSourceType, setCounts, onSetCounts, faction, onFaction, weights, onWeights,
-  mixOpen, onMixOpen, disabled = false,
+  mixOpen, onMixOpen, cube = null, onCube, lang, disabled = false, cubeReadOnly = false,
 }) {
   const { t } = useLang()
   const tab = active => `flex-1 px-3 py-1.5 rounded-md text-sm font-medium transition-colors disabled:opacity-60 ${
@@ -25,14 +26,19 @@ export default function TournamentCardsSource({
   return (
     <div className="space-y-4">
       <div className="flex gap-1 p-1 rounded-lg bg-surface2 border border-line" role="radiogroup" aria-label={t('tournaments.sourceLabel')}>
-        {[['set', 'sourceSets'], ['faction', 'sourceFactionMix']].map(([type, key]) => (
+        {[['set', 'sourceSets'], ['faction', 'sourceFactionMix'], ['cube', 'sourceCube']].map(([type, key]) => (
           <button key={type} type="button" role="radio" aria-checked={sourceType === type} disabled={disabled}
             onClick={() => onSourceType(type)} className={tab(sourceType === type)}>
             {t(`tournaments.${key}`)}
           </button>
         ))}
       </div>
-      {sourceType === 'faction' ? (
+      {sourceType === 'cube' ? (
+        <>
+          <p className="text-sm text-muted">{t('tournaments.cubeHint')}</p>
+          <CubePicker value={cube} onChange={onCube} disabled={disabled} readOnly={cubeReadOnly} lang={lang} />
+        </>
+      ) : sourceType === 'faction' ? (
         <>
           <div className="space-y-1.5">
             <span className="text-sm text-ink2">{t('tournaments.factionLabel')}</span>

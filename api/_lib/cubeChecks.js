@@ -1,0 +1,40 @@
+// Server-side verification of a cube source (spec §15.2 "Verification server-side").
+import { resolveCubeSource } from '../../src/lib/cubeSource.js'
+import { cubeCapacity, checkPlayerCap } from '../../src/lib/cubeSealed.js'
+
+/**
+ * @returns {Promise<{ refused: { status: 400 | 503, body: object } } | { config: object }>}
+ * 503 { error: 'cards_unavailable' } when the card data could not be loaded (try again later).
+ */
+export async function checkCubeConfig(config, { maxPlayers } = {}) {
+  const source = config?.source
+  if (source?.type !== 'cube') return { config }
+
+  let resolved
+  try {
+    resolved = await resolveCubeSource(source)
+  } catch (e) {
+    if (e.code === 'cards_unavailable') return { refused: { status: 503, body: { error: 'cards_unavailable' } } }
+    throw e
+  }
+  const refuse = body => ({ refused: { status: 400, body: { error: 'invalid_request', ...body } } })
+
+  if (resolved.unresolved.length) {
+    const heroSet = new Set(source.heroPool)
+    const cardSet = new Set(Object.keys(source.cards))
+    const keys = []
+    if (resolved.unresolved.some(r => cardSet.has(r))) keys.push('source.cards.unresolved')
+    if (resolved.unresolved.some(r => heroSet.has(r))) keys.push('source.heroPool.unresolved')
+    return refuse({ config: keys, unresolved: resolved.unresolved })
+  }
+  // An alt-art / promo ref and its B twin merge into one stored ref: the sum may pass 99.
+  if (Object.values(resolved.stored.cards).some(qty => qty > 99)) return refuse({ config: ['source.cards'] })
+  if (resolved.heroesInCards.length) return refuse({ config: ['source.cards'] })
+  if (resolved.nonHeroesInPool.length) return refuse({ config: ['source.heroPool'] })
+
+  const capacity = cubeCapacity({ cards: resolved.cards, boosters: source.boosters, cardsPerBooster: source.cardsPerBooster, perFaction: source.perFaction })
+  const cap = checkPlayerCap({ source, maxPlayers, capacity })
+  if (Object.keys(cap.fields).length || cap.config.length) return refuse({ fields: cap.fields, config: cap.config, capacity })
+
+  return { config: { ...config, source: { ...source, ...resolved.stored } } }
+}

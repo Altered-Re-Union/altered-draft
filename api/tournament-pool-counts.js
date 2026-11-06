@@ -31,6 +31,8 @@ export default async function handler(req, res) {
       : await getOrCreateNormalPool(sub)
   } catch (e) {
     if (e.code === 'tournament_unavailable' || e.code === 'pool_unavailable') return res.status(409).json({ error: e.code })
+    if (e.code === 'tournament_full') return res.status(409).json({ error: 'tournament_full' })
+    if (e.code === 'cube_unresolved' || e.code === 'cards_unavailable') return res.status(409).json({ error: 'pool_unavailable' })
     throw e
   }
 
