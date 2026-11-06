@@ -26,8 +26,7 @@ const CUBE_CARDS = Object.fromEntries(FACTIONS.flatMap(f => [
   ...Array.from({ length: 18 }, (_, i) => [`ALT_CYCLONE_B_${f}_${pad(i + 2)}_C`, 1]),
   [`ALT_CYCLONE_B_${f}_20_C`, 2],
 ]))
-// Validated with 6 boosters, then cut to 3 (3 × 10 is under the 60-card pool minimum, but
-// keeps the lots small): the deal itself never re-validates the stored config.
+// A realistic stored config: 6 boosters of 10 per player, cap 2 = exactly the 120 cards.
 const cubeConfig = over => {
   const { ok, errors, config } = validateTournamentConfig({
     format: 'sealed',
@@ -35,7 +34,7 @@ const cubeConfig = over => {
     heroes: over?.heroes ?? 'packs',
   })
   if (!ok) throw new Error(`bad test config: ${errors.join(', ')}`)
-  return { ...config, source: { ...config.source, boosters: 3 } }
+  return config
 }
 const CUBE_CONFIG = cubeConfig()
 
@@ -47,7 +46,7 @@ async function mkTournament(over = {}) {
     ...over,
   })
 }
-const mkCube = over => mkTournament({ config: CUBE_CONFIG, maxPlayers: 3, ...over })
+const mkCube = over => mkTournament({ config: CUBE_CONFIG, maxPlayers: 2, ...over })
 
 vi.mock('../../src/lib/poolBuilder.js', async importOriginal => {
   const mod = await importOriginal()
@@ -89,7 +88,7 @@ vi.mock('../../api/_lib/auth.js', async importOriginal => {
   return { ...mod, verifyUser: vi.fn(async () => null), verifySub: vi.fn(async () => null) }
 })
 import { verifyUser, verifySub } from '../../api/_lib/auth.js'
-import { fetchUniques } from '../../src/lib/cardData.js'
+import { fetchSet, fetchUniques } from '../../src/lib/cardData.js'
 import { resolveCubeSource } from '../../src/lib/cubeSource.js'
 import bgaDecklist from '../../api/tournament-bga-decklist.js'
 import poolCounts from '../../api/tournament-pool-counts.js'
@@ -138,9 +137,9 @@ describe('cube deal and slot claim', () => {
     const row = await getOrCreateTournamentPool('alice', t)
     expect(row.cube_slot).toBe(0)
     const slots = await slotsOf(t.id)
-    expect(slots.map(s => s.slot)).toEqual([0, 1, 2])
+    expect(slots.map(s => s.slot)).toEqual([0, 1])
     for (const { boosters } of slots) {
-      expect(boosters).toHaveLength(3)
+      expect(boosters).toHaveLength(6)
       for (const b of boosters) {
         expect(b).toHaveLength(11)
         expect(HEROES).toContain(b[0])
@@ -148,7 +147,8 @@ describe('cube deal and slot claim', () => {
     }
     const used = countRefs(slots.flatMap(s => bodiesOf(s.boosters)))
     for (const [ref, n] of Object.entries(used)) expect(n).toBeLessThanOrEqual(CUBE_CONFIG.source.cards[ref] ?? 0)
-    expect(Object.values(used).reduce((a, b) => a + b, 0)).toBe(90)
+    // 2 lots × 6 boosters × 10 = the whole cube, every copy exactly once.
+    expect(used).toEqual(CUBE_CONFIG.source.cards)
     expect(row.boosters).toEqual(slots[0].boosters)
     expect(row.cards).toEqual(countRefs(slots[0].boosters.flat()))
     expect(row.set_code).toBeNull()
@@ -160,12 +160,10 @@ describe('cube deal and slot claim', () => {
     const a = await getOrCreateTournamentPool('alice', t)
     const first = await slotsOf(t.id)
     const b = await getOrCreateTournamentPool('bob', t)
-    const c = await getOrCreateTournamentPool('carol', t)
-    expect([a.cube_slot, b.cube_slot, c.cube_slot]).toEqual([0, 1, 2])
+    expect([a.cube_slot, b.cube_slot]).toEqual([0, 1])
     expect(await slotsOf(t.id)).toEqual(first)
     expect(b.boosters).toEqual(first[1].boosters)
-    expect(c.boosters).toEqual(first[2].boosters)
-    const used = countRefs([a, b, c].flatMap(p => bodiesOf(p.boosters)))
+    const used = countRefs([a, b].flatMap(p => bodiesOf(p.boosters)))
     for (const [ref, n] of Object.entries(used)) expect(n).toBeLessThanOrEqual(CUBE_CONFIG.source.cards[ref])
   })
 
@@ -184,13 +182,12 @@ describe('cube deal and slot claim', () => {
     const t = await mkCube()
     const alice = await getOrCreateTournamentPool('alice', t)
     await getOrCreateTournamentPool('bob', t)
-    await getOrCreateTournamentPool('carol', t)
-    await expect(getOrCreateTournamentPool('dave', t)).rejects.toMatchObject({ code: 'tournament_full' })
+    await expect(getOrCreateTournamentPool('carol', t)).rejects.toMatchObject({ code: 'tournament_full' })
     expect((await getOrCreateTournamentPool('alice', t)).id).toBe(alice.id)
   })
 
   it('three creators racing for a cap of 2 end with two pools and one tournament_full', async () => {
-    const t = await mkCube({ maxPlayers: 2 })
+    const t = await mkCube()
     const results = await Promise.allSettled(['a', 'b', 'c'].map(s => getOrCreateTournamentPool(s, t)))
     expect(results.filter(r => r.status === 'fulfilled')).toHaveLength(2)
     expect(results.find(r => r.status === 'rejected').reason.code).toBe('tournament_full')
@@ -199,7 +196,7 @@ describe('cube deal and slot claim', () => {
   })
 
   it('the same player racing herself on the last place gets her pool, never tournament_full', async () => {
-    const t = await mkCube({ maxPlayers: 2 })
+    const t = await mkCube()
     await getOrCreateTournamentPool('bob', t)
     const results = await Promise.all([1, 2, 3].map(() => getOrCreateTournamentPool('alice', t)))
     expect(new Set(results.map(r => r.id)).size).toBe(1)
@@ -216,6 +213,38 @@ describe('cube deal and slot claim', () => {
     const open = await mkTournament()
     for (const sub of ['alice', 'bob', 'carol']) expect((await getOrCreateTournamentPool(sub, open)).cube_slot).toBeNull()
     expect((await query('SELECT count(*)::int AS n FROM sealed_pools WHERE tournament_ref = $1', [open.id])).rows[0].n).toBe(3)
+  })
+
+  it('a cap added while a request is in flight: the stale uncapped row still goes through the capped path', async () => {
+    const t = await mkTournament()
+    await getOrCreateTournamentPool('alice', t)
+    await getOrCreateTournamentPool('bob', t)
+    const stale = await getTournament(t.id)
+    expect(stale.max_players).toBeNull()
+    await query('UPDATE tournaments SET max_players = 2 WHERE id = $1', [t.id])
+    await expect(getOrCreateTournamentPool('carol', stale)).rejects.toMatchObject({ code: 'tournament_full' })
+    expect((await query('SELECT count(*)::int AS n FROM sealed_pools WHERE tournament_ref = $1', [t.id])).rows[0].n).toBe(2)
+  })
+
+  it('once the cube is dealt, a later pool comes from a stored slot without resolving the cube again', async () => {
+    const t = await mkCube()
+    await getOrCreateTournamentPool('alice', t)
+    const first = await slotsOf(t.id)
+    vi.mocked(resolveCubeSource).mockClear()
+    const setImpl = vi.mocked(fetchSet).getMockImplementation()
+    const uniquesImpl = vi.mocked(fetchUniques).getMockImplementation()
+    const down = async () => { throw new Error('cards API down') }
+    vi.mocked(fetchSet).mockImplementation(down)
+    vi.mocked(fetchUniques).mockImplementation(down)
+    try {
+      const bob = await getOrCreateTournamentPool('bob', t)
+      expect(bob.cube_slot).toBe(1)
+      expect(bob.boosters).toEqual(first[1].boosters)
+      expect(resolveCubeSource).not.toHaveBeenCalled()
+    } finally {
+      vi.mocked(fetchSet).mockImplementation(setImpl)
+      vi.mocked(fetchUniques).mockImplementation(uniquesImpl)
+    }
   })
 
   it('an adopted legacy pool is never refused by the cap and counts towards it', async () => {
@@ -276,14 +305,14 @@ describe('cube deal and slot claim', () => {
       expect(pool.config).toEqual(final.config)
       expect(patched === null || patched.config.source.name === 'Edited cube').toBe(true)
       const slots = await slotsOf(t.id)
-      expect(slots).toHaveLength(3)
+      expect(slots).toHaveLength(2)
     }
   })
 })
 
 describe('handlers', () => {
   it('GET /api/tournaments/:id/pool answers 409 tournament_full with maxPlayers; the BGA endpoints 409 tournament_full', async () => {
-    const t = await mkCube({ maxPlayers: 2 })
+    const t = await mkCube()
     await getOrCreateTournamentPool('p1', t)
     await getOrCreateTournamentPool('p2', t)
     asUser(ALICE)
@@ -310,7 +339,7 @@ describe('handlers', () => {
     const res = await call(tournamentPoolFor, { query: { id: t.id } })
     expect(res.statusCode).toBe(200)
     expect(res.body).toMatchObject({ sourceType: 'cube', cube: { name: 'Test cube', cardCount: 120 } })
-    expect(res.body.boosters).toHaveLength(3)
+    expect(res.body.boosters).toHaveLength(6)
 
     const set = await mkTournament()
     const plain = await call(tournamentPoolFor, { query: { id: set.id } })

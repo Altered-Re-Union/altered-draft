@@ -12,7 +12,7 @@ import CubePreviewModal from './CubePreviewModal.jsx'
 
 const deckKey = d => d.id ?? d.uuid ?? d.name
 const btn = 'px-3 py-1.5 rounded-lg text-sm font-medium disabled:opacity-40 transition-colors'
-const btnSecondary = `${btn} bg-surface3 hover:bg-surface3 text-ink`
+const btnSecondary = `${btn} bg-surface3 hover:bg-line text-ink`
 const btnPrimary = `${btn} bg-accent hover:bg-accent2 text-on-accent`
 const input = 'w-full bg-surface2 border border-line rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-accent disabled:opacity-40'
 
@@ -66,7 +66,7 @@ export default function CubePicker({ value, onChange, disabled = false }) {
       if (!refs.length) { setMsg(t('tournaments.cubeReunionNoCards')); setBusy(false); return }
       setBusy(false)
       await choose(refs, {
-        name: chosen.length === 1 && chosen[0].name ? chosen[0].name : t('tournaments.cubeDecksName', { n: chosen.length }),
+        name: chosen.length === 1 ? chosen[0].name || t('lobby.untitledDeck') : t('tournaments.cubeDecksName', { n: chosen.length }),
         origin: 'reunion', empty: t('tournaments.cubeReunionNoCards'),
       })
     } catch (e) { setMsg(e.message); setBusy(false) }
@@ -144,11 +144,11 @@ export default function CubePicker({ value, onChange, disabled = false }) {
             <p className="text-xs text-muted leading-relaxed">{cube.description}</p>
             <div className="flex items-center gap-3 pt-1">
               <button type="button" data-testid={`cube-community-${cube.id}`} disabled={off}
-                onClick={() => choose([...cube.refs, ...(cube.heroes ?? [])], { name: cube.name, origin: 'community', cubeId: cube.id, empty: t('tournaments.cubePasteNoCards') })}
+                onClick={() => choose([...cube.refs, ...(cube.heroes ?? [])], { name: cube.name, origin: 'community', cubeId: cube.id, empty: t('tournaments.cubeLoadFailed', { msg: cube.name }) })}
                 className={btnPrimary}>{t('tournaments.cubeUse')}</button>
-              <button type="button" data-testid={`cube-preview-${cube.id}`}
+              <button type="button" data-testid={`cube-preview-${cube.id}`} disabled={disabled}
                 onClick={() => setPreview({ ...cube, refs: [...cube.refs, ...(cube.heroes ?? [])] })}
-                className="text-xs text-accent-ink hover:text-accent transition-colors">{t('tournaments.cubePreview')}</button>
+                className="text-xs text-accent-ink hover:text-accent disabled:opacity-40 transition-colors">{t('tournaments.cubePreview')}</button>
             </div>
           </div>
         ))}
@@ -174,8 +174,8 @@ export default function CubePicker({ value, onChange, disabled = false }) {
                 {formats.length > 1 && (
                   <div className="flex flex-wrap gap-1">
                     {['all', ...formats].map(f => (
-                      <button key={f} type="button" aria-pressed={deckFormat === f} onClick={() => setDeckFormat(f)}
-                        className={`px-2 py-0.5 rounded text-xs capitalize transition-colors ${
+                      <button key={f} type="button" aria-pressed={deckFormat === f} disabled={disabled} onClick={() => setDeckFormat(f)}
+                        className={`px-2 py-0.5 rounded text-xs capitalize transition-colors disabled:opacity-40 ${
                           deckFormat === f ? 'bg-accent text-on-accent font-bold' : 'bg-surface2 text-muted hover:text-ink'}`}>
                         {f === 'all' ? t('lobby.filterAll') : f.replace('_', ' ')}
                       </button>
