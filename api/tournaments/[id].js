@@ -5,6 +5,7 @@ import { verifyUser, bearerToken } from '../_lib/auth.js'
 import { jsonBody } from '../_lib/request.js'
 import { validateTournamentFields } from '../../src/lib/tournamentRules.js'
 import { checkPlayerCap } from '../../src/lib/cubeSealed.js'
+import { checkCubeConfig } from '../_lib/cubeChecks.js'
 import { validateTournamentConfig, legacyFormatForBgaTournament } from '../../src/lib/tournamentConfig.js'
 import {
   getTournament, updateTournament, countPoolsForTournament, deleteTournamentIfNoPools, detachTournament, toTournamentJson,
@@ -107,10 +108,21 @@ export default async function handler(req, res) {
       if (Object.keys(cap.fields).length) return res.status(400).json({ error: 'invalid_request', fields: cap.fields })
     }
 
+    // A cube's cap is locked with its config (it sizes the slots).
     const touchesLocked = body.config !== undefined || body.bgaUrl !== undefined
+      || (body.maxPlayers !== undefined && effectiveSource?.type === 'cube')
     if (touchesLocked && (await countPoolsForTournament(row.id)) > 0) {
       return res.status(409).json({ error: 'tournament_locked' })
     }
+    // Cube: the cap is locked with the config (it sizes the slots), and refs/capacity are verified.
+    const cubeSent = fields.config?.source?.type === 'cube'
+    const cubeStored = effectiveSource?.type === 'cube'
+    if (cubeSent || (validated.values.maxPlayers !== undefined && cubeStored)) {
+      const checked = await checkCubeConfig(fields.config ?? row.config, { maxPlayers: validated.values.maxPlayers !== undefined ? validated.values.maxPlayers : row.max_players })
+      if (checked.refused) return res.status(400).json(checked.refused.body)
+      if (fields.config) fields.config = checked.config
+    }
+
     let updated
     try {
       updated = await updateTournament(row.id, fields, { requireUnlocked: touchesLocked })

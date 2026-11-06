@@ -32,7 +32,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const distDir = path.join(__dirname, '../dist')
 
 const app = express()
-app.use(express.json())
+app.use(express.json({ limit: '1mb' })) // a maximal cube config is ~45 KB (default limit: 100 KB)
 
 // A handler throwing (e.g. an unreachable DB) must 500 that one request, not crash
 // the whole process or hang the response — Express 4 doesn't auto-catch async errors.
