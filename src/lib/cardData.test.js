@@ -162,6 +162,33 @@ describe('fetchUnique', () => {
     expect('synthetic' in bundled).toBe(false)
   }, 15000)
 
+  it('stopOnUnavailable: no new ref is fetched once one comes back unavailable', async () => {
+    vi.useFakeTimers()
+    try {
+      global.fetch.mockRejectedValue(new Error('down'))
+      const refs = Array.from({ length: 20 }, (_, i) => `ALT_EOLE_B_YZ_99_U_${50000 + i}`)
+      const pending = fetchUniques(refs, 'EN', { stopOnUnavailable: true })
+      await vi.runAllTimersAsync()
+      const out = await pending
+      // 8 workers start one ref each (3 tries), then stop: 12 refs are never asked for.
+      expect(global.fetch).toHaveBeenCalledTimes(8 * 3)
+      expect(out).toHaveLength(8)
+      expect(out.every(c => c.unavailable)).toBe(true)
+    } finally { vi.useRealTimers() }
+  })
+
+  it('without stopOnUnavailable, every ref is fetched', async () => {
+    vi.useFakeTimers()
+    try {
+      global.fetch.mockRejectedValue(new Error('down'))
+      const refs = Array.from({ length: 10 }, (_, i) => `ALT_EOLE_B_YZ_99_U_${60000 + i}`)
+      const pending = fetchUniques(refs, 'EN')
+      await vi.runAllTimersAsync()
+      expect(await pending).toHaveLength(10)
+      expect(global.fetch).toHaveBeenCalledTimes(10 * 3)
+    } finally { vi.useRealTimers() }
+  })
+
   it('aborts a stalled request instead of hanging', async () => {
     global.fetch.mockResolvedValueOnce({ ok: true, json: async () => ({ member: [{ reference: 'ALT_EOLE_B_YZ_99_U_7777', rarity: { reference: 'UNIQUE' } }] }) })
     await fetchUnique('ALT_EOLE_B_YZ_99_U_7777', 'EN')

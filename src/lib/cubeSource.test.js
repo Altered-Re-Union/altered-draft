@@ -38,6 +38,7 @@ describe('cubeSource', () => {
   it('an unavailable cards API throws cards_unavailable; an unknown ref stays unresolved', async () => {
     const down = vi.fn(async refs => refs.map(r => ({ reference: r, faction: 'XX', cardType: '', synthetic: true, unavailable: true })))
     await expect(resolveRefs(['ALT_CORE_B_AX_04_U_1', 'ALT_CORE_B_AX_02_C'], { fetchSet, fetchUniques: down })).rejects.toMatchObject({ code: 'cards_unavailable' })
+    expect(down.mock.calls[0][2]).toEqual({ stopOnUnavailable: true })
     const unknown = vi.fn(async refs => refs.map(r => ({ reference: r, faction: 'XX', cardType: '', synthetic: true })))
     expect((await resolveRefs(['ALT_CORE_B_AX_04_U_1'], { fetchSet, fetchUniques: unknown })).unresolved).toEqual(['ALT_CORE_B_AX_04_U_1'])
   })

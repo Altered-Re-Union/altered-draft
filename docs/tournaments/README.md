@@ -1702,7 +1702,9 @@ fallback carries `synthetic: true` and is never cached (only real answers are). 
 empty `member`) counts as unresolved; an unavailable API (network error, 5xx, timeout) marks the
 synthetic card `unavailable: true` and `resolveRefs` throws `cards_unavailable`, as it does when a set
 file fails to load (`fetchSet` aborts when no response has started after 10 s). `fetchUniques` runs at
-most 8 requests at once. On POST and on a PATCH that sends a cube,
+most 8 requests at once and, for `resolveRefs`, starts no new ref once one comes back unavailable
+(`stopOnUnavailable`): an outage answers after one round of retries (about 25 s), whatever the
+cube's size. On POST and on a PATCH that sends a cube,
 `api/_lib/cubeChecks.js` resolves `cards` and `heroPool`, refuses unresolved refs (`source.cards.unresolved`
 / `source.heroPool.unresolved`), a hero in `cards` or a non-hero in `heroPool`, and a merged quantity
 above 99 (`source.cards`), then stores the source re-keyed by stored forms; `cards_unavailable` answers

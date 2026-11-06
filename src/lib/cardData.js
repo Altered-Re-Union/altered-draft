@@ -168,14 +168,22 @@ export async function fetchUnique(reference, lang = 'EN') {
 
 // Fetch many uniques; failures are skipped (the card simply won't appear). At most
 // UNIQUES_CONCURRENCY requests at once: a big cube must not fan out hundreds of them.
+// `stopOnUnavailable` (server-side cube resolution): once a card comes back `unavailable` (the
+// cards API did not answer), no new ref is started — the caller answers 503 anyway, so an outage
+// costs one round of retries (~25 s) instead of one per ref. Requests in flight still finish.
 const UNIQUES_CONCURRENCY = 8
-export async function fetchUniques(references, lang = 'EN') {
+export async function fetchUniques(references, lang = 'EN', { stopOnUnavailable = false } = {}) {
   const out = []
   const queue = [...new Set(references)]
+  let stopped = false
   const worker = async () => {
-    while (queue.length) {
+    while (queue.length && !stopped) {
       const r = queue.shift()
-      try { out.push(await fetchUnique(r, lang)) } catch { /* skip */ }
+      try {
+        const card = await fetchUnique(r, lang)
+        out.push(card)
+        if (stopOnUnavailable && card?.unavailable) stopped = true
+      } catch { /* skip */ }
     }
   }
   await Promise.all(Array.from({ length: Math.min(UNIQUES_CONCURRENCY, queue.length) }, worker))

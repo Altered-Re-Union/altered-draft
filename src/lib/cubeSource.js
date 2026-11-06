@@ -45,7 +45,7 @@ export async function resolveRefs(refs, {
     else if (needsCardApi(g)) byApi.push(g)
   }
   if (byApi.length) {
-    const fetched = new Map((await fetchUniques(byApi, lang)).map(c => [c.reference, c]))
+    const fetched = new Map((await fetchUniques(byApi, lang, { stopOnUnavailable: true })).map(c => [c.reference, c]))
     for (const g of byApi) {
       const card = fetched.get(g)
       // The cards API did not answer: try again later, never list the ref as unknown.
