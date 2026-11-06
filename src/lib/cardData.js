@@ -144,6 +144,7 @@ export async function fetchUnique(reference, lang = 'EN') {
         reference, name: reference, faction: 'XX', factionName: 'Unknown', rarity: 'U',
         imagePath: null, faceLang: lang, cardType: '',
         mainCost: null, recallCost: null, forestPower: null, mountainPower: null, oceanPower: null,
+        synthetic: true,
       }
       uniqueCache[key] = card
     }
