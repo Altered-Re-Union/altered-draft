@@ -38,7 +38,7 @@ describe('validateTournamentConfig', () => {
   it('rejects unknown/hidden sets, other source types, bad hero modes and out-of-range uniques', () => {
     expect(validateTournamentConfig({ ...valid, source: { type: 'set', setCode: 'NOPE' } }).errors).toContain('source.setCode')
     expect(validateTournamentConfig({ ...valid, source: { type: 'set', setCode: 'COREKS' } }).errors).toContain('source.setCode')
-    expect(validateTournamentConfig({ ...valid, source: { type: 'cube', setCode: 'CORE' } }).errors).toContain('source.type')
+    expect(validateTournamentConfig({ ...valid, source: { type: 'bogus', setCode: 'CORE' } }).errors).toContain('source.type')
     expect(validateTournamentConfig({ ...valid, heroes: 'draft' }).errors).toContain('heroes')
     expect(validateTournamentConfig({ ...valid, uniques: { inBoosters: 8, guaranteed: 0 } }).errors).toContain('uniques.inBoosters')
     expect(validateTournamentConfig({ ...valid, uniques: { inBoosters: 0, guaranteed: -1 } }).errors).toContain('uniques.guaranteed')
@@ -153,7 +153,7 @@ describe('validateTournamentConfig faction source', () => {
     ['non-integer weight', { type: 'faction', faction: 'AX', sets: { CORE: 1.5 } }, 'source.sets'],
     ['all zero', { type: 'faction', faction: 'AX', sets: { CORE: 0, BISE: 0 } }, 'source.sets'],
     ['sets not an object', { type: 'faction', faction: 'AX', sets: ['CORE'] }, 'source.sets'],
-    ['unknown type', { type: 'cube', faction: 'AX', sets: { CORE: 1 } }, 'source.type'],
+    ['unknown type', { type: 'bogus', faction: 'AX', sets: { CORE: 1 } }, 'source.type'],
   ])('rejects %s', (_, source, code) => {
     const r = validateTournamentConfig(factionCfg({ source }))
     expect(r.ok).toBe(false); expect(r.errors).toContain(code)
@@ -247,5 +247,43 @@ describe('validateTournamentConfig randomOneIn', () => {
   it('forces even factions off for a multi-set split, keeps it for the normalized single set', () => {
     expect(validateTournamentConfig({ ...multi({ CYCLONE: 4, EOLE: 3 }), uniques: { inBoosters: 2, guaranteed: 0, evenFactions: true } }).config.uniques.evenFactions).toBe(false)
     expect(validateTournamentConfig({ ...multi({ CYCLONE: 7 }), uniques: { inBoosters: 2, guaranteed: 0, evenFactions: true } }).config.uniques.evenFactions).toBe(true)
+  })
+})
+
+describe('validateTournamentConfig cube source', () => {
+  const cube = over => ({ format: 'sealed', source: { type: 'cube', name: 'My cube', origin: 'paste', cubeId: null, cards: { ALT_CORE_B_AX_01_C: 1, ALT_CORE_B_BR_02_R1: 2, ALT_CORE_B_AX_04_U_1437: 1 }, heroPool: ['ALT_CORE_B_BR_01_C', 'ALT_CORE_B_AX_01_C'], boosters: 7, cardsPerBooster: 12, perFaction: 1, ...over }, heroes: 'packs', uniques: { inBoosters: 3, guaranteed: 2, evenFactions: true, randomOneIn: 4 }, excludeBanlist: true })
+
+  it('accepts a cube, sorts its keys and hero pool, forces the uniques and the ban list off', () => {
+    const r = validateTournamentConfig(cube())
+    expect(r.ok).toBe(true)
+    expect(r.config.source).toEqual({ type: 'cube', name: 'My cube', origin: 'paste', cubeId: null, cards: { ALT_CORE_B_AX_01_C: 1, ALT_CORE_B_AX_04_U_1437: 1, ALT_CORE_B_BR_02_R1: 2 }, heroPool: ['ALT_CORE_B_AX_01_C', 'ALT_CORE_B_BR_01_C'], boosters: 7, cardsPerBooster: 12, perFaction: 1 })
+    expect(r.config.uniques).toEqual({ inBoosters: 0, guaranteed: 0, evenFactions: false, faction: null, randomOneIn: null })
+    expect(r.config.excludeBanlist).toBe(false)
+    expect(r.config).not.toHaveProperty('banlist')
+  })
+  it('trims the name, coerces strings, keeps a community cube id, nulls it otherwise, keeps a non-B printing', () => {
+    expect(validateTournamentConfig(cube({ name: '  Commons  ', origin: 'community', cubeId: 'all-commons', boosters: '6', cardsPerBooster: '10', perFaction: '0' })).config.source).toMatchObject({ name: 'Commons', cubeId: 'all-commons', boosters: 6, cardsPerBooster: 10, perFaction: 0 })
+    expect(validateTournamentConfig(cube({ cubeId: 'x' })).config.source.cubeId).toBeNull()
+    expect(validateTournamentConfig(cube({ cards: { ALT_BISE_P_BR_64_C: 1, ALT_CORE_A_AX_02_C: 1 } })).config.source.cards).toEqual({ ALT_BISE_P_BR_64_C: 1, ALT_CORE_A_AX_02_C: 1 })
+  })
+  it('refuses each cube problem with its code', () => {
+    const cases = [
+      [{ name: '' }, 'source.name'], [{ name: 'x'.repeat(81) }, 'source.name'],
+      [{ origin: 'web' }, 'source.origin'], [{ origin: 'community', cubeId: '' }, 'source.cubeId'],
+      [{ cards: {} }, 'source.cards'], [{ cards: [] }, 'source.cards'], [{ cards: { ALT_CORE_X_AX_01_C: 1 } }, 'source.cards'], [{ cards: { ALT_NOPE_B_AX_01_C: 1 } }, 'source.cards'],
+      [{ cards: { ALT_CORE_B_AX_01_C: 0 } }, 'source.cards'], [{ cards: { ALT_CORE_B_AX_01_C: 100 } }, 'source.cards'],
+      [{ cards: { ALT_CORE_B_AX_01_C: 1501 } }, 'source.cards'],
+      [{ heroPool: [] }, 'source.heroPool'], [{ heroPool: ['ALT_CORE_B_AX_04_U_1437'] }, 'source.heroPool'], [{ heroPool: 'x' }, 'source.heroPool'],
+      [{ boosters: 2 }, 'source.boosters'], [{ boosters: 9 }, 'source.boosters'],
+      [{ cardsPerBooster: 9 }, 'source.cardsPerBooster'], [{ cardsPerBooster: 17 }, 'source.cardsPerBooster'],
+      [{ perFaction: 3 }, 'source.perFaction'], [{ perFaction: 2, cardsPerBooster: 11 }, 'source.perFaction'],
+      [{ boosters: 3, cardsPerBooster: 10 }, 'source.poolSize'],
+    ]
+    for (const [over, code] of cases) expect(validateTournamentConfig(cube(over)).errors, JSON.stringify(over)).toEqual([code])
+  })
+  it('configSetCodes and legacyColumnsFromConfig on a cube', () => {
+    const { config } = validateTournamentConfig(cube({ cards: { ALT_EOLE_B_AX_01_C: 1, ALT_CORE_B_AX_01_C: 1 }, heroPool: ['ALT_CYCLONE_B_AX_01_C'] }))
+    expect(configSetCodes(config)).toEqual(['CORE', 'CYCLONE', 'EOLE'])
+    expect(legacyColumnsFromConfig(config)).toEqual({ set_code: null, unique_count: 0, even_factions: false, heroes_in_pool: true, guaranteed_uniques: 0 })
   })
 })

@@ -115,4 +115,38 @@ describe('tournamentFormIssues (BGA tournament already played with mixed legacy 
     expect(tournamentFormIssues({ body, config, now: NOW, isCreate: true, mixedBgaIds })).toEqual([{ field: 'bgaUrl', code: 'mixed_formats' }])
     expect(tournamentFormIssues({ body: { ...body, bgaUrl: 'https://boardgamearena.com/tournament?id=8' }, config, now: NOW, isCreate: true, mixedBgaIds })).toEqual([])
   })
+
+  describe('cube and player cap', () => {
+    const cube = over => ({
+      format: 'sealed', heroes: 'packs', uniques: {}, excludeBanlist: false,
+      source: { type: 'cube', name: 'My cube', origin: 'paste', cubeId: null, cards: { ALT_CORE_B_AX_01_C: 1 }, heroPool: ['ALT_CORE_B_BR_01_C'], boosters: 7, cardsPerBooster: 12, perFaction: 1, ...over },
+    })
+    const run = (cfg, extra = {}) => tournamentFormIssues({ body: { ...body, maxPlayers: 4 }, config: cfg, now: NOW, isCreate: true, ...extra })
+
+    it('asks for the cube cards', () => {
+      expect(run(cube({ cards: {} }))).toEqual([{ field: 'cube', code: 'required' }])
+    })
+    it('flags a too small pool under the cube settings', () => {
+      expect(run(cube({ boosters: 3, cardsPerBooster: 10 }))).toEqual([{ field: 'cubeSettings', code: 'source.poolSize' }])
+    })
+    it('asks for a hero pool', () => {
+      expect(run(cube({ heroPool: [] }))).toEqual([{ field: 'heroPool', code: 'required' }])
+    })
+    it('requires a cap for a valid cube', () => {
+      expect(run(cube(), { body: { ...body, maxPlayers: null } })).toEqual([{ field: 'maxPlayers', code: 'required_for_cube' }])
+    })
+    it('reports a capacity below 2 under the cube, before the cap', () => {
+      expect(run(cube(), { capacity: { players: 1 } })).toEqual([{ field: 'cube', code: 'source.capacity' }])
+      expect(run(cube(), { capacity: { players: 1 }, body: { ...body, maxPlayers: null } })).toEqual([
+        { field: 'cube', code: 'source.capacity' }, { field: 'maxPlayers', code: 'required_for_cube' },
+      ])
+    })
+    it('flags a cap above the capacity', () => {
+      expect(run(cube(), { capacity: { players: 3 } })).toEqual([{ field: 'maxPlayers', code: 'above_capacity' }])
+    })
+    it('flags a cap below the pool count on another source', () => {
+      expect(tournamentFormIssues({ body: { ...body, maxPlayers: 2 }, config, now: NOW, isCreate: true, poolCount: 3 }))
+        .toEqual([{ field: 'maxPlayers', code: 'below_pool_count' }])
+    })
+  })
 })
