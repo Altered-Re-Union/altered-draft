@@ -388,3 +388,11 @@ describe('buildPool random uniques', () => {
     }
   })
 })
+
+describe('buildPool cube guard', () => {
+  it('refuses a cube source before any fetch', async () => {
+    const fetchCards = vi.fn()
+    await expect(buildPool('sub', { config: { source: { type: 'cube' } }, nonce: 'n' }, { fetchCards })).rejects.toThrow('cube pools are dealt per tournament')
+    expect(fetchCards).not.toHaveBeenCalled()
+  })
+})
