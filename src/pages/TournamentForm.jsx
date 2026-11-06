@@ -8,12 +8,16 @@ import { VISIBILITIES } from '../lib/tournamentRules.js'
 import { validateTournamentConfig, DEFAULT_RANDOM_ONE_IN } from '../lib/tournamentConfig.js'
 import { hasFactionRanges } from '../lib/uniqueFactionRanges.js'
 import { SETS } from '../lib/cardData.js'
+import { cubeCapacity, CUBE_LIMITS } from '../lib/cubeSealed.js'
+import { resolveCubeCards } from '../lib/cubeResolve.js'
 import { createTournament, updateTournament, getTournament, checkBgaTournament } from '../lib/tournamentApi.js'
 import TopNav from '../components/TopNav.jsx'
 import Footer from '../components/Footer.jsx'
 import TournamentCardsSource from '../components/TournamentCardsSource.jsx'
 import SettingsFields from '../components/SettingsFields.jsx'
 import TournamentUniqueFields from '../components/TournamentUniqueFields.jsx'
+import TournamentCubeSettings from '../components/TournamentCubeSettings.jsx'
+import MaxPlayersField, { capacityLimitText } from '../components/MaxPlayersField.jsx'
 
 // <input type="datetime-local"> speaks local wall-clock time without a zone; the API
 // speaks ISO/UTC. Convert at the edges only.
@@ -46,16 +50,35 @@ function defaultStart() {
 const FIELD_DOM_ID = {
   name: 'tn-name', description: 'tn-desc', visibility: 'tn-visibility', bgaUrl: 'tn-bga', startsAt: 'tn-start', endsAt: 'tn-end',
   faction: 'tn-cards', sets: 'tn-cards', uniques: 'tn-settings',
+  cube: 'tn-cards', cubeSettings: 'tn-cube-boosters', heroPool: 'tn-hero-pool', maxPlayers: 'tn-max-players',
 }
 const FIELD_LABEL_KEY = {
   name: 'tournaments.nameLabel', description: 'tournaments.descriptionLabel', visibility: 'tournaments.visibilityLabel', bgaUrl: 'tournaments.bgaUrlLabel',
   startsAt: 'tournaments.startsAtLabel', endsAt: 'tournaments.endsAtLabel',
   faction: 'tournaments.sectionCards', sets: 'tournaments.sectionCards', uniques: 'tournaments.tournamentUniquesTitle',
+  cube: 'tournaments.sectionCards', cubeSettings: 'tournaments.cubeBoostersTitle', heroPool: 'tournaments.heroPoolLabel', maxPlayers: 'tournaments.maxPlayersLabel',
+}
+
+// A config error code of a 400 (`err.data.config`), placed on the field that shows it.
+const CUBE_SETTINGS_CODES = ['source.poolSize', 'source.perFaction', 'source.boosters', 'source.cardsPerBooster']
+function configCodeIssue(code) {
+  if (code === 'source.cards.unresolved') return { field: 'cube', code: 'unresolved' }
+  if (code === 'source.heroPool.unresolved') return { field: 'heroPool', code: 'unresolved' }
+  if (['source.name', 'source.cards', 'source.capacity'].includes(code)) return { field: 'cube', code }
+  if (CUBE_SETTINGS_CODES.includes(code)) return { field: 'cubeSettings', code }
+  if (code === 'source.heroPool') return { field: 'heroPool', code }
+  if (code === 'source.faction') return { field: 'faction', code }
+  if (code === 'source.sets' || code === 'source.setCode') return { field: 'sets', code }
+  return { field: 'uniques', code }
 }
 
 // `ctx`: { isFaction, boosterTotal, maxInBoosters } — the Sets tab's split total and the
-// in-booster cap of a split mixing sets with and without unique data, quoted by the messages.
-function issueMessage({ field, code }, t, { isFaction = false, boosterTotal = 0, maxInBoosters = Infinity } = {}) {
+// in-booster cap of a split mixing sets with and without unique data, quoted by the messages;
+// { cube, cubeSettings, capacity, poolCount, unresolved } for the cube and the player cap.
+function issueMessage({ field, code }, t, {
+  isFaction = false, boosterTotal = 0, maxInBoosters = Infinity,
+  cube = null, cubeSettings = null, capacity = null, poolCount = 0, unresolved = [],
+} = {}) {
   switch (field) {
     case 'name': return t('tournaments.errName')
     case 'description': return t('tournaments.errDescription')
@@ -72,6 +95,26 @@ function issueMessage({ field, code }, t, { isFaction = false, boosterTotal = 0,
       if (code === 'uniques.inBoosters' && Number.isFinite(maxInBoosters)) return t('tournaments.errUniquesTooMany', { n: maxInBoosters })
       if (code === 'uniques.faction') return t('tournaments.errUniquesFaction')
       return t('tournaments.errGeneric', { msg: code })
+    case 'cube': {
+      if (code === 'unresolved') return t('tournaments.errCubeUnresolved', { refs: unresolved.join(', ') })
+      if (code === 'source.capacity') return t('tournaments.errCubeTooSmall', { limit: capacityLimitText(capacity?.limit, t) })
+      const name = cube?.name?.trim() ?? ''
+      if (code === 'source.name' || (cube && code === 'required' && (!name || name.length > CUBE_LIMITS.nameMax))) return t('tournaments.errCubeName')
+      if (!cube || code === 'required') return t('tournaments.errSelectCube')
+      return t('tournaments.errGeneric', { msg: code })
+    }
+    case 'cubeSettings':
+      if (code === 'source.poolSize') return t('tournaments.errCubePoolSize', { n: (cubeSettings?.boosters ?? 0) * (cubeSettings?.cardsPerBooster ?? 0) })
+      if (code === 'source.perFaction') return t('tournaments.errCubePerFaction')
+      return t('tournaments.errGeneric', { msg: code })
+    case 'heroPool':
+      if (code === 'unresolved') return t('tournaments.errCubeUnresolved', { refs: unresolved.join(', ') })
+      return t('tournaments.errCubeNoHero')
+    case 'maxPlayers':
+      if (code === 'required_for_cube') return t('tournaments.errMaxPlayersRequired')
+      if (code === 'above_capacity') return t('tournaments.errMaxPlayersCapacity', { n: capacity?.players ?? '?' })
+      if (code === 'below_pool_count') return t('tournaments.errMaxPlayersBelowPools', { n: poolCount })
+      return t('tournaments.errMaxPlayers')
     default: return t('tournaments.errGeneric', { msg: code })
   }
 }
@@ -106,6 +149,13 @@ export default function TournamentForm() {
   // The slider's value while the exact mode is on: each mode keeps its own (spec §13.4).
   const [lastOneIn, setLastOneIn] = useState(DEFAULT_RANDOM_ONE_IN)
   const [excludeBanlist, setExcludeBanlist] = useState(false)
+  // Cube source (spec §15.5): CubePicker's value, the booster settings and the hero pool.
+  const [cube, setCube] = useState(null)
+  const [cubeSettings, setCubeSettings] = useState({ boosters: 7, cardsPerBooster: 12, perFaction: 1 })
+  const [heroPool, setHeroPool] = useState([])
+  // The player cap, every source: '' (no limit) or what was typed.
+  const [maxPlayers, setMaxPlayers] = useState('')
+  const [poolCount, setPoolCount] = useState(0)
 
   const [locked, setLocked] = useState(false)
   const [loading, setLoading] = useState(isEdit)
@@ -144,11 +194,14 @@ export default function TournamentForm() {
       if (d.sourceType) setSourceType(d.sourceType); if (d.faction !== undefined) setFaction(d.faction); if (d.setWeights) setSetWeights(d.setWeights)
       if (d.heroes) setHeroes(d.heroes); if (d.uniques) setUniques({ randomOneIn: null, ...d.uniques }); setExcludeBanlist(!!d.excludeBanlist)
       if (d.lastOneIn) setLastOneIn(d.lastOneIn)
+      if (d.cube !== undefined) setCube(d.cube); if (d.cubeSettings) setCubeSettings(d.cubeSettings); if (Array.isArray(d.heroPool)) setHeroPool(d.heroPool)
     }
+    // A cube's cap is locked with its config (withConfig false); the other sources' is not.
+    if (d.maxPlayers !== undefined && (withConfig || d.sourceType !== 'cube')) setMaxPlayers(d.maxPlayers)
   }
   function reconnect() {
     try {
-      sessionStorage.setItem(draftKey, JSON.stringify({ name, description, visibility, bgaUrl, startsAt, endsAt, sourceType, setCounts, mixOpen, faction, setWeights, heroes, uniques, lastOneIn, excludeBanlist }))
+      sessionStorage.setItem(draftKey, JSON.stringify({ name, description, visibility, bgaUrl, startsAt, endsAt, sourceType, setCounts, mixOpen, faction, setWeights, heroes, uniques, lastOneIn, excludeBanlist, cube, cubeSettings, heroPool, maxPlayers }))
     } catch { /* storage unavailable: the reconnect still works, the draft is lost */ }
     login(isEdit ? `/tournament/t/${id}/edit` : '/tournament/new')
   }
@@ -177,20 +230,39 @@ export default function TournamentForm() {
         setName(tn.name); setDescription(tn.description); setVisibility(tn.visibility ?? 'public'); setBgaUrl(tn.bgaUrl)
         setStartsAt(toLocalInput(tn.startsAt)); setEndsAt(toLocalInput(tn.endsAt))
         const src = tn.config.source
-        setSourceType(src.type === 'faction' ? 'faction' : 'set')
+        setSourceType(src.type === 'faction' || src.type === 'cube' ? src.type : 'set')
         if (src.type === 'faction') { setFaction(src.faction); setSetWeights(setWeightsFrom(src.sets)) }
         else if (src.type === 'multiset') { setSetCounts(src.sets); setMixOpen(true) }
+        else if (src.type === 'cube') {
+          // The stored refs carry no faction: the card shows them at once, and while unlocked
+          // they are re-resolved for the capacity (locked, nothing needs it).
+          const cards = src.cards ?? {}
+          setCube({ name: src.name, origin: src.origin, cubeId: src.cubeId ?? null,
+            cards: Object.entries(cards).map(([ref, qty]) => ({ ref, qty, faction: null, cardType: null })), heroesFound: [], unresolved: [], resolved: false })
+          setCubeSettings({ boosters: src.boosters, cardsPerBooster: src.cardsPerBooster, perFaction: src.perFaction })
+          setHeroPool(src.heroPool ?? [])
+          if (!tn.locked) {
+            resolveCubeCards(Object.keys(cards))
+              .then(resolved => { if (!cancelled) setCube(prev => (prev ? { ...prev, cards: resolved.cards, unresolved: resolved.unresolved, resolved: true } : prev)) })
+              .catch(e => { if (!cancelled) setServerError(t('tournaments.cubeLoadFailed', { msg: e.message })) })
+          }
+        }
         else setSetCounts({ [src.setCode]: 7 })
         setHeroes(tn.config.heroes)
+        setMaxPlayers(tn.maxPlayers ?? '')
+        setPoolCount(tn.poolCount ?? 0)
         // A faction source stores its own faction as the uniques faction (forced server-side):
         // keep it out of the shared uniques state, or switching to "Sets" would preselect it.
         // Older rows lack `randomOneIn`; a random config stores inBoosters 0, so the exact
-        // mode gets the creation default back if the organizer switches to it.
-        const stored = { randomOneIn: null, ...tn.config.uniques }
-        if (stored.randomOneIn != null) stored.inBoosters = 1
-        setUniques(src.type === 'faction' ? { ...stored, faction: null, evenFactions: false } : stored)
-        setLastOneIn(tn.config.uniques.randomOneIn ?? DEFAULT_RANDOM_ONE_IN)
-        setExcludeBanlist(!!tn.config.excludeBanlist)
+        // mode gets the creation default back if the organizer switches to it. A cube stores
+        // zeroed uniques: the other tabs keep the creation defaults.
+        if (src.type !== 'cube') {
+          const stored = { randomOneIn: null, ...tn.config.uniques }
+          if (stored.randomOneIn != null) stored.inBoosters = 1
+          setUniques(src.type === 'faction' ? { ...stored, faction: null, evenFactions: false } : stored)
+          setLastOneIn(tn.config.uniques.randomOneIn ?? DEFAULT_RANDOM_ONE_IN)
+          setExcludeBanlist(!!tn.config.excludeBanlist)
+        }
         setLocked(!!tn.locked)
         const d = readDraft()
         if (d) applyDraft(d, { withConfig: !tn.locked })
@@ -242,6 +314,7 @@ export default function TournamentForm() {
 
   const bgaParsed = useMemo(() => parseBgaTournamentUrl(bgaUrl), [bgaUrl])
   const isFaction = sourceType === 'faction'
+  const isCube = sourceType === 'cube'
   const chosen = Object.keys(setCounts)
   const uniqueSupport = isFaction
     ? Object.entries(setWeights).some(([c, w]) => w > 0 && hasFactionRanges(c))
@@ -252,19 +325,51 @@ export default function TournamentForm() {
   const multiSet = !isFaction && chosen.length > 1
   const boosterTotal = chosen.reduce((sum, c) => sum + setCounts[c], 0)
   const maxInBoosters = partialSupport ? 3 * chosen.filter(hasFactionRanges).reduce((sum, c) => sum + setCounts[c], 0) : Infinity
-  const issueCtx = { isFaction, boosterTotal, maxInBoosters }
+  // How many players the cube serves with these boosters, live once its cards are resolved.
+  const capacity = useMemo(
+    () => (isCube && cube?.resolved ? cubeCapacity({ cards: cube.cards, ...cubeSettings }) : null),
+    [isCube, cube?.resolved, cube?.cards, cubeSettings],
+  )
+  // The cap follows the capacity while it is empty or above it; the organizer can only lower it.
+  useEffect(() => {
+    if (!capacity || capacity.players < 2) return
+    setMaxPlayers(prev => (prev === '' || Number(prev) > capacity.players ? capacity.players : prev))
+  }, [capacity])
+  const issueCtx = { isFaction, boosterTotal, maxInBoosters, cube, cubeSettings, capacity, poolCount, unresolved: [] }
+  // A new cube (not a rename) brings its own heroes as the preselected pool.
+  function changeCube(next) {
+    if (next && next.cards !== cube?.cards) setHeroPool((next.heroesFound ?? []).map(h => h.ref))
+    setCube(next)
+    setServerError('')
+    touch('cube')
+  }
   const tz = useMemo(() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone } catch { return 'UTC' } }, [])
 
-  const config = {
-    v: 1, format: 'sealed',
-    source: isFaction ? { type: 'faction', faction, sets: setWeights, boosters: 7 } : { type: 'multiset', sets: setCounts, boosters: 7 },
-    heroes,
-    uniques: !uniqueSupport ? { inBoosters: 0, guaranteed: 0, evenFactions: false, faction: null, randomOneIn: null }
-      : isFaction ? { ...uniques, faction, evenFactions: false } : uniques,
-    excludeBanlist,
+  const noUniques = { inBoosters: 0, guaranteed: 0, evenFactions: false, faction: null, randomOneIn: null }
+  const config = isCube
+    ? {
+        v: 1, format: 'sealed',
+        source: {
+          type: 'cube', name: cube?.name ?? '', origin: cube?.origin ?? 'paste', cubeId: cube?.cubeId ?? null,
+          cards: cube ? Object.fromEntries(cube.cards.map(c => [c.ref, c.qty])) : {},
+          heroPool, ...cubeSettings,
+        },
+        heroes,
+        uniques: noUniques,
+        excludeBanlist: false,
+      }
+    : {
+        v: 1, format: 'sealed',
+        source: isFaction ? { type: 'faction', faction, sets: setWeights, boosters: 7 } : { type: 'multiset', sets: setCounts, boosters: 7 },
+        heroes,
+        uniques: !uniqueSupport ? noUniques : isFaction ? { ...uniques, faction, evenFactions: false } : uniques,
+        excludeBanlist,
+      }
+  const body = {
+    name, description, visibility, bgaUrl, startsAt: fromLocalInput(startsAt), endsAt: fromLocalInput(endsAt),
+    maxPlayers: maxPlayers === '' ? null : Number(maxPlayers),
   }
-  const body = { name, description, visibility, bgaUrl, startsAt: fromLocalInput(startsAt), endsAt: fromLocalInput(endsAt) }
-  const issues = tournamentFormIssues({ body, config, isCreate: !isEdit, locked, takenBgaIds, ownId: id ?? null, mixedBgaIds, lastDateEdited })
+  const issues = tournamentFormIssues({ body, config, isCreate: !isEdit, locked, takenBgaIds, ownId: id ?? null, mixedBgaIds, lastDateEdited, capacity, poolCount })
   const fieldIssue = field => (touched.has(field) ? issues.find(i => i.field === field) : null)
   const blocked = issues.length > 0 || saving || loading || !!loadError
 
@@ -293,6 +398,8 @@ export default function TournamentForm() {
       if (isEdit) {
         const patch = { ...body }
         if (!locked) { patch.bgaUrl = body.bgaUrl; patch.config = cfg.config } else delete patch.bgaUrl
+        // A cube's cap sizes its deal: locked with the config. The other sources' stays editable.
+        if (locked && isCube) delete patch.maxPlayers
         await updateTournament(id, patch)
         navigate(`/tournament/t/${id}`)
       } else {
@@ -311,8 +418,12 @@ export default function TournamentForm() {
         focusField('bgaUrl')
       } else if (err.status === 400 && err.data?.fields && Object.keys(err.data.fields).length) {
         const first = Object.keys(err.data.fields)[0]
-        setServerError(issueMessage({ field: first, code: err.data.fields[first] }, t, issueCtx))
+        setServerError(issueMessage({ field: first, code: err.data.fields[first] }, t, { ...issueCtx, capacity: err.data.capacity ?? capacity }))
         focusField(first)
+      } else if (err.status === 400 && Array.isArray(err.data?.config) && err.data.config.length) {
+        const issue = configCodeIssue(err.data.config[0])
+        setServerError(issueMessage(issue, t, { ...issueCtx, capacity: err.data.capacity ?? capacity, unresolved: err.data.unresolved ?? [] }))
+        focusField(issue.field)
       } else if (err.status === 409 && err.data?.error === 'tournament_locked') setServerError(t('tournaments.errLocked'))
       else if (err.status === 429) setServerError(t('tournaments.errTooMany'))
       else if (err.status === 401) setSessionExpired(true)
@@ -442,13 +553,25 @@ export default function TournamentForm() {
             mixOpen={mixOpen} onMixOpen={setMixOpen}
             faction={faction} onFaction={edit('faction', setFaction)}
             weights={setWeights} onWeights={edit('sets', setSetWeights)}
+            cube={cube} onCube={changeCube}
             disabled={configFrozen || saving} />
-          <ErrorLine field="faction" /><ErrorLine field="sets" />
+          <ErrorLine field="faction" /><ErrorLine field="sets" /><ErrorLine field="cube" />
         </section>
 
         {/* Section 3 — settings */}
         <section id="tn-settings" tabIndex={-1} className="bg-surface rounded-xl border border-line p-5 space-y-6 focus:outline-none">
           <h2 className="font-semibold">{t('tournaments.sectionSettings')}</h2>
+          {isCube ? (
+            <fieldset disabled={configFrozen || saving} className="space-y-6 disabled:opacity-60">
+              <TournamentCubeSettings
+                settings={cubeSettings} onSettings={edit('cubeSettings', setCubeSettings)}
+                heroes={heroes} onHeroes={setHeroes}
+                heroPool={heroPool} onHeroPool={edit('heroPool', setHeroPool)}
+                cubeHeroes={(cube?.heroesFound ?? []).map(h => h.ref)}
+                disabled={configFrozen || saving} />
+              <ErrorLine field="cubeSettings" /><ErrorLine field="heroPool" />
+            </fieldset>
+          ) : (
           <fieldset disabled={configFrozen || saving} className="space-y-6 disabled:opacity-60">
             <SettingsFields
               mode="sealed"
@@ -462,6 +585,15 @@ export default function TournamentForm() {
               disabled={configFrozen || saving} factionSource={isFaction} fixedFaction={isFaction ? faction : null}
               multiSet={multiSet} maxInBoosters={maxInBoosters} lastOneIn={lastOneIn} onLastOneIn={setLastOneIn} />
           </fieldset>
+          )}
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-ink">{t('tournaments.playersTitle')}</h3>
+            <MaxPlayersField value={maxPlayers} onChange={edit('maxPlayers', setMaxPlayers)} onBlur={() => touch('maxPlayers')}
+              required={isCube} capacity={capacity} invalid={!!fieldIssue('maxPlayers')}
+              resolving={isCube && !!cube && !cube.resolved && !locked}
+              disabled={(isCube && configFrozen) || saving} />
+            <ErrorLine field="maxPlayers" />
+          </div>
         </section>
 
         {/* Action bar, stuck to the bottom of the viewport */}
