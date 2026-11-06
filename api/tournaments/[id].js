@@ -99,7 +99,8 @@ export default async function handler(req, res) {
 
     // Player cap on a non-cube source: never below the pools already created (the cube lock is separate).
     const effectiveSource = fields.config?.source ?? row.config?.source
-    if (validated.values.maxPlayers !== undefined && effectiveSource?.type !== 'cube') {
+    // Only when the cap actually changes: a rename of a tournament adopted over its cap must pass.
+    if (validated.values.maxPlayers !== undefined && validated.values.maxPlayers !== row.max_players && effectiveSource?.type !== 'cube') {
       const cap = checkPlayerCap({
         source: effectiveSource,
         maxPlayers: validated.values.maxPlayers,
@@ -119,7 +120,7 @@ export default async function handler(req, res) {
     const cubeStored = effectiveSource?.type === 'cube'
     if (cubeSent || (validated.values.maxPlayers !== undefined && cubeStored)) {
       const checked = await checkCubeConfig(fields.config ?? row.config, { maxPlayers: validated.values.maxPlayers !== undefined ? validated.values.maxPlayers : row.max_players })
-      if (checked.refused) return res.status(400).json(checked.refused.body)
+      if (checked.refused) return res.status(checked.refused.status).json(checked.refused.body)
       if (fields.config) fields.config = checked.config
     }
 

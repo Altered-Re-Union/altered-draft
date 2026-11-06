@@ -286,4 +286,16 @@ describe('validateTournamentConfig cube source', () => {
     expect(configSetCodes(config)).toEqual(['CORE', 'CYCLONE', 'EOLE'])
     expect(legacyColumnsFromConfig(config)).toEqual({ set_code: null, unique_count: 0, even_factions: false, heroes_in_pool: true, guaranteed_uniques: 0 })
   })
+  it('accepts a promo / OP printing of a set code SETS does not know, by its base set (Wozow)', () => {
+    const r = validateTournamentConfig(cube({ cards: { ALT_DUSTERTOP_P_AX_04_C: 1 }, heroPool: ['ALT_DUSTEROP_P_AX_01_C'] }))
+    expect(r.errors).toEqual([])
+    expect(r.config.source.cards).toEqual({ ALT_DUSTERTOP_P_AX_04_C: 1 })
+    expect(configSetCodes(r.config)).toEqual(['DUSTER'])
+    expect(configSetCodes({ source: { type: 'cube', cards: { ALT_DUSTERTOP_P_AX_04_C: 1, ALT_CORE_B_AX_01_C: 1 }, heroPool: [] } })).toEqual(['CORE', 'DUSTER'])
+  })
+  it('refuses a cube with more than 300 distinct refs needing the cards API', () => {
+    const uniques = n => Object.fromEntries(Array.from({ length: n }, (_, i) => [`ALT_CORE_B_AX_04_U_${1000 + i}`, 1]))
+    expect(validateTournamentConfig(cube({ cards: uniques(300) })).errors).toEqual([])
+    expect(validateTournamentConfig(cube({ cards: uniques(301) })).errors).toEqual(['source.cards'])
+  })
 })

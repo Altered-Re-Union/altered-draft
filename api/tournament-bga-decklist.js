@@ -49,7 +49,7 @@ export default async function handler(req, res) {
     // A player beyond the cap gets no deck list (spec §15.2 "Full"); a cube card the cards
     // API could not resolve at deal time is a retry later.
     if (e.code === 'tournament_full') return res.status(409).json({ error: 'tournament_full' })
-    if (e.code === 'cube_unresolved') return res.status(409).json({ error: 'pool_unavailable' })
+    if (e.code === 'cube_unresolved' || e.code === 'cards_unavailable') return res.status(409).json({ error: 'pool_unavailable' })
     throw e
   }
 

@@ -92,7 +92,7 @@ async function insertPool(sub, kind, { config, tournament = null, createdBy = 'p
  * Returns null when the tournament changed meanwhile, when the cube turned out undealt
  * under the lock without having been resolved (the caller re-reads it and retries, and the
  * retry resolves), or on a lost (sub, tournament) insert race; throws `tournament_full` /
- * `cube_unresolved`.
+ * `cube_unresolved` / `cards_unavailable` (the card data could not be loaded, resolveRefs).
  */
 async function insertCappedPool(sub, { config, tournament, createdBy = 'page' }) {
   const nonce = newNonce()
@@ -277,8 +277,9 @@ export async function getPoolForTournament(sub, tournamentId) {
  * A race on either unique index, or a tournament changed meanwhile, makes a step miss:
  * the whole sequence is retried with the tournament re-read from the database. Throws
  * `tournament_unavailable` (deleted / detached meanwhile), `pool_unavailable` (still no
- * row after the retries), `tournament_full` (the cap is reached) or `cube_unresolved` (a
- * cube card could not be resolved at deal time) instead of returning null.
+ * row after the retries), `tournament_full` (the cap is reached), `cube_unresolved` (a
+ * cube card could not be resolved at deal time) or `cards_unavailable` (the card data could
+ * not be loaded at deal time) instead of returning null.
  */
 export async function getOrCreateTournamentPool(sub, tournament, { createdBy = 'page' } = {}) {
   let current = tournament

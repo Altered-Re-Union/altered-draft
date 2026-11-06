@@ -10,6 +10,9 @@ export const CUBE_LIMITS = {
   minPoolCards: 60,
   maxCards: 1500,
   maxHeroes: 200,
+  // Distinct refs resolved one by one on the cards API (uniques, non-B printings): bounds the
+  // server-side fan-out of a create/edit/first pool; above every community cube.
+  maxCardApiRefs: 300,
   maxPlayers: 256,
   nameMax: 80,
 }
