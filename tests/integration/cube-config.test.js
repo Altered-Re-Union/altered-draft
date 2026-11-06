@@ -31,6 +31,7 @@ vi.mock('../../api/_lib/auth.js', async importOriginal => {
   return { ...mod, verifyUser: vi.fn(async () => null), verifySub: vi.fn(async () => null) }
 })
 import { verifyUser } from '../../api/_lib/auth.js'
+import { fetchSet, fetchUniques } from '../../src/lib/cardData.js'
 import tournamentsIndex from '../../api/tournaments/index.js'
 import tournamentsItem from '../../api/tournaments/[id].js'
 
@@ -102,6 +103,26 @@ describe('POST a cube tournament', () => {
     expect(stored.ALT_CYCLONE_B_AX_01_C).toBe(30)
     expect(stored.ALT_CYCLONE_A_AX_01_C).toBeUndefined()
     expect(stored.ALT_CYCLONE_P_BR_64_C).toBe(5)
+  })
+
+  it('refuses an alt-art ref and its B twin merging above 99 copies', async () => {
+    const cards = { ...CUBE_INPUT.source.cards, ALT_CYCLONE_A_AX_01_C: 60, ALT_CYCLONE_B_AX_01_C: 60 }
+    const res = await post(cubeBody({ config: withSource({ cards }) }))
+    expect(res.statusCode).toBe(400)
+    expect(res.body).toMatchObject({ error: 'invalid_request', config: ['source.cards'] })
+    expect((await query('SELECT count(*)::int AS n FROM tournaments')).rows[0].n).toBe(0)
+  })
+
+  it('a user at the open-tournament quota gets 429 before any cube resolution', async () => {
+    const setConfig = { v: 1, format: 'sealed', source: { type: 'set', setCode: 'CYCLONE' }, heroes: 'packs', uniques: { inBoosters: 0, guaranteed: 0 } }
+    for (let i = 0; i < 10; i++) expect((await post(cubeBody({ config: setConfig }))).statusCode).toBe(201)
+    vi.mocked(fetchSet).mockClear()
+    vi.mocked(fetchUniques).mockClear()
+    const res = await post(cubeBody())
+    expect(res.statusCode).toBe(429)
+    expect(res.body).toEqual({ error: 'too_many_open_tournaments' })
+    expect(fetchSet).not.toHaveBeenCalled()
+    expect(fetchUniques).not.toHaveBeenCalled()
   })
 
   it('refuses an unresolved ref with the list', async () => {

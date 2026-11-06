@@ -1103,3 +1103,17 @@ every UI task reads them from one place.
   `null`).
 - Whether the Lobby adopts `CubePicker` (last task, optional: only if it is a drop-in with no
   visible change; otherwise the Lobby is left alone).
+
+### 15.9 As built (2026-11-06)
+
+What differs from §15.2–§15.8 once built; the rest stands.
+
+- **Name.** The community cube is "All Commons" (`src/lib/cubes.js`), not "All commons" (a tournament seeded through the API's `cubeTournamentBody` keeps the lowercase name it was given).
+- **Editing an unlocked cube.** The form re-resolves the stored refs **keeping the stored quantities** (not one copy per ref) and keeps unresolved refs in the config, shown in the unresolved callout; the server refuses them with `source.cards.unresolved` when they are truly unknown.
+- **Cap of a cube.** A PATCH `maxPlayers: null` on a cube tournament is refused `required_for_cube` (a cube always has a cap). The cap is locked with the config (409 `tournament_locked` once a pool exists); on the set / faction / multiset sources it stays editable down to the pool count (`below_pool_count`), and 1 is never valid (2–256). So "cap 1 → `below_pool_count`" is unreachable: the recette's `cu-g-lower` runs cap 2 with 2 pools, raise to 3, a third pool, then lowering to 2 is refused (`below_pool_count`, n = 3).
+- **Reveal.** The pool reveal waits for the generated cover (cube pools) before opening; a failed cover (`null`) goes straight to the cards.
+- **`dealCubeSlots`.** The total check runs before the per-faction checks; `rest` = each faction stack's leftovers in `FACTIONS` order, then the faction-less copies, shuffled once (§15.3 step 2 in practice).
+- **`source.poolSize`** is reported only when `boosters` and `cardsPerBooster` are both valid.
+- **Inserts.** `insertPool`'s `FOR SHARE` also requires `max_players IS NULL` (a cap added in flight re-routes the insert to `insertCappedPool`); `insertCappedPool` resolves the cube before the lock only while it is not dealt: once `tournament_cube_slots` has rows a late pool skips the resolution, so a cards-API outage no longer blocks late joiners (§15.2 "Verifying the cube" still holds for the first pool).
+- **Quantities.** After the resolver re-keys the cube by stored forms, a merged quantity above 99 is refused with `source.cards`.
+- **Recette.** `acceptance-cube-sealed.html` has 44 steps over BGA ids 123510–123517.

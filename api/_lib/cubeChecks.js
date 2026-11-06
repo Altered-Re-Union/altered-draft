@@ -20,6 +20,8 @@ export async function checkCubeConfig(config, { maxPlayers } = {}) {
     if (resolved.unresolved.some(r => heroSet.has(r))) keys.push('source.heroPool.unresolved')
     return refuse({ config: keys, unresolved: resolved.unresolved })
   }
+  // An alt-art / promo ref and its B twin merge into one stored ref: the sum may pass 99.
+  if (Object.values(resolved.stored.cards).some(qty => qty > 99)) return refuse({ config: ['source.cards'] })
   if (resolved.heroesInCards.length) return refuse({ config: ['source.cards'] })
   if (resolved.nonHeroesInPool.length) return refuse({ config: ['source.heroPool'] })
 
