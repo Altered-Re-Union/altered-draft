@@ -322,7 +322,6 @@ const TID = (bga) => `TID=$(${DB} -At -c "SELECT id FROM tournaments WHERE bga_t
 // The page link of a tournament of this page.
 const TURL = (bga) => PSQL(`SELECT '${WEB}/tournament/t/' || id FROM tournaments WHERE bga_tournament_id = '${bga}'`);
 // The raw ?bgaId= answer to a persona.
-const BYBGA = (tok, bga) => pre(`curl -s -H "Authorization: Bearer $TOKEN_${tok}" "${API}/api/tournaments?bgaId=${bga}"; echo`);
 // What a persona gets from GET /api/tournaments/:id/pool: only the HTTP status (the body is the whole pool).
 const POOLCODE = (tok, bga) => pre(`${TID(bga)}
 curl -s -o /dev/null -w 'pool %{http_code}\\n' -H "Authorization: Bearer $TOKEN_${tok}" "${API}/api/tournaments/$TID/pool"`);
@@ -371,7 +370,7 @@ const GROUPS = [
         html: `${pre(`cd ${REPO} && make e2e && npm run test:e2e:coverage`)}<p>Expected: the suite passes; the coverage report lists the five acceptance pages (<code>acceptance-user-tournaments.html</code>, <code>acceptance-mono-faction-sealed.html</code>, <code>acceptance-multiset-sealed.html</code>, <code>acceptance-private-tournaments.html</code>, <code>acceptance-cube-sealed.html</code>) and exits without error. The steps of this page it replays carry the <span class="new-tag auto">auto</span> badge.</p>` },
       { id: 'cu-0-clean', title: 'Start without the tournaments of this page, alice under the cap',
         html: `<p>This page uses the BGA ids 123510 to 123517: 123510 “Commons cube”, 123511 “Full cup”, 123512 “Capped set cup”, 123513 “Deck cube”, 123514 “Pasted cube”, 123515 the API throwaway (never created), 123516 the form draft of cu-a-draft (never created), 123517 “Free heroes cube”. 123518 and 123519 are kept free.</p>${PSQL(`SELECT count(*) FROM tournaments WHERE bga_tournament_id ~ ${IDS}`)}<p>Expected: <code>0</code>. To start over on them only (the slots go with the pools):</p>${PSQL(`DELETE FROM sealed_pools WHERE tournament_id ~ ${IDS} OR tournament_ref IN (SELECT id FROM tournaments WHERE bga_tournament_id ~ ${IDS}); DELETE FROM tournaments WHERE bga_tournament_id ~ ${IDS}`)}
-<p>alice creates 6 open tournaments on this page, and an organizer has 10 at most. Her open tournaments now:</p>${pre(`${DB} -At -c "SELECT count(*) FROM tournaments WHERE organizer_sub = '${ALICE_SUB}' AND detached_at IS NULL AND cancelled_at IS NULL AND ended_at IS NULL AND (ends_at IS NULL OR ends_at > now())"`)}<p>Expected: <code>4</code> or less. Otherwise cancel her older ones (earlier runs; a cancelled tournament keeps its pools):</p>${PSQL(`UPDATE tournaments SET cancelled_at = now() WHERE organizer_sub = '${ALICE_SUB}' AND NOT bga_tournament_id ~ ${IDS} AND detached_at IS NULL AND cancelled_at IS NULL AND ended_at IS NULL`)}` },
+<p>alice creates 5 open tournaments on this page (123510, 123511, 123512, 123514, 123517), and an organizer has 10 open at most. Her open tournaments now (the ones of this page were deleted above):</p>${pre(`${DB} -At -c "SELECT count(*) FROM tournaments WHERE organizer_sub = '${ALICE_SUB}' AND detached_at IS NULL AND cancelled_at IS NULL AND ended_at IS NULL AND (ends_at IS NULL OR ends_at > now())"`)}<p>Expected: <code>5</code> or less (5 + the 5 of this page = 10). Otherwise cancel her older ones (earlier runs; a cancelled tournament keeps its pools):</p>${PSQL(`UPDATE tournaments SET cancelled_at = now() WHERE organizer_sub = '${ALICE_SUB}' AND NOT bga_tournament_id ~ ${IDS} AND detached_at IS NULL AND cancelled_at IS NULL AND ended_at IS NULL`)}` },
     ],
   },
   {
@@ -458,7 +457,7 @@ ${pre(`curl -s -H "Authorization: Bearer $TOKEN_ALICE" "${API}/api/tournaments?b
 ${PSQL(`SELECT name, max_players, set_code IS NULL AS no_set FROM tournaments WHERE bga_tournament_id = '123510'`)}
 <p>Expected: <code>Commons cube | 3 | t</code>.</p>` },
       { id: 'cu-c-summary', who: 'alice', title: 'The summary line and “0 / 3 players”',
-        html: `<ul><li>On the tournament page, under the title: <strong>“6 boosters of 10 · cube “All commons” (192 cards) · 1 of each faction per booster”</strong> (no unique or ban-list part), and next to the pool count <strong>“0 / 3 players”</strong>. No “Full” pill.</li>
+        html: `<ul><li>On the tournament page, under the title: <strong>“6 boosters of 10 · cube “All Commons” (192 cards) · 1 of each faction per booster”</strong> (created through the form: the cube name is the one typed, prefilled “All Commons”; with the API command of C it reads “All commons”) (no unique or ban-list part), and next to the pool count <strong>“0 / 3 players”</strong>. No “Full” pill.</li>
 <li>${url(WEB + '/tournament?tab=upcoming')}: the “Commons cube” card shows the same summary and <strong>“0 / 3 players”</strong>; the organizer’s tab ${url(WEB + '/tournament?tab=created')} too.</li></ul>` },
     ],
   },
@@ -470,7 +469,7 @@ ${PSQL(`SELECT name, max_players, set_code IS NULL AS no_set FROM tournaments WH
         html: `<p>The link of the tournament:</p>${TURL('123510')}<ul><li>On the tournament page, under the summary: <strong>“View the cube (192 cards) →”</strong>. Click it: <code>/tournament/t/&lt;id&gt;/cube</code>.</li>
 <li>The pool page of the tournament (“Open my pool”, once D and E are done; or <code>/tournament/t/&lt;id&gt;/pool</code> as a player): a <strong>“Cube”</strong> link in the title bar leads to the same page.</li></ul>` },
       { id: 'cu-d-page', title: 'The cube page: header, heroes, contents',
-        html: `<ul><li>Header: the tournament name, <strong>“Cube of “All commons””</strong>, the origin, the summary line and the players line (“0 / 3 players”).</li>
+        html: `<ul><li>Header: the tournament name, <strong>“Cube of “All Commons””</strong> (“All commons” if the tournament came from the API command), the origin, the summary line and the players line (“0 / 3 players”).</li>
 <li><strong>“Available heroes (12)”</strong>: 12 chips with the faction icon and the hero name, and the mode text <strong>“One of them in each booster.”</strong>.</li>
 <li>Then the cube contents: a sidebar with counts by faction / rarity / set, a search field, a group-by choice (faction, set, rarity), list or grid, hover preview. 192 cards in total.</li>
 <li>Search <code>Sofia</code>: <strong>“Sofia, First Outpost”</strong> is there; group by faction, it sits in the <strong>Bravos</strong> group.</li>
@@ -491,8 +490,8 @@ ${PSQL(`SELECT name, max_players, set_code IS NULL AS no_set FROM tournaments WH
 ${PSQL(`SELECT (SELECT count(*) FROM tournament_cube_slots s WHERE s.tournament_ref = t.id) AS lots, p.cube_slot, jsonb_array_length(p.boosters) AS boosters, (SELECT string_agg(DISTINCT jsonb_array_length(b)::text, ',') FROM jsonb_array_elements(p.boosters) b) AS sizes FROM tournaments t JOIN sealed_pools p ON p.tournament_ref = t.id WHERE t.bga_tournament_id = '123510' AND p.sub = '${ALICE_SUB}'`)}
 <p>Expected: <code>3 | 0 | 6 | 11</code> (3 lots dealt at the first pool, alice holds slot 0, 6 boosters of 10 cards plus the hero). No <code>8th booster</code>: there is no bonus pack for a cube.</p>` },
       { id: 'cu-e-reveal', who: 'alice', title: 'The reveal: the generated cover, the cards, no 8th booster',
-        html: `<ul><li>On alice’s pool page (the reveal plays once per pool and browser, a <code>pool_reveal_seen:…</code> flag in localStorage: if you already closed it, open the page in a private window): the first cover is <strong>generated</strong>: the Altered logo on a deep blue ground, <strong>“Commons cube”</strong> and <strong>“Cube “All commons””</strong> (no set photo).</li>
-<li>Open the 6 boosters one after the other: each shows 11 cards, a <strong>hero first</strong>, then 10 cards; the heading’s sublabel is the cube name.</li>
+        html: `<ul><li>On alice’s pool page (the reveal plays once per pool and browser, a <code>pool_reveal_seen:…</code> flag in localStorage: if you already closed it, open the page in a private window): the first cover is <strong>generated</strong>: the Altered logo on a deep blue ground, <strong>“Commons cube”</strong> and <strong>“Cube · All Commons”</strong> (“All commons” for an API-created tournament; no set photo).</li>
+<li>Open the 6 boosters one after the other: each shows 11 cards, a <strong>hero first</strong>, then 10 cards; the heading’s sublabel is <strong>“Cube “All Commons””</strong> (the cube’s name between quotes; “All commons” for an API-created tournament).</li>
 <li>After the 6th booster the reveal ends on the pool (<strong>no 7th, no 8th pack</strong>, no bonus pack).</li>
 <li>If the logo image failed to load, the reveal goes straight to the cards (acceptable: report it).</li></ul>` },
       { id: 'cu-e-composition', who: 'alice', title: 'The composition: heroes, one card per faction, every copy once',
@@ -536,14 +535,19 @@ ${PSQL(`SELECT name, max_players FROM tournaments WHERE bga_tournament_id = '123
 <p>Expected: <code>Capped set cup | 2</code>. (API alternative if you skip the form:)</p>${CREATE_SET('ALICE', 'Capped set cup', '123512', 2)}` },
       { id: 'cu-g-full', title: 'Two pools, carol is refused',
         html: `${POOLCODE('ALICE', '123512')}${POOLCODE('BOB', '123512')}${POOLBODY('CAROL', '123512')}<p>Expected: <code>pool 200</code>, <code>pool 200</code>, then <code>{"error":"tournament_full","maxPlayers":2} 409</code>. On the page: “2 / 2 players”, the “Full” pill, and for carol “This tournament is full: 2 players already have a pool.” without a button.</p>` },
-      { id: 'cu-g-lower', who: 'alice', title: 'Edit the cap with pools: below the pool count refused, raise, clear',
-        html: `<ul><li>“Capped set cup” › Edit: the Cards and Settings are locked (pools exist) <strong>but “Maximum players” stays editable</strong>.</li>
-<li>Type <strong>1</strong>: the bottom bar says <strong>“2 players already have a pool: the maximum cannot go below.”</strong> and the save button is blocked.</li>
-<li>Type <strong>3</strong>, save: it works; the page reads “2 / 3 players” and the Full pill is gone. carol can now open her pool (checklist step 2 button is back).</li>
-<li>Empty the field (it reads “No limit”), save: the page shows the pool count without “/ M”.</li></ul>
+      { id: 'cu-g-lower', who: 'alice', title: 'Edit the cap with pools: raise, below the pool count refused, clear',
+        html: `<p>Sequence: raise first (carol is blocked at 2), carol opens her pool, then try to go below.</p>
+<ul><li>“Capped set cup” (2 pools) › Edit: the Cards and Settings are locked (pools exist) <strong>but “Maximum players” stays editable</strong>.</li>
+<li>Type <strong>3</strong>, save: it works; the page reads “2 / 3 players” and the Full pill is gone (raising is always allowed).</li></ul>
+<p>carol can now open her pool (3 pools):</p>${POOLCODE('CAROL', '123512')}<p>Expected: <code>pool 200</code>; the page reads “3 / 3 players” with the Full pill.</p>
+<ul><li>alice › Edit, type <strong>2</strong>: the bottom bar says <strong>“3 players already have a pool: the maximum cannot go below.”</strong> and the save button is blocked.</li>
+<li>Type <strong>1</strong>: the bar now says <strong>“The maximum must be a whole number between 2 and 256.”</strong> instead (the range is checked first).</li></ul>
+<p>The same rules through the API:</p>${pre(`${TID('123512')}
+curl -s -w ' %{http_code}\\n' -X PATCH -H "Authorization: Bearer $TOKEN_ALICE" -H "Content-Type: application/json" -d '{"maxPlayers":2}' "${API}/api/tournaments/$TID"
+curl -s -w ' %{http_code}\\n' -X PATCH -H "Authorization: Bearer $TOKEN_ALICE" -H "Content-Type: application/json" -d '{"maxPlayers":1}' "${API}/api/tournaments/$TID"`)}<p>Expected: first a 400 <code>invalid_request</code> with <code>"maxPlayers":"below_pool_count"</code>, then a 400 with <code>"maxPlayers":"invalid_max_players"</code>.</p>
+<ul><li>Finally empty the field (it reads <strong>“No limit”</strong>), save: the page shows the pool count without “/ M”.</li></ul>
 ${PSQL(`SELECT max_players IS NULL AS no_limit FROM tournaments WHERE bga_tournament_id = '123512'`)}
-<p>Expected: <code>t</code>. And through the API, the same rule:</p>${pre(`${TID('123512')}
-curl -s -w ' %{http_code}\\n' -X PATCH -H "Authorization: Bearer $TOKEN_ALICE" -H "Content-Type: application/json" -d '{"maxPlayers":1}' "${API}/api/tournaments/$TID"`)}<p>Expected: a 400 <code>invalid_request</code> with <code>"maxPlayers":"invalid_max_players"</code> (1 is below the 2 minimum, before the pool count is even compared). Then <code>{"maxPlayers":2}</code> after carol also opened her pool (3 pools): <code>"maxPlayers":"below_pool_count"</code>.</p>` },
+<p>Expected: <code>t</code> (<code>maxPlayers</code> is null).</p>` },
     ],
   },
   {
@@ -598,7 +602,7 @@ ${PSQL(`SELECT max_players, config->'source'->>'boosters', config->'source'->>'p
     intro: 'The new screens in French, both themes, at phone width, and the console.',
     steps: [
       { id: 'cu-k-fr', title: 'French',
-        html: `<p>UI language FR, then the form (Cube tab, the three panels, the chosen card, the cube Settings, the hero picker, “Joueurs maximum”), the tournament page of “Commons cube”, the hub cards (“N / M joueurs”, the Full pill), the cube page, the pool reveal cover. Expected: no English text left, no raw key (<code>tournaments.…</code>, <code>packReveal.…</code>); the cover’s subtitle follows the language.</p>` },
+        html: `<p>UI language FR, then the form (Cube tab, the three panels, the chosen card, the cube Settings, the hero picker, “Nombre maximum de joueurs” and its “Sans limite”), the tournament page of “Commons cube”, the hub cards (“N / M joueurs”, the “Complet” pill, “Toutes les places sont prises” on hover), the cube page, the pool reveal cover. Expected: no English text left, no raw key (<code>tournaments.…</code>, <code>packReveal.…</code>); the cover’s subtitle follows the language.</p>` },
       { id: 'cu-k-theme', title: 'Light and dark themes',
         html: `<p>Toggle ☀/☾ on the form (Cube tab, the chosen card, the option cards, the hero picker panel, the capacity line), the tournament page (the Full pill), the cube page and the pool page. Expected: everything readable in both themes, the “Full” pill and the cap line included; only the generated cover (a canvas) keeps its own colours.</p>` },
       { id: 'cu-k-mobile', title: 'Phone width',
