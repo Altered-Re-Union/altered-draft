@@ -242,8 +242,29 @@ export default function TournamentForm() {
           setCubeSettings({ boosters: src.boosters, cardsPerBooster: src.cardsPerBooster, perFaction: src.perFaction })
           setHeroPool(src.heroPool ?? [])
           if (!tn.locked) {
-            resolveCubeCards(Object.keys(cards))
-              .then(resolved => { if (!cancelled) setCube(prev => (prev ? { ...prev, cards: resolved.cards, unresolved: resolved.unresolved, resolved: true } : prev)) })
+            // Stored refs are already in their stored form: resolve each once (cards and the hero
+            // pool) and keep the stored quantities. A ref that no longer resolves stays in the
+            // cube (faction null, stored qty) so a name-only edit sends the cube unchanged; it is
+            // listed as unresolved and the server refuses it if it is really unknown.
+            const heroRefs = src.heroPool ?? []
+            const storedRefs = Object.keys(cards)
+            resolveCubeCards([...storedRefs, ...heroRefs])
+              .then(resolved => {
+                if (cancelled) return
+                const byRef = new Map(resolved.cards.map(c => [c.ref, c]))
+                const nextCards = Object.entries(cards).map(([ref, qty]) => {
+                  const hit = byRef.get(ref)
+                  return hit ? { ...hit, qty } : { ref, qty, faction: null, cardType: null }
+                })
+                const heroesFound = resolved.heroes.filter(h => heroRefs.includes(h.ref))
+                // Only over the stored cube still waiting for its factions: a session draft
+                // applied meanwhile (another cube, or one already resolved) wins.
+                setCube(prev => {
+                  const same = prev && prev.resolved === false && prev.cards.length === storedRefs.length
+                    && prev.cards.every(c => cards[c.ref] === c.qty)
+                  return same ? { ...prev, cards: nextCards, heroesFound, unresolved: resolved.unresolved, resolved: true } : prev
+                })
+              })
               .catch(e => { if (!cancelled) setServerError(t('tournaments.cubeLoadFailed', { msg: e.message })) })
           }
         }

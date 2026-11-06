@@ -20,7 +20,7 @@ export default function MaxPlayersField({ value, onChange, onBlur, required = fa
     <div className="space-y-1">
       <label className="block text-sm text-ink2" htmlFor="tn-max-players">{t('tournaments.maxPlayersLabel')}</label>
       <input id="tn-max-players" data-testid="max-players" type="number" inputMode="numeric" step={1}
-        min={2} max={capacity?.players ?? CUBE_LIMITS.maxPlayers}
+        min={2} max={Math.max(2, capacity?.players ?? CUBE_LIMITS.maxPlayers)}
         value={value} disabled={disabled} required={required} aria-invalid={invalid}
         placeholder={required ? undefined : t('tournaments.maxPlayersNoLimit')}
         aria-describedby="tn-max-players-hint"
