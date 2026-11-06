@@ -1,3 +1,4 @@
+import { UNIQUES_EN } from './uniquesData.js'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import {
   cardImageUrl, isUniqueRef, needsCardApi, canonicalCardRef, apiSetCode,
@@ -152,6 +153,14 @@ describe('fetchUnique', () => {
     expect(card.imagePath).toBeNull()
     expect(card.faceLang).toBe('EN')
   })
+
+  it('flags the synthetic fallback card, never a bundled one', async () => {
+    global.fetch.mockRejectedValue(new Error('down'))
+    const synth = await fetchUnique('ALT_CORE_B_AX_04_U_999999999', 'EN')
+    expect(synth.synthetic).toBe(true)
+    const bundled = await fetchUnique(Object.keys(UNIQUES_EN)[0], 'EN')
+    expect('synthetic' in bundled).toBe(false)
+  }, 15000)
 
   it('aborts a stalled request instead of hanging', async () => {
     global.fetch.mockResolvedValueOnce({ ok: true, json: async () => ({ member: [{ reference: 'ALT_EOLE_B_YZ_99_U_7777', rarity: { reference: 'UNIQUE' } }] }) })
