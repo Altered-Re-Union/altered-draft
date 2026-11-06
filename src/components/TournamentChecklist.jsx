@@ -23,7 +23,7 @@ function Step({ n, title, desc, done, children }) {
  * localStorage, since BGA registration can't be verified) → open the one-shot pool →
  * build the deck. `viewer` is the API's viewer block (null when logged out).
  */
-export default function TournamentChecklist({ tournament, viewer, user, onLogin, onOpenPool, opening, openError }) {
+export default function TournamentChecklist({ tournament, viewer, user, onLogin, onOpenPool, opening, openError, full }) {
   const { t } = useLang()
   const [registered, setRegistered] = useState(false)
   useEffect(() => {
@@ -59,6 +59,8 @@ export default function TournamentChecklist({ tournament, viewer, user, onLogin,
           <button type="button" onClick={onLogin} className={btn}>{t('tournaments.connectToPrepare')}</button>
         ) : hasPool ? (
           <Link to={poolHref} className={btn2}>{t('tournaments.step2ButtonExisting')}</Link>
+        ) : full ? (
+          <p className="text-xs text-muted" data-testid="step2-full">{t('tournaments.step2Full', { max: tournament.maxPlayers })}</p>
         ) : open ? (
           <button type="button" onClick={onOpenPool} disabled={opening} className={btn}>
             {opening ? t('tournaments.step2Opening') : t('tournaments.step2Button')}
