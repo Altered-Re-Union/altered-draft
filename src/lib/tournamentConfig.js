@@ -4,12 +4,14 @@
 import { SETS, FACTIONS } from './cardData.js'
 import { hasFactionRanges } from './uniqueFactionRanges.js'
 import { CURRENT_BANLIST } from './banlist.js'
+import { setCodeFromRef } from './assets.js'
+import { CUBE_LIMITS, CUBE_ORIGINS, CARD_REF_RE, isHeroRefShape } from './cubeSealed.js'
 
 export const CONFIG_VERSION = 1
 export const SEALED_BOOSTERS = 7
 export const MAX_UNIQUES = 7
 export const HERO_MODES = ['packs', 'free']
-export const SOURCE_TYPES = ['set', 'faction', 'multiset']
+export const SOURCE_TYPES = ['set', 'faction', 'multiset', 'cube']
 export const MAX_SET_WEIGHT = 3
 export const MAX_RANDOM_ONE_IN = 10
 export const DEFAULT_RANDOM_ONE_IN = 8
@@ -22,6 +24,11 @@ export const DEFAULT_RANDOM_ONE_IN = 8
 export function configSetCodes(config) {
   const src = config.source
   if (src.type === 'set') return [src.setCode]
+  if (src.type === 'cube') {
+    const codes = new Set([...Object.keys(src.cards ?? {}), ...(src.heroPool ?? [])].map(setCodeFromRef))
+    const rank = code => SETS.findIndex(s => s.code === code)
+    return [...codes].sort((a, b) => rank(a) - rank(b))
+  }
   const rank = code => {
     const i = SETS.findIndex(s => s.code === code)
     return i === -1 ? SETS.length : i
@@ -33,6 +40,58 @@ function toInt(value, fallback) {
   if (value === undefined || value === null || value === '') return fallback
   const n = typeof value === 'number' ? value : Number(String(value))
   return Number.isInteger(n) ? n : null
+}
+
+const knownSet = ref => SETS.some(s => s.code === setCodeFromRef(ref))
+const isPlainObject = v => !!v && typeof v === 'object' && !Array.isArray(v)
+
+/** Shape and range checks of a cube source (spec §15.2); existence of the refs is a server check. */
+function validateCubeSource(src, errors) {
+  const L = CUBE_LIMITS
+  const name = typeof src.name === 'string' ? src.name.trim() : ''
+  if (!name || name.length > L.nameMax) errors.push('source.name')
+  const originOk = CUBE_ORIGINS.includes(src.origin)
+  if (!originOk) errors.push('source.origin')
+  const cubeId = originOk && src.origin === 'community' ? (typeof src.cubeId === 'string' && src.cubeId.trim() ? src.cubeId.trim() : undefined) : null
+  if (cubeId === undefined) errors.push('source.cubeId')
+
+  const cards = {}
+  let cardsOk = isPlainObject(src.cards) && Object.keys(src.cards).length > 0
+  if (cardsOk) {
+    let sum = 0
+    for (const ref of Object.keys(src.cards).sort()) {
+      const qty = typeof src.cards[ref] === 'boolean' ? null : toInt(src.cards[ref], null)
+      if (!CARD_REF_RE.test(ref) || !knownSet(ref) || qty === null || qty < 1 || qty > 99) { cardsOk = false; break }
+      cards[ref] = qty
+      sum += qty
+    }
+    if (sum > L.maxCards) cardsOk = false
+  }
+  if (!cardsOk) errors.push('source.cards')
+
+  let heroPool = []
+  let heroOk = Array.isArray(src.heroPool)
+  if (heroOk) {
+    heroPool = [...new Set(src.heroPool)].sort()
+    if (!heroPool.length || heroPool.length > L.maxHeroes || !heroPool.every(r => isHeroRefShape(r) && knownSet(r))) heroOk = false
+  }
+  if (!heroOk) errors.push('source.heroPool')
+
+  const num = (v, [min, max]) => {
+    const n = typeof v === 'boolean' ? null : toInt(v, null)
+    return n !== null && n >= min && n <= max ? n : null
+  }
+  const boosters = num(src.boosters, L.boosters)
+  const cardsPerBooster = num(src.cardsPerBooster, L.cardsPerBooster)
+  let perFaction = num(src.perFaction, L.perFaction)
+  if (boosters === null) errors.push('source.boosters')
+  if (cardsPerBooster === null) errors.push('source.cardsPerBooster')
+  if (perFaction === null || (perFaction === 2 && cardsPerBooster !== null && cardsPerBooster < L.perFaction2MinCards)) {
+    errors.push('source.perFaction')
+    perFaction = null
+  }
+  if (boosters !== null && cardsPerBooster !== null && boosters * cardsPerBooster < L.minPoolCards) errors.push('source.poolSize')
+  return { type: 'cube', name, origin: src.origin, cubeId, cards, heroPool, boosters, cardsPerBooster, perFaction }
 }
 
 /**
@@ -48,10 +107,14 @@ export function validateTournamentConfig(input) {
   const src = c.source && typeof c.source === 'object' ? c.source : {}
   if (!SOURCE_TYPES.includes(src.type)) errors.push('source.type')
   const isFaction = src.type === 'faction'
+  const isCube = src.type === 'cube'
+  let cubeSource = null
   let set = null
   let factionSets = {}
   let multiSets = null
-  if (isFaction) {
+  if (isCube) {
+    cubeSource = validateCubeSource(src, errors)
+  } else if (isFaction) {
     if (!FACTIONS.includes(src.faction)) errors.push('source.faction')
     const raw = src.sets && typeof src.sets === 'object' && !Array.isArray(src.sets) ? src.sets : null
     let setsOk = !!raw
@@ -86,11 +149,11 @@ export function validateTournamentConfig(input) {
     set = SETS.find(s => s.code === src.setCode && !s.hidden) ?? null
     if (!set) errors.push('source.setCode')
   }
-  if (src.boosters !== undefined && src.boosters !== SEALED_BOOSTERS) errors.push('source.boosters')
+  if (!isCube && src.boosters !== undefined && src.boosters !== SEALED_BOOSTERS) errors.push('source.boosters')
 
   if (!HERO_MODES.includes(c.heroes)) errors.push('heroes')
 
-  const u = c.uniques && typeof c.uniques === 'object' ? c.uniques : {}
+  const u = !isCube && c.uniques && typeof c.uniques === 'object' ? c.uniques : {}
   // Random mode (spec §5.1, §13.2): each booster rolls its own unique. It replaces the exact
   // in-booster count, whose client value is not even range-checked.
   const randomOneIn = u.randomOneIn === undefined || u.randomOneIn === null ? null : toInt(u.randomOneIn, null)
@@ -117,7 +180,7 @@ export function validateTournamentConfig(input) {
     else if (!random && inBoosters !== null && inBoosters > 3 * eligible.reduce((t, k) => t + multiSets[k], 0)) errors.push('uniques.inBoosters')
   }
 
-  if (c.excludeBanlist !== undefined && typeof c.excludeBanlist !== 'boolean') errors.push('excludeBanlist')
+  if (!isCube && c.excludeBanlist !== undefined && typeof c.excludeBanlist !== 'boolean') errors.push('excludeBanlist')
 
   if (errors.length) return { ok: false, errors, config: null }
   const uniqueTotal = inBoosters + guaranteed
@@ -129,7 +192,9 @@ export function validateTournamentConfig(input) {
     config: {
       v: CONFIG_VERSION,
       format: 'sealed',
-      source: isFaction
+      source: isCube
+        ? cubeSource
+        : isFaction
         ? { type: 'faction', faction: src.faction, sets: factionSets, boosters: SEALED_BOOSTERS }
         : multiSets
           ? { type: 'multiset', sets: multiSets, boosters: SEALED_BOOSTERS }
@@ -139,12 +204,12 @@ export function validateTournamentConfig(input) {
       // a stale "true" would still change the draw (evenFactionTargets consumes the rng) and
       // mislead the stored config. Same for a faction left over with no unique at all.
       uniques: { inBoosters, guaranteed, evenFactions: !!u.evenFactions && !random && !multiSets && uniqueTotal >= 2 && !faction, faction, randomOneIn: random ? randomOneIn : null },
-      excludeBanlist: !!c.excludeBanlist,
+      excludeBanlist: !isCube && !!c.excludeBanlist,
       // The ban-list version this config draws under (banlist.js): always the current one,
       // whatever the client sent. Only reached on creation and on a config edit, which is
       // only allowed while the tournament has no pool, so no pool ever changes list. Absent
       // when the ban list is off (and on configs stored before versioning: legacy list).
-      ...(c.excludeBanlist ? { banlist: CURRENT_BANLIST } : {}),
+      ...(!isCube && c.excludeBanlist ? { banlist: CURRENT_BANLIST } : {}),
     },
   }
 }
