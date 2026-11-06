@@ -3,6 +3,7 @@
 import { verifyUser, bearerToken } from '../_lib/auth.js'
 import { jsonBody, queryParam } from '../_lib/request.js'
 import { validateTournamentFields, canSeeTournament, MAX_OPEN_TOURNAMENTS } from '../../src/lib/tournamentRules.js'
+import { checkPlayerCap } from '../../src/lib/cubeSealed.js'
 import { validateTournamentConfig, legacyFormatForBgaTournament } from '../../src/lib/tournamentConfig.js'
 import { listTournaments, listTournamentsByOrganizer, createTournament, countOpenTournaments, getTournamentByBgaId, toTournamentJson, hiddenBgaTournamentIds } from '../../src/lib/tournamentStore.js'
 import { countPoolsByTournament, poolSummariesForTournaments, legacyFormatsForBgaId } from '../../src/lib/poolStore.js'
@@ -73,6 +74,12 @@ export default async function handler(req, res) {
     if (legacy?.mixed) return res.status(409).json({ error: 'bga_tournament_mixed_formats' })
     const finalConfig = legacy ? validateTournamentConfig(legacy.config).config ?? legacy.config : config.config
 
+    // Nothing to refuse on a non-cube source (no pool yet); the cube branch is separate.
+    if (finalConfig.source?.type !== 'cube') {
+      const cap = checkPlayerCap({ source: finalConfig.source, maxPlayers: fields.values.maxPlayers, poolCount: 0 })
+      if (Object.keys(cap.fields).length) return res.status(400).json({ error: 'invalid_request', fields: cap.fields, config: cap.config })
+    }
+
     if (!user.isModerator && (await countOpenTournaments(user.sub)) >= MAX_OPEN_TOURNAMENTS) {
       return res.status(429).json({ error: 'too_many_open_tournaments' })
     }
@@ -90,6 +97,7 @@ export default async function handler(req, res) {
         organizerName: user.name,
         config: finalConfig,
         visibility: fields.values.visibility,
+        maxPlayers: fields.values.maxPlayers,
       })
     } catch (e) {
       if (e.code === 'bga_tournament_taken') return res.status(409).json({ error: 'bga_tournament_taken' })

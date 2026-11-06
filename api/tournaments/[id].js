@@ -4,6 +4,7 @@
 import { verifyUser, bearerToken } from '../_lib/auth.js'
 import { jsonBody } from '../_lib/request.js'
 import { validateTournamentFields } from '../../src/lib/tournamentRules.js'
+import { checkPlayerCap } from '../../src/lib/cubeSealed.js'
 import { validateTournamentConfig, legacyFormatForBgaTournament } from '../../src/lib/tournamentConfig.js'
 import {
   getTournament, updateTournament, countPoolsForTournament, deleteTournamentIfNoPools, detachTournament, toTournamentJson,
@@ -93,6 +94,17 @@ export default async function handler(req, res) {
       const legacy = legacyFormatForBgaTournament(await legacyFormatsForBgaId(fields.bgaTournamentId))
       if (legacy?.mixed) return res.status(409).json({ error: 'bga_tournament_mixed_formats' })
       if (legacy) fields.config = validateTournamentConfig(legacy.config).config ?? legacy.config
+    }
+
+    // Player cap on a non-cube source: never below the pools already created (the cube lock is separate).
+    const effectiveSource = fields.config?.source ?? row.config?.source
+    if (validated.values.maxPlayers !== undefined && effectiveSource?.type !== 'cube') {
+      const cap = checkPlayerCap({
+        source: effectiveSource,
+        maxPlayers: validated.values.maxPlayers,
+        poolCount: await countPoolsForTournament(row.id),
+      })
+      if (Object.keys(cap.fields).length) return res.status(400).json({ error: 'invalid_request', fields: cap.fields })
     }
 
     const touchesLocked = body.config !== undefined || body.bgaUrl !== undefined

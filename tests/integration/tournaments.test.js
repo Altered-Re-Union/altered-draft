@@ -97,7 +97,7 @@ const MOD = { sub: 'mod', name: 'Mod', roles: ['mod'], isModerator: true }
 const asUser = user => verifyUser.mockImplementation(async req => (req.headers.authorization ? user : null))
 
 beforeEach(async () => {
-  await query('TRUNCATE sealed_pool_games, sealed_pools, hidden_tournaments, tournaments')
+  await query('TRUNCATE sealed_pool_games, sealed_pools, tournament_cube_slots, hidden_tournaments, tournaments')
 })
 
 afterAll(async () => {
@@ -1205,5 +1205,95 @@ describe('private tournaments (V4)', () => {
     verifySub.mockResolvedValue('alice')
     const res = await call(boundPools)
     expect(res.body.pools[0].tournament).toMatchObject({ id: priv.id, visibility: 'private' })
+  })
+})
+
+describe('V5: player cap (schema and field)', () => {
+  const postBody = n => ({
+    name: 'Cap Cup', description: '', bgaUrl: `https://boardgamearena.com/tournament?id=${n}`,
+    startsAt: inDays(3).toISOString(), endsAt: null, config: CONFIG,
+  })
+
+  it('has max_players, tournament_cube_slots and cube_slot', async () => {
+    const col = await query("SELECT 1 FROM information_schema.columns WHERE table_name = 'tournaments' AND column_name = 'max_players'")
+    expect(col.rows).toHaveLength(1)
+    const check = await query(
+      "SELECT pg_get_constraintdef(c.oid) AS def FROM pg_constraint c WHERE c.conrelid = 'tournaments'::regclass AND c.contype = 'c' AND pg_get_constraintdef(c.oid) ILIKE '%max_players%'",
+    )
+    expect(check.rows).toHaveLength(1)
+    const pk = await query(
+      `SELECT a.attname FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+       WHERE i.indrelid = 'tournament_cube_slots'::regclass AND i.indisprimary ORDER BY a.attname`,
+    )
+    expect(pk.rows.map(r => r.attname)).toEqual(['slot', 'tournament_ref'])
+    const slot = await query("SELECT 1 FROM information_schema.columns WHERE table_name = 'sealed_pools' AND column_name = 'cube_slot'")
+    expect(slot.rows).toHaveLength(1)
+    const idx = await query("SELECT indexdef FROM pg_indexes WHERE indexname = 'sealed_pools_one_pool_per_cube_slot'")
+    expect(idx.rows).toHaveLength(1)
+    expect(idx.rows[0].indexdef).toMatch(/UNIQUE/i)
+    expect(idx.rows[0].indexdef).toMatch(/cube_slot IS NOT NULL/i)
+  })
+
+  it('createTournament stores maxPlayers and toTournamentJson returns it, null by default', async () => {
+    const capped = await mkTournament({ maxPlayers: 12 })
+    expect(toTournamentJson(capped).maxPlayers).toBe(12)
+    expect(toTournamentJson(await getTournament(capped.id)).maxPlayers).toBe(12)
+    const open = await mkTournament()
+    expect(toTournamentJson(open).maxPlayers).toBeNull()
+  })
+
+  it('POST accepts maxPlayers 2..256, refuses 1, 257 and "x" with invalid_max_players, stores null when absent', async () => {
+    asUser(ALICE)
+    const ok = await call(tournamentsIndex, { method: 'POST', body: { ...postBody(9201), maxPlayers: 2 } })
+    expect(ok.statusCode).toBe(201)
+    expect(ok.body.maxPlayers).toBe(2)
+    expect((await call(tournamentsIndex, { method: 'POST', body: { ...postBody(9202), maxPlayers: 256 } })).body.maxPlayers).toBe(256)
+    for (const [i, bad] of [1, 257, 'x'].entries()) {
+      const res = await call(tournamentsIndex, { method: 'POST', body: { ...postBody(9210 + i), maxPlayers: bad } })
+      expect(res.statusCode).toBe(400)
+      expect(res.body.fields).toEqual({ maxPlayers: 'invalid_max_players' })
+    }
+    const none = await call(tournamentsIndex, { method: 'POST', body: postBody(9203) })
+    expect(none.statusCode).toBe(201)
+    expect(none.body.maxPlayers).toBeNull()
+  })
+
+  it('PATCH raises, lowers to the pool count and clears maxPlayers on a set tournament; refuses below the pool count', async () => {
+    const t = await mkTournament({ organizerSub: 'alice', maxPlayers: 10 })
+    for (const sub of ['p1', 'p2', 'p3']) await getOrCreateTournamentPool(sub, t)
+    asUser(ALICE)
+    const patch = body => call(tournamentsItem, { method: 'PATCH', query: { id: t.id }, body })
+
+    const below = await patch({ maxPlayers: 2 })
+    expect(below.statusCode).toBe(400)
+    expect(below.body).toEqual({ error: 'invalid_request', fields: { maxPlayers: 'below_pool_count' } })
+    expect((await patch({ maxPlayers: 3 })).body.maxPlayers).toBe(3)
+    expect((await patch({ maxPlayers: 50 })).body.maxPlayers).toBe(50)
+    const cleared = await patch({ maxPlayers: null })
+    expect(cleared.statusCode).toBe(200)
+    expect(cleared.body.maxPlayers).toBeNull()
+
+    await patch({ maxPlayers: 5 })
+    await patch({ action: 'cancel' })
+    const whileCancelled = await patch({ maxPlayers: 4 })
+    expect(whileCancelled.statusCode).toBe(200)
+    expect(whileCancelled.body.maxPlayers).toBe(4)
+
+    asUser(MOD)
+    await call(tournamentsItem, { method: 'PATCH', query: { id: t.id }, body: { action: 'detach' } })
+    asUser(ALICE)
+    const detached = await patch({ maxPlayers: 9 })
+    expect(detached.statusCode).toBe(409)
+    expect(detached.body).toEqual({ error: 'tournament_detached' })
+  })
+
+  it('detachTournament deletes the tournament_cube_slots rows', async () => {
+    const t = await mkTournament()
+    for (const slot of [0, 1]) {
+      await query('INSERT INTO tournament_cube_slots (tournament_ref, slot, boosters) VALUES ($1, $2, $3)', [t.id, slot, JSON.stringify([[]])])
+    }
+    expect((await query('SELECT count(*)::int AS n FROM tournament_cube_slots WHERE tournament_ref = $1', [t.id])).rows[0].n).toBe(2)
+    await detachTournament(t.id)
+    expect((await query('SELECT count(*)::int AS n FROM tournament_cube_slots WHERE tournament_ref = $1', [t.id])).rows[0].n).toBe(0)
   })
 })
