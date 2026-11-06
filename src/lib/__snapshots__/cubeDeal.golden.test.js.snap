@@ -1,0 +1,3 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`cube deal golden > the deal of a fake cube is frozen 1`] = `"263234c11b6ffb98f49fd22a761c406e0319372647688a6f260c3cd8137e9173"`;
