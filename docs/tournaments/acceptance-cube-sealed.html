@@ -349,9 +349,9 @@ const PASTE_LIST = `3 ALT_DUSTER_A_AX_98_C
 
 // Steps replayed by the Playwright suite. Rewritten by `npm run test:e2e:coverage -- --write`
 // (scripts/e2e-acceptance-coverage.mjs) from the tests' tags: do not edit this line by hand.
-const AUTO_STEPS = [];
+const AUTO_STEPS = ['cu-a-community', 'cu-a-paste', 'cu-a-reunion', 'cu-a-switch', 'cu-a-tab', 'cu-b-boosters', 'cu-b-capacity', 'cu-b-heroes', 'cu-b-too-small', 'cu-c-create', 'cu-c-summary', 'cu-d-link', 'cu-d-page', 'cu-d-redirect', 'cu-e-composition', 'cu-e-deck', 'cu-e-first', 'cu-e-others', 'cu-e-reveal', 'cu-f-api', 'cu-f-free', 'cu-f-page', 'cu-g-create', 'cu-g-full', 'cu-g-lower', 'cu-h-api', 'cu-h-locked', 'cu-i-locked', 'cu-i-unlocked', 'cu-j-bga', 'cu-k-fr', 'cu-k-mobile'];
 // Steps the suite covers with a narrower assertion than the acceptance steps (hand-maintained).
-const AUTO_PARTIAL = {};
+const AUTO_PARTIAL = { 'cu-b-capacity': 'the field following a capacity that rises from its prefill (2 at 7 × 12, 3 at 6 × 10) is a test.fixme: the form keeps the untouched 2', 'cu-e-reveal': 'the suite checks the generated cover is shown on the 6 boosters, the sublabel and no bonus pack; the drawing itself (logo, title, subtitle) stays a human check', 'cu-i-locked': 'the absence of “Change cube” on the locked chosen cube is a test.fixme: the button and the name field are shown, disabled', 'cu-k-fr': 'no raw key and sample French strings on the form, the tournament page and the cube page; no English leftovers, the hub cards and the cover’s subtitle stay a human check', 'cu-k-mobile': 'no horizontal scroll on the Cube tab, the chosen cube, the hero picker, the tournament page, the cube page and the reveal; nothing cut off and the bottom bar stay a human check' };
 
 const GROUPS = [
   {
