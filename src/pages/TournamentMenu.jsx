@@ -5,7 +5,7 @@ import { fetchBoundPools, listTournaments, listMyTournaments, setTournamentHidde
 import { useLang } from '../lib/i18n/i18n.jsx'
 import TopNav from '../components/TopNav.jsx'
 import Footer from '../components/Footer.jsx'
-import { StatusPill, PrivateBadge, formatDateTime, ConfigSummary } from '../components/TournamentBits.jsx'
+import { StatusPill, PrivateBadge, FullBadge, PlayersLine, isFull, formatDateTime, ConfigSummary } from '../components/TournamentBits.jsx'
 import { groupCreatedTournaments, splitBoundPools, poolTournamentOver } from '../lib/tournamentRules.js'
 import { TOURNAMENT_HUB_PATH } from '../lib/links.js'
 
@@ -28,12 +28,13 @@ function TournamentCard({ tn, t, tc, action }) {
         <p className="font-semibold">{tn.name}</p>
         <StatusPill status={tn.status} t={t} />
         {tn.visibility === 'private' && <PrivateBadge t={t} />}
+        {isFull(tn) && <FullBadge t={t} />}
         {v?.hasPool && <span className="text-xs text-ok">✓ {t('tournaments.youHavePool')}</span>}
       </div>
       <p className="text-sm text-ink2">{t('tournaments.startsAt', { date: formatDateTime(tn.startsAt) })}</p>
       <ConfigSummary config={tn.config} t={t} tc={tc} className="text-xs text-muted" />
       <p className="text-xs text-faint">
-        {t('tournaments.organizedBy', { name: tn.organizer.name })} · {tc('tournaments.poolsPrepared', tn.poolCount ?? 0)}
+        {t('tournaments.organizedBy', { name: tn.organizer.name })} · <PlayersLine tournament={tn} t={t} tc={tc} />
         {v?.deck ? ` · ${t('tournaments.yourDeck', { name: v.deck.name, n: v.deck.cardQuantity ?? 0 })}` : ''}
       </p>
     </>
@@ -293,6 +294,7 @@ export default function TournamentMenu() {
                   <div className="flex items-center gap-2 min-w-0">
                     <p className="font-semibold text-sm truncate">{tn.name}</p>
                     {tn.visibility === 'private' && <PrivateBadge t={t} />}
+                    {isFull(tn) && <FullBadge t={t} />}
                   </div>
                   <p className="text-xs text-ink2">{t('tournaments.startsAt', { date: formatDateTime(tn.startsAt) })}</p>
                   <p className="text-xs text-faint truncate">
