@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Link } from 'react-router-dom'
-import { fetchSet, fetchUniques, isUniqueRef } from '../lib/cardData.js'
+import { fetchSet, fetchUniques, isUniqueRef, needsCardApi } from '../lib/cardData.js'
 import { setCodeFromRef } from '../lib/assets.js'
 import { createDeck, updateDeck, toDeckCards, getDeck, deckCardsToRefs } from '../lib/decks.js'
 import { syncPoolDeck } from '../lib/tournamentApi.js'
 import { syncDeckToPool } from '../lib/poolDeckSync.js'
 import { createSerialRunner } from '../lib/serialRunner.js'
 import { buildRandomDeck } from '../lib/randomDeck.js'
+import { cubeBoosterCover } from '../lib/cubeCover.js'
 import { useLang } from '../lib/i18n/i18n.jsx'
 import PoolGrid from './PoolGrid.jsx'
 import PackReveal from './PackReveal.jsx'
@@ -52,6 +53,7 @@ export default function TournamentPoolView({ title, load, reset, backTo = null }
   const [cooldownMs, setCooldownMs] = useState(0)
   const [syncing, setSyncing] = useState(false)
   const [showReveal, setShowReveal] = useState(false) // first-open pack-by-pack overlay
+  const [coverImage, setCoverImage] = useState(null) // generated booster cover of a cube pool
 
   const poolRef = useRef(null) // avoids clobbering deck state on a resolved-late reload
   const lastSyncAtRef = useRef(0)
@@ -80,12 +82,19 @@ export default function TournamentPoolView({ title, load, reset, backTo = null }
       if (!setCodes.length && data.setCode) setCodes.push(data.setCode)
       const sets = await Promise.all(setCodes.map(s => fetchSet(s).catch(() => [])))
       for (const c of sets.flat()) map[c.reference] = c
-      const uniqueRefs = refs.filter(r => isUniqueRef(r) && !map[r])
+      const uniqueRefs = refs.filter(r => needsCardApi(r) && !map[r])
       if (uniqueRefs.length) {
         const uCards = await fetchUniques(uniqueRefs)
         for (const c of uCards) map[c.reference] = c
       }
       setCardMap(map)
+
+      if (data.sourceType === 'cube' && data.cube) {
+        cubeBoosterCover({
+          title: data.tournamentName ?? title,
+          subtitle: t('packReveal.cubeBooster', { name: data.cube.name }),
+        }).then(setCoverImage)
+      }
 
       // Seed the local deck editor from whatever's already been synced for this pool.
       // We don't have a per-card deck breakdown server-side (only the summary), so an
@@ -279,6 +288,8 @@ export default function TournamentPoolView({ title, load, reset, backTo = null }
           packs={revealPacks}
           hasBonus={bonusUniques.length > 0}
           sourceType={pool?.sourceType ?? 'set'}
+          coverImage={pool?.sourceType === 'cube' ? coverImage : undefined}
+          coverSublabel={pool?.sourceType === 'cube' ? t('packReveal.cubeBooster', { name: pool.cube?.name ?? '' }) : null}
           cardMap={cardMap}
           deck={deck}
           poolCounts={pool?.cards}
@@ -295,6 +306,12 @@ export default function TournamentPoolView({ title, load, reset, backTo = null }
         )}
         <div className="flex items-center gap-3 mb-3 flex-wrap">
           <h1 className="text-xl font-display">{pool?.tournamentName || title}</h1>
+          {pool?.sourceType === 'cube' && pool.tournamentRef && (
+            <Link to={`/tournament/t/${pool.tournamentRef}/cube`} data-testid="pool-cube-link"
+              className="text-xs text-accent-ink hover:underline">
+              {t('tournamentPoolView.cubeLink')}
+            </Link>
+          )}
           {loading ? (
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border-2 border-line bg-surface2 text-base font-semibold text-muted">
               <span className="w-4 h-4 rounded-full border-2 border-line border-t-accent animate-spin shrink-0" />
