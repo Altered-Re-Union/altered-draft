@@ -54,6 +54,8 @@ export default function TournamentPoolView({ title, load, reset, backTo = null }
   const [syncing, setSyncing] = useState(false)
   const [showReveal, setShowReveal] = useState(false) // first-open pack-by-pack overlay
   const [coverImage, setCoverImage] = useState(null) // generated booster cover of a cube pool
+  const [coverReady, setCoverReady] = useState(false) // the cover attempt settled: the reveal may mount
+  const loadRunRef = useRef(0) // stale-run / unmount guard for the cover state
 
   const poolRef = useRef(null) // avoids clobbering deck state on a resolved-late reload
   const lastSyncAtRef = useRef(0)
@@ -66,11 +68,24 @@ export default function TournamentPoolView({ title, load, reset, backTo = null }
   const skipNextSyncRef = useRef(false)
 
   const loadPool = useCallback(async () => {
+    const run = ++loadRunRef.current
+    setCoverImage(null)
+    setCoverReady(false)
     setLoading(true)
     setError('')
     try {
       const data = await load()
       poolRef.current = data
+      // A cube pool's cover is drawn BEFORE the reveal may mount (it never rejects: null on
+      // failure), so the first pack never skips it and it never pops in mid-reveal.
+      if (data.sourceType === 'cube' && data.cube) {
+        const cover = await cubeBoosterCover({
+          title: data.tournamentName ?? title,
+          subtitle: t('packReveal.cubeBooster', { name: data.cube.name }),
+        })
+        if (run === loadRunRef.current) setCoverImage(cover)
+      }
+      if (run === loadRunRef.current) setCoverReady(true)
       setPool(data)
       setCooldownMs(cooldownFromResetAt(data.resetAt)) // show the cooldown from the start, not just after a rejected click
 
@@ -88,13 +103,6 @@ export default function TournamentPoolView({ title, load, reset, backTo = null }
         for (const c of uCards) map[c.reference] = c
       }
       setCardMap(map)
-
-      if (data.sourceType === 'cube' && data.cube) {
-        cubeBoosterCover({
-          title: data.tournamentName ?? title,
-          subtitle: t('packReveal.cubeBooster', { name: data.cube.name }),
-        }).then(setCoverImage)
-      }
 
       // Seed the local deck editor from whatever's already been synced for this pool.
       // We don't have a per-card deck breakdown server-side (only the summary), so an
@@ -116,12 +124,13 @@ export default function TournamentPoolView({ title, load, reset, backTo = null }
       }
     } catch (e) {
       setError(e.message || t('tournamentPoolView.couldNotLoadPool'))
+      if (run === loadRunRef.current) setCoverReady(true)
     } finally {
       setLoading(false)
     }
-  }, [load, t])
+  }, [load, t, title])
 
-  useEffect(() => { loadPool() }, [loadPool])
+  useEffect(() => { loadPool(); return () => { loadRunRef.current++ } }, [loadPool])
 
   // Tick the reset cooldown down every second while it's active (self-corrects on a 429).
   useEffect(() => {
@@ -132,9 +141,9 @@ export default function TournamentPoolView({ title, load, reset, backTo = null }
 
   // Show the first-open pack reveal once per pool (skips if already seen, or no boosters).
   useEffect(() => {
-    if (!pool?.id || !pool.boosters?.length) return
+    if (!coverReady || !pool?.id || !pool.boosters?.length) return
     try { if (!localStorage.getItem(revealKey(pool))) setShowReveal(true) } catch { /* ignore */ }
-  }, [pool?.id, pool?.resetAt])
+  }, [pool?.id, pool?.resetAt, coverReady])
 
   function dismissReveal() {
     try { if (pool?.id) localStorage.setItem(revealKey(pool), '1') } catch { /* ignore */ }
