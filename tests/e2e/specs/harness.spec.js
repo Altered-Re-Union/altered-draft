@@ -229,7 +229,7 @@ test.describe('card fixtures and the app wiring', () => {
       expect(cards.length, set).toBeGreaterThan(100)
       expect(cards.every(c => c.reference.includes('_B_')), set).toBe(true)
     }
-    expect((await request.get(`${FAKES_URL}/carddb/ALIZE/ALIZE_EN.json`)).status()).toBe(404)
+    expect((await request.get(`${FAKES_URL}/carddb/NOPE/NOPE_EN.json`)).status()).toBe(404)
   })
 
   test('api config only points at localhost', async ({ request }) => {
