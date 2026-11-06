@@ -26,6 +26,26 @@ export function PrivateBadge({ t }) {
   )
 }
 
+export function FullBadge({ t }) {
+  return (
+    <span data-testid="tournament-full" title={t('tournaments.fullBadgeTitle')} className="text-xs px-2 py-0.5 rounded-full border text-danger border-danger/40 bg-danger-soft">
+      {t('tournaments.fullBadge')}
+    </span>
+  )
+}
+
+/** True once a capped tournament has as many pools as places. */
+export function isFull(tn) {
+  return tn?.maxPlayers != null && (tn.poolCount ?? 0) >= tn.maxPlayers
+}
+
+/** "3 pools prepared" without a cap, "2 / 4 players" with one. */
+export function PlayersLine({ tournament, t, tc }) {
+  const n = tournament.poolCount ?? 0
+  if (tournament.maxPlayers == null) return <>{tc('tournaments.poolsPrepared', n)}</>
+  return <span data-testid="tournament-players">{t('tournaments.playersOf', { n, max: tournament.maxPlayers })}</span>
+}
+
 /** Viewer-local date + time (the API sends UTC ISO strings). */
 export function formatDateTime(iso) {
   if (!iso) return '—'
@@ -42,6 +62,15 @@ export function configSummaryParts(config, t, tc) {
   const isFaction = config.source?.type === 'faction'
   const isMulti = config.source?.type === 'multiset'
   let parts
+  if (config.source?.type === 'cube') {
+    const src = config.source
+    const total = Object.values(src.cards ?? {}).reduce((a, q) => a + q, 0)
+    return [
+      { text: t('tournaments.summaryCube', { n: src.boosters, cards: src.cardsPerBooster, name: src.name, total }) },
+      src.perFaction > 0 && { text: t(`tournaments.summaryPerFaction${src.perFaction}`) },
+      config.heroes === 'free' && { text: t('tournaments.summaryHeroesFree') },
+    ].filter(Boolean)
+  }
   if (isMulti) {
     const counts = config.source.sets ?? {}
     const setsText = SETS.filter(s => counts[s.code] > 0)

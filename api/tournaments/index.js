@@ -4,6 +4,7 @@ import { verifyUser, bearerToken } from '../_lib/auth.js'
 import { jsonBody, queryParam } from '../_lib/request.js'
 import { validateTournamentFields, canSeeTournament, MAX_OPEN_TOURNAMENTS } from '../../src/lib/tournamentRules.js'
 import { checkPlayerCap } from '../../src/lib/cubeSealed.js'
+import { checkCubeConfig } from '../_lib/cubeChecks.js'
 import { validateTournamentConfig, legacyFormatForBgaTournament } from '../../src/lib/tournamentConfig.js'
 import { listTournaments, listTournamentsByOrganizer, createTournament, countOpenTournaments, getTournamentByBgaId, toTournamentJson, hiddenBgaTournamentIds } from '../../src/lib/tournamentStore.js'
 import { countPoolsByTournament, poolSummariesForTournaments, legacyFormatsForBgaId } from '../../src/lib/poolStore.js'
@@ -74,7 +75,13 @@ export default async function handler(req, res) {
     if (legacy?.mixed) return res.status(409).json({ error: 'bga_tournament_mixed_formats' })
     const finalConfig = legacy ? validateTournamentConfig(legacy.config).config ?? legacy.config : config.config
 
-    // Nothing to refuse on a non-cube source (no pool yet); the cube branch is separate.
+    // Cube: refs and capacity verified (an imposed legacy config is never a cube, so it skips this).
+    let storedConfig = finalConfig
+    if (!legacy) {
+      const checked = await checkCubeConfig(finalConfig, { maxPlayers: fields.values.maxPlayers })
+      if (checked.refused) return res.status(400).json(checked.refused.body)
+      storedConfig = checked.config
+    }
     if (finalConfig.source?.type !== 'cube') {
       const cap = checkPlayerCap({ source: finalConfig.source, maxPlayers: fields.values.maxPlayers, poolCount: 0 })
       if (Object.keys(cap.fields).length) return res.status(400).json({ error: 'invalid_request', fields: cap.fields, config: cap.config })
@@ -95,7 +102,7 @@ export default async function handler(req, res) {
         endsAt: fields.values.endsAt,
         organizerSub: user.sub,
         organizerName: user.name,
-        config: finalConfig,
+        config: storedConfig,
         visibility: fields.values.visibility,
         maxPlayers: fields.values.maxPlayers,
       })

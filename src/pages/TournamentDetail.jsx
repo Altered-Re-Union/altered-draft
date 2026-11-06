@@ -7,7 +7,7 @@ import TopNav from '../components/TopNav.jsx'
 import Footer from '../components/Footer.jsx'
 import TournamentChecklist from '../components/TournamentChecklist.jsx'
 import ShareBox from '../components/ShareBox.jsx'
-import { StatusPill, PrivateBadge, formatDateTime, ConfigSummary } from '../components/TournamentBits.jsx'
+import { StatusPill, PrivateBadge, FullBadge, PlayersLine, isFull, formatDateTime, ConfigSummary } from '../components/TournamentBits.jsx'
 import { TOURNAMENT_HUB_PATH } from '../lib/links.js'
 
 export default function TournamentDetail() {
@@ -37,7 +37,8 @@ export default function TournamentDetail() {
       await fetchTournamentPool(id)
       navigate(`/tournament/t/${id}/pool`)
     } catch (e) {
-      setOpenError(e.status === 409 ? t('tournaments.step2Closed') : t('tournaments.errGeneric', { msg: e.message }))
+      setOpenError(e.status === 409 && e.data?.error === 'tournament_full' ? t('tournaments.step2Full', { max: e.data.maxPlayers ?? tournament?.maxPlayers })
+        : e.status === 409 ? t('tournaments.step2Closed') : t('tournaments.errGeneric', { msg: e.message }))
     } finally {
       setOpening(false)
     }
@@ -100,15 +101,21 @@ export default function TournamentDetail() {
                 <h1 className="text-2xl font-display">{tournament.name}</h1>
                 <StatusPill status={tournament.status} t={t} />
                 {tournament.visibility === 'private' && <PrivateBadge t={t} />}
+                {isFull(tournament) && <FullBadge t={t} />}
               </div>
               <p className="text-sm text-ink2">
                 {t('tournaments.startsAt', { date: formatDateTime(tournament.startsAt) })}
                 {tournament.endsAt ? ` · ${t('tournaments.endsAt', { date: formatDateTime(tournament.endsAt) })}` : ''}
               </p>
               <p className="text-xs text-faint">
-                {t('tournaments.organizedBy', { name: tournament.organizer.name })} · {tc('tournaments.poolsPrepared', tournament.poolCount ?? 0)}
+                {t('tournaments.organizedBy', { name: tournament.organizer.name })} · <PlayersLine tournament={tournament} t={t} tc={tc} />
               </p>
               <ConfigSummary config={tournament.config} t={t} tc={tc} className="text-sm text-muted" />
+              {tournament.config?.source?.type === 'cube' && (
+                <Link to={`/tournament/t/${id}/cube`} data-testid="cube-link" className="text-sm text-accent-ink hover:underline inline-block">
+                  {t('tournaments.cubeLink', { n: Object.values(tournament.config.source.cards ?? {}).reduce((a, q) => a + q, 0) })}
+                </Link>
+              )}
               {tournament.description && <p className="text-sm text-ink whitespace-pre-wrap pt-2">{tournament.description}</p>}
               {detached && <p className="text-sm text-danger pt-2">{t('tournaments.detachedNotice')}</p>}
             </header>
@@ -116,7 +123,7 @@ export default function TournamentDetail() {
             <TournamentChecklist
               tournament={tournament} viewer={viewer} user={user}
               onLogin={() => login(`/tournament/t/${id}`)}
-              onOpenPool={handleOpenPool} opening={opening} openError={openError}
+              onOpenPool={handleOpenPool} opening={opening} openError={openError} full={isFull(tournament)}
             />
 
             {!detached && <ShareBox tournament={tournament} />}
