@@ -1,10 +1,9 @@
 // The sealed configuration object of a tournament (docs/tournaments/user-tournaments-spec.md
 // §5.1). One shape for declared tournaments, for the legacy `current_format` (converted on
 // read) and, from lot 2 on, for the Lobby. Pure: shared by server validation and the form.
-import { SETS, FACTIONS } from './cardData.js'
+import { SETS, FACTIONS, canonicalCardRef, needsCardApi } from './cardData.js'
 import { hasFactionRanges } from './uniqueFactionRanges.js'
 import { CURRENT_BANLIST } from './banlist.js'
-import { setCodeFromRef } from './assets.js'
 import { CUBE_LIMITS, CUBE_ORIGINS, CARD_REF_RE, isHeroRefShape } from './cubeSealed.js'
 
 export const CONFIG_VERSION = 1
@@ -25,9 +24,9 @@ export function configSetCodes(config) {
   const src = config.source
   if (src.type === 'set') return [src.setCode]
   if (src.type === 'cube') {
-    const codes = new Set([...Object.keys(src.cards ?? {}), ...(src.heroPool ?? [])].map(setCodeFromRef))
-    const rank = code => SETS.findIndex(s => s.code === code)
-    return [...codes].sort((a, b) => rank(a) - rank(b))
+    // The BASE set of each ref (a promo / OP code like DUSTERTOP counts as DUSTER), known codes only.
+    const codes = new Set([...Object.keys(src.cards ?? {}), ...(src.heroPool ?? [])].map(baseSetCode))
+    return SETS.map(s => s.code).filter(code => codes.has(code))
   }
   const rank = code => {
     const i = SETS.findIndex(s => s.code === code)
@@ -42,7 +41,9 @@ function toInt(value, fallback) {
   return Number.isInteger(n) ? n : null
 }
 
-const knownSet = ref => SETS.some(s => s.code === setCodeFromRef(ref))
+/** The set a ref's gameplay card belongs to: promo / OP codes (DUSTERTOP) map to their base set. */
+const baseSetCode = ref => canonicalCardRef(ref).split('_')[1]
+const knownSet = ref => SETS.some(s => s.code === baseSetCode(ref))
 const isPlainObject = v => !!v && typeof v === 'object' && !Array.isArray(v)
 
 /** Shape and range checks of a cube source (spec §15.2); existence of the refs is a server check. */
@@ -76,6 +77,8 @@ function validateCubeSource(src, errors) {
     if (!heroPool.length || heroPool.length > L.maxHeroes || !heroPool.every(r => isHeroRefShape(r) && knownSet(r))) heroOk = false
   }
   if (!heroOk) errors.push('source.heroPool')
+  // Bounds the server-side fan-out on the cards API (one request per ref).
+  if (cardsOk && heroOk && new Set([...Object.keys(cards), ...heroPool].filter(needsCardApi)).size > L.maxCardApiRefs) errors.push('source.cards')
 
   const num = (v, [min, max]) => {
     const n = typeof v === 'boolean' ? null : toInt(v, null)

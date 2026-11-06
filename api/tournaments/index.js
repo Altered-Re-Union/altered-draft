@@ -84,7 +84,7 @@ export default async function handler(req, res) {
     let storedConfig = finalConfig
     if (!legacy) {
       const checked = await checkCubeConfig(finalConfig, { maxPlayers: fields.values.maxPlayers })
-      if (checked.refused) return res.status(400).json(checked.refused.body)
+      if (checked.refused) return res.status(checked.refused.status).json(checked.refused.body)
       storedConfig = checked.config
     }
     if (finalConfig.source?.type !== 'cube') {

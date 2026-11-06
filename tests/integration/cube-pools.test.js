@@ -74,6 +74,8 @@ vi.mock('../../src/lib/cardData.js', async importOriginal => {
       ...Array.from({ length: 20 }, (_, i) => card(`ALT_${setCode}_B_${f}_${pad2(i + 2)}_C`, f)),
     ])),
     fetchUniques: vi.fn(async () => []),
+    // The real resolver (real fetchUnique, real cache) for the cards-API outage test.
+    realFetchUniques: mod.fetchUniques,
   }
 })
 
@@ -88,7 +90,7 @@ vi.mock('../../api/_lib/auth.js', async importOriginal => {
   return { ...mod, verifyUser: vi.fn(async () => null), verifySub: vi.fn(async () => null) }
 })
 import { verifyUser, verifySub } from '../../api/_lib/auth.js'
-import { fetchSet, fetchUniques } from '../../src/lib/cardData.js'
+import { fetchSet, fetchUniques, realFetchUniques } from '../../src/lib/cardData.js'
 import { resolveCubeSource } from '../../src/lib/cubeSource.js'
 import bgaDecklist from '../../api/tournament-bga-decklist.js'
 import poolCounts from '../../api/tournament-pool-counts.js'
@@ -331,6 +333,54 @@ describe('handlers', () => {
     } finally {
       vi.mocked(verifySub).mockResolvedValue(null)
     }
+  })
+
+  it('the cards API down at deal time: 409 pool_unavailable on the three endpoints, then the next request deals (no restart)', async () => {
+    const unique = 'ALT_CYCLONE_B_AX_05_U_4343'
+    const t = await mkCube({ config: cubeConfig({ source: { cards: { ...CUBE_CARDS, [unique]: 1 } } }) })
+    const realFetch = global.fetch
+    vi.mocked(fetchUniques).mockImplementation(realFetchUniques)
+    global.fetch = vi.fn(async () => { throw new Error('cards API down') })
+    try {
+      asUser(ALICE)
+      const res = await call(tournamentPoolFor, { query: { id: t.id } })
+      expect(res.statusCode).toBe(409)
+      expect(res.body).toEqual({ error: 'pool_unavailable' })
+      vi.mocked(verifySub).mockResolvedValue('zoe')
+      const deck = await call(bgaDecklist, { query: { tournamentId: t.bga_tournament_id, tournamentName: 'x', gameId: 'g1' } })
+      expect(deck.statusCode).toBe(409)
+      expect(deck.body).toEqual({ error: 'pool_unavailable' })
+      const counts = await call(poolCounts, { query: { tournamentId: t.bga_tournament_id } })
+      expect(counts.statusCode).toBe(409)
+      expect(counts.body).toEqual({ error: 'pool_unavailable' })
+      vi.mocked(verifySub).mockResolvedValue(null)
+      expect(await slotsOf(t.id)).toEqual([])
+      expect((await query('SELECT count(*)::int AS n FROM sealed_pools')).rows[0].n).toBe(0)
+
+      // The API is back: the same process deals (the outage was not cached).
+      global.fetch = vi.fn(async () => ({
+        ok: true, status: 200,
+        json: async () => ({ member: [{ reference: unique, name: { en: 'Live unique' }, faction: { code: 'AX' }, rarity: { reference: 'UNIQUE' }, cardType: { reference: 'CHARACTER' } }] }),
+      }))
+      const ok = await call(tournamentPoolFor, { query: { id: t.id } })
+      expect(ok.statusCode).toBe(200)
+      expect(await slotsOf(t.id)).toHaveLength(2)
+    } finally {
+      global.fetch = realFetch
+      vi.mocked(verifySub).mockResolvedValue(null)
+      vi.mocked(fetchUniques).mockImplementation(async () => [])
+    }
+  }, 20000)
+
+  it('a set file that does not load at deal time: 409 pool_unavailable, nothing dealt', async () => {
+    const t = await mkCube()
+    vi.mocked(fetchSet).mockImplementationOnce(async () => { throw new Error('Failed to fetch set CYCLONE (EN): 503') })
+    asUser(ALICE)
+    const res = await call(tournamentPoolFor, { query: { id: t.id } })
+    expect(res.statusCode).toBe(409)
+    expect(res.body).toEqual({ error: 'pool_unavailable' })
+    expect(await slotsOf(t.id)).toEqual([])
+    expect((await call(tournamentPoolFor, { query: { id: t.id } })).statusCode).toBe(200)
   })
 
   it('poolResponse carries sourceType cube and cube { name, cardCount }', async () => {

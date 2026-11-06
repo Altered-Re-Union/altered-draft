@@ -374,8 +374,9 @@ test('the cube page: the link, the header, the heroes, the contents; a set tourn
     await expect(page.getByText(FACTION_NAMES[f], { exact: true }).first().locator('xpath=following-sibling::span[1]'), f).toHaveText('32')
   }
   const search = page.getByPlaceholder(t('cubePreview.searchPlaceholder'))
-  await search.fill('Sofia')
-  await expect(page.getByText('Sofia, First Outpost').first()).toBeVisible()
+  const sofia = BY_REF.get(SOFIA).name
+  await search.fill(sofia.split(',')[0])
+  await expect(page.getByText(sofia).first()).toBeVisible()
   await expect(page.getByText(BY_REF.get(CUBE.refs.find(r => r !== SOFIA)).name, { exact: true })).toHaveCount(0)
 
   // The pool page's "Cube" link.
@@ -433,7 +434,8 @@ test('the deal: three lots, slots 0 / 1 / 2, hero first, one card per faction, e
   await expect(page.getByTestId('tournament-full')).toHaveText(t('tournaments.fullBadge'))
   await expect(page.getByTestId('tournament-full')).toHaveAttribute('title', t('tournaments.fullBadgeTitle'))
   // A pool already opened is still returned once the tournament is full.
-  await seed.pool('alice', id)
+  const again = await seed.pool('alice', id)
+  expect(again.cards).toEqual((await storedPool(db, id, 'alice')).cards)
 })
 
 test('the reveal: the generated cover, 6 boosters, no bonus pack', { tag: ['@cu-e-reveal'] }, async ({ openAs, seed }) => {
@@ -487,6 +489,11 @@ test('"Full cup": carol is refused on the page and the API; free heroes in every
   await expect(page.getByRole('button', { name: t('tournaments.step2Button') })).toHaveCount(0)
   await players(page.locator('header'), 2, 2)
   await expect(page.getByTestId('tournament-full')).toBeVisible()
+
+  // A direct link to the pool page: the sentence, never the raw 409 code.
+  await page.goto(`/tournament/t/${id}/pool`)
+  await expect(page.getByText(t('tournaments.step2Full', { max: 2 }))).toBeVisible()
+  await expect(page.getByText('tournament_full')).toHaveCount(0)
 
   const pool = await api('carol').get(`/api/tournaments/${id}/pool`)
   expect(pool.status).toBe(409)
@@ -671,7 +678,8 @@ test('edit a cube without pools: change the cube, the settings and the cap', { t
 })
 
 test('edit a cube with pools: everything locked but the name', { tag: ['@cu-i-locked'] }, async ({ openAs, seed, api }) => {
-  const { id } = await seed.tournament('alice', cubeTournamentBody())
+  const seeded = cubeTournamentBody()
+  const { id } = await seed.tournament('alice', seeded)
   await seed.pool('bob', id)
   const page = await openAs('alice')
   await page.goto(`/tournament/t/${id}/edit`)
@@ -681,13 +689,13 @@ test('edit a cube with pools: everything locked but the name', { tag: ['@cu-i-lo
   await expect(page.getByTestId('cube-change')).toBeDisabled()
   await expect(page.getByTestId('cube-preview')).toBeEnabled()
   await page.getByTestId('cube-preview').click()
-  await expect(page.getByRole('heading', { name: 'All commons' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: seeded.config.source.name })).toBeVisible()
   await page.getByRole('button', { name: '✕' }).click()
-  for (const id of ['cube-boosters', 'cube-cards-per-booster']) {
-    for (const button of await page.getByTestId(id).getByRole('button').all()) await expect(button, id).toBeDisabled()
+  for (const testId of ['cube-boosters', 'cube-cards-per-booster']) {
+    for (const button of await page.getByTestId(testId).getByRole('button').all()) await expect(button, testId).toBeDisabled()
   }
-  for (const id of ['cube-per-faction-0', 'cube-per-faction-1', 'cube-per-faction-2', 'hero-mode-packs', 'hero-mode-free', 'hero-pool-open', 'max-players']) {
-    await expect(page.getByTestId(id), id).toBeDisabled()
+  for (const testId of ['cube-per-faction-0', 'cube-per-faction-1', 'cube-per-faction-2', 'hero-mode-packs', 'hero-mode-free', 'hero-pool-open', 'max-players']) {
+    await expect(page.getByTestId(testId), testId).toBeDisabled()
   }
   for (const key of ['sourceSets', 'sourceFactionMix', 'sourceCube']) await expect(sourceRadio(page, key)).toBeDisabled()
   await expect(field(page, 'nameLabel')).toBeEnabled()

@@ -23,6 +23,8 @@ vi.mock('../../src/lib/cardData.js', async importOriginal => {
     fetchSet: vi.fn(async setCode => (setCode === 'CYCLONE' ? cyclone : [])),
     // Promo-only ref (no B twin): answered by reference.
     fetchUniques: vi.fn(async refs => refs.filter(r => r === 'ALT_CYCLONE_P_BR_64_C').map(r => card(r, 'BR'))),
+    // The real resolver (real fetchUnique, real cache) for the cards-API outage test.
+    realFetchUniques: mod.fetchUniques,
   }
 })
 
@@ -31,7 +33,7 @@ vi.mock('../../api/_lib/auth.js', async importOriginal => {
   return { ...mod, verifyUser: vi.fn(async () => null), verifySub: vi.fn(async () => null) }
 })
 import { verifyUser } from '../../api/_lib/auth.js'
-import { fetchSet, fetchUniques } from '../../src/lib/cardData.js'
+import { fetchSet, fetchUniques, realFetchUniques } from '../../src/lib/cardData.js'
 import tournamentsIndex from '../../api/tournaments/index.js'
 import tournamentsItem from '../../api/tournaments/[id].js'
 
@@ -133,6 +135,57 @@ describe('POST a cube tournament', () => {
     expect(res.body.unresolved).toEqual(['ALT_CYCLONE_B_AX_99_C'])
   })
 
+  it('the cards API down: 503 cards_unavailable, nothing stored; once it is back the same cube is accepted (no restart)', async () => {
+    const unique = 'ALT_CYCLONE_B_AX_05_U_4242'
+    const body = cubeBody({ config: withSource({ cards: { ...CUBE_INPUT.source.cards, [unique]: 1 } }) })
+    const realFetch = global.fetch
+    const base = vi.mocked(fetchUniques).getMockImplementation()
+    vi.mocked(fetchUniques).mockImplementation(realFetchUniques)
+    global.fetch = vi.fn(async () => { throw new Error('cards API down') })
+    try {
+      let res = await post(body)
+      expect(res.statusCode).toBe(503)
+      expect(res.body).toEqual({ error: 'cards_unavailable' })
+      expect((await query('SELECT count(*)::int AS n FROM tournaments')).rows[0].n).toBe(0)
+
+      global.fetch = vi.fn(async () => ({
+        ok: true, status: 200,
+        json: async () => ({ member: [{ reference: unique, name: { en: 'Live unique' }, faction: { code: 'AX' }, rarity: { reference: 'UNIQUE' }, cardType: { reference: 'CHARACTER' } }] }),
+      }))
+      res = await post(body)
+      expect(res.statusCode).toBe(201)
+      expect(res.body.config.source.cards[unique]).toBe(1)
+    } finally {
+      global.fetch = realFetch
+      vi.mocked(fetchUniques).mockImplementation(base)
+    }
+  }, 20000)
+
+  it('a set file that does not load: 503 cards_unavailable on POST and PATCH', async () => {
+    vi.mocked(fetchSet).mockImplementationOnce(async () => { throw new Error('Failed to fetch set CYCLONE (EN): 503') })
+    let res = await post(cubeBody())
+    expect(res.statusCode).toBe(503)
+    expect(res.body).toEqual({ error: 'cards_unavailable' })
+    const t = (await post(cubeBody())).body
+    vi.mocked(fetchSet).mockImplementationOnce(async () => { throw new Error('timeout') })
+    res = await patch(t.id, { maxPlayers: 2 })
+    expect(res.statusCode).toBe(503)
+    expect(res.body).toEqual({ error: 'cards_unavailable' })
+  })
+
+  it('accepts a promo printing of a set code SETS does not know (Wozow: ALT_DUSTERTOP_P_AX_04_C)', async () => {
+    const promo = 'ALT_DUSTERTOP_P_AX_04_C'
+    const base = vi.mocked(fetchUniques).getMockImplementation()
+    vi.mocked(fetchUniques).mockImplementation(async refs => refs.filter(r => r === promo).map(reference => ({ reference, name: reference, faction: 'AX', cardType: 'CHARACTER', rarity: 'C' })))
+    try {
+      const res = await post(cubeBody({ config: withSource({ cards: { ...CUBE_INPUT.source.cards, [promo]: 1 } }) }))
+      expect(res.statusCode).toBe(201)
+      expect(res.body.config.source.cards[promo]).toBe(1)
+    } finally {
+      vi.mocked(fetchUniques).mockImplementation(base)
+    }
+  })
+
   it('refuses a hero among the cards and a non-hero in the hero pool', async () => {
     const hero = 'ALT_CYCLONE_B_AX_10_C'
     let res = await post(cubeBody({ config: withSource({ cards: { ...CUBE_INPUT.source.cards, [hero]: 1 } }) }))
@@ -177,6 +230,19 @@ describe('PATCH a cube tournament', () => {
     res = await patch(t.id, { maxPlayers: 3 })
     expect(res.statusCode).toBe(409)
     expect(res.body.error).toBe('tournament_locked')
+  })
+
+  it('PATCH of a set tournament adopted over its cap: a rename passes, lowering the cap further is refused (M4)', async () => {
+    const setConfig = { v: 1, format: 'sealed', source: { type: 'set', setCode: 'CYCLONE' }, heroes: 'packs', uniques: { inBoosters: 0, guaranteed: 0 } }
+    const t = (await post(cubeBody({ config: setConfig, maxPlayers: null }))).body
+    for (const sub of ['p1', 'p2', 'p3', 'p4']) await getOrCreateTournamentPool(sub, await getTournament(t.id))
+    await query('UPDATE tournaments SET max_players = 3 WHERE id = $1', [t.id]) // as after adoptions above the cap
+    let res = await patch(t.id, { name: 'Renamed', maxPlayers: 3 })
+    expect(res.statusCode).toBe(200)
+    expect(res.body.name).toBe('Renamed')
+    res = await patch(t.id, { maxPlayers: 2 })
+    expect(res.statusCode).toBe(400)
+    expect(res.body.fields.maxPlayers).toBe('below_pool_count')
   })
 
   it('PATCH switching a set tournament to a cube runs the cube checks against the sent or stored cap', async () => {

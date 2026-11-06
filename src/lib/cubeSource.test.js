@@ -35,4 +35,14 @@ describe('cubeSource', () => {
     const r = await resolveCubeSource({ cards: { ALT_CORE_B_AX_01_C: 1 }, heroPool: ['ALT_CORE_B_AX_02_C'] }, { fetchSet, fetchUniques })
     expect(r.heroesInCards).toEqual(['ALT_CORE_B_AX_01_C']); expect(r.nonHeroesInPool).toEqual(['ALT_CORE_B_AX_02_C'])
   })
+  it('an unavailable cards API throws cards_unavailable; an unknown ref stays unresolved', async () => {
+    const down = vi.fn(async refs => refs.map(r => ({ reference: r, faction: 'XX', cardType: '', synthetic: true, unavailable: true })))
+    await expect(resolveRefs(['ALT_CORE_B_AX_04_U_1', 'ALT_CORE_B_AX_02_C'], { fetchSet, fetchUniques: down })).rejects.toMatchObject({ code: 'cards_unavailable' })
+    const unknown = vi.fn(async refs => refs.map(r => ({ reference: r, faction: 'XX', cardType: '', synthetic: true })))
+    expect((await resolveRefs(['ALT_CORE_B_AX_04_U_1'], { fetchSet, fetchUniques: unknown })).unresolved).toEqual(['ALT_CORE_B_AX_04_U_1'])
+  })
+  it('a failing set fetch throws cards_unavailable (M2)', async () => {
+    const failing = vi.fn(async () => { throw new Error('Failed to fetch set CORE (EN): 503') })
+    await expect(resolveRefs(['ALT_CORE_B_AX_02_C'], { fetchSet: failing, fetchUniques })).rejects.toMatchObject({ code: 'cards_unavailable' })
+  })
 })

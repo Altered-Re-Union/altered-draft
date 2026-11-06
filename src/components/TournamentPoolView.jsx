@@ -50,6 +50,7 @@ export default function TournamentPoolView({ title, load, reset, backTo = null }
   const [deck, setDeck] = useState({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [retryLoad, setRetryLoad] = useState(false) // the load failed on a try-again-later answer
   const [cooldownMs, setCooldownMs] = useState(0)
   const [syncing, setSyncing] = useState(false)
   const [showReveal, setShowReveal] = useState(false) // first-open pack-by-pack overlay
@@ -73,6 +74,7 @@ export default function TournamentPoolView({ title, load, reset, backTo = null }
     setCoverReady(false)
     setLoading(true)
     setError('')
+    setRetryLoad(false)
     try {
       const data = await load()
       poolRef.current = data
@@ -123,7 +125,13 @@ export default function TournamentPoolView({ title, load, reset, backTo = null }
         setDeck({})
       }
     } catch (e) {
-      setError(e.message || t('tournamentPoolView.couldNotLoadPool'))
+      // A direct link on a full tournament, or a first pool the server could not deal yet
+      // (card data unavailable): a sentence, never the raw 409 code.
+      const code = e.status === 409 ? e.data?.error : null
+      setError(code === 'tournament_full' ? t('tournaments.step2Full', { max: e.data.maxPlayers ?? '?' })
+        : code === 'pool_unavailable' ? t('tournamentPoolView.couldNotLoadPool')
+          : e.message || t('tournamentPoolView.couldNotLoadPool'))
+      setRetryLoad(code === 'pool_unavailable')
       if (run === loadRunRef.current) setCoverReady(true)
     } finally {
       setLoading(false)
@@ -356,7 +364,16 @@ export default function TournamentPoolView({ title, load, reset, backTo = null }
             )}
           </div>
         </div>
-        {error && <p className="text-danger text-sm mb-2">{error}</p>}
+        {error && (
+          <p className="text-danger text-sm mb-2">
+            {error}
+            {retryLoad && (
+              <button onClick={loadPool} className="ml-2 text-xs px-2 py-0.5 rounded bg-surface2 hover:bg-surface3 text-ink transition-colors">
+                {t('cardImage.retry')}
+              </button>
+            )}
+          </p>
+        )}
 
         {/* Deckbuilding is always the full pool — the pack-by-pack experience is the
             first-open reveal overlay, not a persistent tab (avoids a "which tab?" step). */}

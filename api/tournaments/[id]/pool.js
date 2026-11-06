@@ -31,7 +31,7 @@ export default async function handler(req, res) {
       // The player cap is reached (spec §15.2 "Full"); a cube card unresolvable at deal time
       // (cards API down) is a try-again-later, never a degraded deal.
       if (e.code === 'tournament_full') return res.status(409).json({ error: 'tournament_full', maxPlayers: e.maxPlayers ?? row.max_players })
-      if (e.code === 'cube_unresolved') return res.status(409).json({ error: 'pool_unavailable' })
+      if (e.code === 'cube_unresolved' || e.code === 'cards_unavailable') return res.status(409).json({ error: 'pool_unavailable' })
       throw e
     }
   }

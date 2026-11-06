@@ -3,13 +3,20 @@ import { resolveCubeSource } from '../../src/lib/cubeSource.js'
 import { cubeCapacity, checkPlayerCap } from '../../src/lib/cubeSealed.js'
 
 /**
- * @returns {Promise<{ refused: { status: 400, body: object } } | { config: object }>}
+ * @returns {Promise<{ refused: { status: 400 | 503, body: object } } | { config: object }>}
+ * 503 { error: 'cards_unavailable' } when the card data could not be loaded (try again later).
  */
 export async function checkCubeConfig(config, { maxPlayers } = {}) {
   const source = config?.source
   if (source?.type !== 'cube') return { config }
 
-  const resolved = await resolveCubeSource(source)
+  let resolved
+  try {
+    resolved = await resolveCubeSource(source)
+  } catch (e) {
+    if (e.code === 'cards_unavailable') return { refused: { status: 503, body: { error: 'cards_unavailable' } } }
+    throw e
+  }
   const refuse = body => ({ refused: { status: 400, body: { error: 'invalid_request', ...body } } })
 
   if (resolved.unresolved.length) {

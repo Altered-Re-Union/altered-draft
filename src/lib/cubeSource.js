@@ -4,6 +4,13 @@ import * as cardData from './cardData.js'
 
 const { SETS, canonicalCardRef, needsCardApi, isUniqueRef } = cardData
 
+/** Thrown when the card data could not be loaded (spec §15.2): a 503 / pool_unavailable, never "unresolved". */
+function cardsUnavailable(message) {
+  const err = new Error(`card data unavailable: ${message}`)
+  err.code = 'cards_unavailable'
+  return err
+}
+
 export async function resolveRefs(refs, {
   fetchSet = cardData.fetchSet,
   fetchUniques = cardData.fetchUniques,
@@ -22,7 +29,9 @@ export async function resolveRefs(refs, {
   }
   const bySet = new Map()
   for (const code of setCodes) {
-    const cards = await fetchSet(code, lang)
+    let cards
+    // A set SETS knows that does not load is an outage (network, timeout, 5xx), not a bad ref.
+    try { cards = await fetchSet(code, lang) } catch (e) { throw cardsUnavailable(e.message) }
     bySet.set(code, new Map(cards.map(c => [c.reference, c])))
   }
 
@@ -39,6 +48,8 @@ export async function resolveRefs(refs, {
     const fetched = new Map((await fetchUniques(byApi, lang)).map(c => [c.reference, c]))
     for (const g of byApi) {
       const card = fetched.get(g)
+      // The cards API did not answer: try again later, never list the ref as unknown.
+      if (card?.unavailable) throw cardsUnavailable(`cards API unavailable for ${g}`)
       if (card && !card.synthetic) { byRef.set(g, { ref: g, card }); missing.delete(g) }
     }
   }

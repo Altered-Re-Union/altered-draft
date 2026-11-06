@@ -100,7 +100,13 @@ function issueMessage({ field, code }, t, {
       if (code === 'source.capacity') return t('tournaments.errCubeTooSmall', { limit: capacityLimitText(capacity?.limit, t) })
       const name = cube?.name?.trim() ?? ''
       if (code === 'source.name' || (cube && code === 'required' && (!name || name.length > CUBE_LIMITS.nameMax))) return t('tournaments.errCubeName')
-      if (!cube || code === 'required') return t('tournaments.errSelectCube')
+      if (!cube || !cube.cards?.length) return t('tournaments.errSelectCube')
+      // A non-empty cube refused on its cards (an unknown ref, a quantity, too many refs to
+      // resolve): never "Choose a cube.".
+      if (code === 'required' || code === 'source.cards') {
+        const refs = unresolved.length ? unresolved : (cube.unresolved ?? [])
+        return refs.length ? t('tournaments.errCubeUnresolved', { refs: refs.join(', ') }) : t('tournaments.errGeneric', { msg: 'source.cards' })
+      }
       return t('tournaments.errGeneric', { msg: code })
     }
     case 'cubeSettings':
@@ -445,7 +451,8 @@ export default function TournamentForm() {
         const issue = configCodeIssue(err.data.config[0])
         setServerError(issueMessage(issue, t, { ...issueCtx, capacity: err.data.capacity ?? capacity, unresolved: err.data.unresolved ?? [] }))
         focusField(issue.field)
-      } else if (err.status === 409 && err.data?.error === 'tournament_locked') setServerError(t('tournaments.errLocked'))
+      } else if (err.status === 503 && err.data?.error === 'cards_unavailable') setServerError(t('tournaments.cubeLoadFailed', { msg: 'cards_unavailable' }))
+      else if (err.status === 409 && err.data?.error === 'tournament_locked') setServerError(t('tournaments.errLocked'))
       else if (err.status === 429) setServerError(t('tournaments.errTooMany'))
       else if (err.status === 401) setSessionExpired(true)
       else setServerError(t('tournaments.errGeneric', { msg: err.message }))

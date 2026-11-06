@@ -2,7 +2,7 @@ import { UNIQUES_EN } from './uniquesData.js'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import {
   cardImageUrl, isUniqueRef, needsCardApi, canonicalCardRef, apiSetCode,
-  uniqueRefsIn, fetchUnique, fetchRandomUniques,
+  uniqueRefsIn, fetchUnique, fetchUniques, fetchRandomUniques, fetchSet,
 } from './cardData.js'
 
 describe('cardImageUrl', () => {
@@ -205,6 +205,58 @@ describe('fetchUnique', () => {
   })
 })
 
+describe('fetchUnique failures (I2)', () => {
+  const originalFetch = global.fetch
+  const live = reference => ({ ok: true, status: 200, json: async () => ({ member: [{ reference, name: { en: 'Real' }, faction: { code: 'AX' }, rarity: { reference: 'UNIQUE' }, cardType: { reference: 'CHARACTER' } }] }) })
+  beforeEach(() => { global.fetch = vi.fn(); vi.useFakeTimers() })
+  afterEach(() => { global.fetch = originalFetch; vi.useRealTimers() })
+  const run = async p => { await vi.runAllTimersAsync(); return p }
+
+  it('never caches the synthetic card of an unavailable API: a later fetch returns the real card', async () => {
+    global.fetch.mockRejectedValue(new Error('down'))
+    const first = await run(fetchUnique('ALT_EOLE_B_YZ_99_U_4242', 'EN'))
+    expect(first).toMatchObject({ synthetic: true, unavailable: true })
+    global.fetch.mockReset(); global.fetch.mockResolvedValue(live('ALT_EOLE_B_YZ_99_U_4242'))
+    const second = await run(fetchUnique('ALT_EOLE_B_YZ_99_U_4242', 'EN'))
+    expect(second.synthetic).toBeUndefined()
+    expect(second.name).toBe('Real')
+  })
+  it('a 5xx is unavailable, a 404 or an empty member is unknown (synthetic, not unavailable)', async () => {
+    global.fetch.mockResolvedValue({ ok: false, status: 502, json: async () => ({}) })
+    expect(await run(fetchUnique('ALT_EOLE_B_YZ_99_U_4243', 'EN'))).toMatchObject({ synthetic: true, unavailable: true })
+    global.fetch.mockReset(); global.fetch.mockResolvedValue({ ok: false, status: 404, json: async () => ({}) })
+    const notFound = await run(fetchUnique('ALT_EOLE_B_YZ_99_U_4244', 'EN'))
+    expect(notFound.synthetic).toBe(true); expect(notFound.unavailable).toBeUndefined()
+    global.fetch.mockReset(); global.fetch.mockResolvedValue({ ok: true, status: 200, json: async () => ({ member: [] }) })
+    const empty = await run(fetchUnique('ALT_EOLE_B_YZ_99_U_4245', 'EN'))
+    expect(empty.synthetic).toBe(true); expect(empty.unavailable).toBeUndefined()
+  })
+  it('fetchUniques runs at most 8 requests at once', async () => {
+    let inFlight = 0; let peak = 0
+    global.fetch.mockImplementation(async url => {
+      inFlight++; peak = Math.max(peak, inFlight)
+      await new Promise(r => setTimeout(r, 10))
+      inFlight--
+      return live(new URL(url).searchParams.get('reference'))
+    })
+    const refs = Array.from({ length: 30 }, (_, i) => `ALT_EOLE_B_YZ_99_U_${7000 + i}`)
+    const out = await run(fetchUniques(refs, 'EN'))
+    expect(out).toHaveLength(30)
+    expect(peak).toBeLessThanOrEqual(8)
+    expect(peak).toBeGreaterThan(1)
+  })
+})
+
+describe('fetchSet timeout (M2)', () => {
+  const originalFetch = global.fetch
+  afterEach(() => { global.fetch = originalFetch })
+  it('passes an abort signal to the set request', async () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => [] })
+    await fetchSet('FUGUE', 'IT')
+    expect(global.fetch.mock.calls[0][1]?.signal).toBeInstanceOf(AbortSignal)
+  })
+})
+
 describe('fetchRandomUniques', () => {
   const originalFetch = global.fetch
 
@@ -259,6 +311,6 @@ describe('fetchSet', () => {
     const { fetchSet: fetchSetFresh } = await import('./cardData.js')
     global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => [] })
     await fetchSetFresh('CYCLONE')
-    expect(global.fetch).toHaveBeenCalledWith('http://localhost:8091/carddb/CYCLONE/CYCLONE_EN.json')
+    expect(global.fetch.mock.calls[0][0]).toBe('http://localhost:8091/carddb/CYCLONE/CYCLONE_EN.json')
   })
 })

@@ -22,13 +22,20 @@ export function cardImageUrl(reference, lang = 'EN') {
 }
 
 const cache = {}
+const SET_TIMEOUT_MS = 10000
 
 export async function fetchSet(setCode, lang = 'EN') {
   const key = `${setCode}_${lang}`
   if (cache[key]) return cache[key]
 
   const url = `${endpoints().cardDbUrl}/${setCode}/${setCode}_${lang}.json`
-  const res = await fetch(url)
+  // A host that never answers must not hang a server request (a cube check, a first pool):
+  // abort when no response has started after SET_TIMEOUT_MS. The body download itself is not
+  // timed, so a slow connection still gets the whole file.
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null
+  const timer = controller ? setTimeout(() => controller.abort(), SET_TIMEOUT_MS) : null
+  let res
+  try { res = await fetch(url, controller ? { signal: controller.signal } : undefined) } finally { clearTimeout(timer) }
   if (!res.ok) throw new Error(`Failed to fetch set ${setCode} (${lang}): ${res.status}`)
 
   const json = await res.json()
@@ -120,14 +127,17 @@ export async function fetchUnique(reference, lang = 'EN') {
     // Cold page loads fire this alongside a burst of other requests (set data, card
     // images), so a transient failure/timeout here is common — retry a couple of times
     // before giving up, instead of silently dropping the card until the player reloads.
+    // A definite "not found" (404, empty `member`) is an answer: no retry.
     const attempts = 3
-    for (let attempt = 0; attempt < attempts && !card; attempt++) {
+    let unknown = false
+    for (let attempt = 0; attempt < attempts && !card && !unknown; attempt++) {
       try {
         // Filter by reference (the /api/cards/<id> path expects a numeric id, not a ref).
         const res = await fetch(`${endpoints().cardsApiUrl}/api/cards?reference=${encodeURIComponent(reference)}`, { headers: { Accept: 'application/json' }, signal: fetchTimeout() })
+        if (res.status === 404) { unknown = true; break }
         if (!res.ok) throw new Error(`Failed to fetch unique ${reference}: ${res.status}`)
         const raw = (await res.json()).member?.[0]
-        if (!raw) throw new Error(`Unique ${reference} not found`)
+        if (!raw) { unknown = true; break }
         card = normalizeAlteredCore(raw, loc, lang)
         uniqueCache[key] = card
       } catch {
@@ -139,26 +149,36 @@ export async function fetchUnique(reference, lang = 'EN') {
       // one, else a synthetic card built from the reference alone, whose face can still be
       // drawn (the renderer doesn't depend on this same API call) — better than leaving the
       // caller with nothing to render (a bare ref/number placeholder) after every retry.
-      if (snapshot) { uniqueCache[key] = snapshot; return snapshot }
-      card = {
+      // Neither is cached: only real answers are, so a transient outage never sticks for the
+      // life of the process. `unavailable` tells a server caller (cubeSource.js) the API did
+      // not answer, as opposed to an unknown reference.
+      if (snapshot) return snapshot
+      return {
         reference, name: reference, faction: 'XX', factionName: 'Unknown', rarity: 'U',
         imagePath: null, faceLang: lang, cardType: '',
         mainCost: null, recallCost: null, forestPower: null, mountainPower: null, oceanPower: null,
         synthetic: true,
+        ...(unknown ? {} : { unavailable: true }),
       }
-      uniqueCache[key] = card
     }
   }
 
   return card
 }
 
-// Fetch many uniques; failures are skipped (the card simply won't appear).
+// Fetch many uniques; failures are skipped (the card simply won't appear). At most
+// UNIQUES_CONCURRENCY requests at once: a big cube must not fan out hundreds of them.
+const UNIQUES_CONCURRENCY = 8
 export async function fetchUniques(references, lang = 'EN') {
   const out = []
-  await Promise.all([...new Set(references)].map(async r => {
-    try { out.push(await fetchUnique(r, lang)) } catch { /* skip */ }
-  }))
+  const queue = [...new Set(references)]
+  const worker = async () => {
+    while (queue.length) {
+      const r = queue.shift()
+      try { out.push(await fetchUnique(r, lang)) } catch { /* skip */ }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(UNIQUES_CONCURRENCY, queue.length) }, worker))
   return out
 }
 
