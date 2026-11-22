@@ -182,7 +182,9 @@ export default function TournamentPoolView({ title, load, reset, backTo = null }
       const summary = {
         name: `${namePrefix}${baseName}`,
         deckCards,
-        isDraft: !isValid,
+        // Never archived (isDraft = hidden in BGA on DeckApi): validity is in the name, and
+        // the decks API computes legality itself. Also clears the old `isDraft: !valid`.
+        isDraft: false,
         format: 'sealed',
       }
       // New decks: draft → link → flip (see poolDeckSync.js for why the order matters).

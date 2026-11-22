@@ -26,7 +26,8 @@ function ddmm() {
 // replaces the separate copy + save buttons on Results & Sealed. `format` is the human
 // label ("Draft" | "Sealed") woven into saved deck names, e.g. "AB12 · Draft deck · 1706".
 // `deckIsValid` mirrors the page's own validity check (≥30 non-hero cards, ≤3 factions,
-// ≤1 hero) — a saved deck only clears isDraft on the decks API once it's actually legal there.
+// ≤1 hero). The decks API computes legality itself: `isDraft` (archived, hidden in BGA) is
+// only set on a saved raw pool, never on a deck.
 export default function ExportMenu({ poolRefs, deckRefs, deckIsValid = false, poolDecklist, deckDecklist, name, format = 'Draft' }) {
   const { user, login } = useAuth()
   const { t } = useLang()
@@ -61,9 +62,9 @@ export default function ExportMenu({ poolRefs, deckRefs, deckIsValid = false, po
       // Pools open in deckbuilder.alteredcore.org, which 401s on a PRIVATE deck when the
       // viewer isn't logged in there → save pools PUBLIC so the "Open ↗" link just works
       // (and is shareable). Decks stay private: they open on altered.re, which handles login.
-      // A deck only loses draft status once it's actually valid per our own rules — pushing
-      // an unfinished deck as non-draft would misreport it as legal on the decks API.
-      const { id } = await createDeck({ name: deckName, deckCards: toDeckCards(refs), isDraft: kind === 'pool' ? true : !deckIsValid, format: 'sandbox', isPublic: kind === 'pool' })
+      // isDraft means archived (hidden in BGA) on DeckApi: a raw pool is not a deck to play,
+      // a deck is never archived (the decks API reports an unfinished one as not legal).
+      const { id } = await createDeck({ name: deckName, deckCards: toDeckCards(refs), isDraft: kind === 'pool', format: 'sandbox', isPublic: kind === 'pool' })
       setSaved(s => ({ ...s, [kind]: id }))
     } catch (e) {
       setSaved(s => ({ ...s, [`${kind}Err`]: e.message }))

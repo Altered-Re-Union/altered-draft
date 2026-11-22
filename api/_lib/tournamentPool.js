@@ -116,13 +116,17 @@ async function patchDeck(deckId, bearerToken, body) {
  * Whether `poolRow.deck_id` still exists on decks-api — and, if it does, reconciles it back
  * onto the rules the app's own sync enforces (TournamentPoolView.jsx): a deck edited
  * out-of-band (directly through decks-api, or a third-party deckbuilder) can drift from
- * both `format` and the isDraft/"Invalid " convention with no signal to invalidate the
- * cached summary on `sealed_pools`, so this always re-derives from the deck's live card
- * list rather than trusting the cache:
+ * both `format` and the "Invalid " convention with no signal to invalidate the cached
+ * summary on `sealed_pools`, so this always re-derives from the deck's live card list
+ * rather than trusting the cache:
  *  - `format` is forced back to `'sealed'` whenever it's anything else.
- *  - the deck's actual legality (>=30 cards, <=3 factions, <=1 hero) drives BOTH `isDraft`
- *    (invalid -> draft, valid -> off draft) and the "Invalid " name prefix (added/stripped
- *    to match), regardless of whatever isDraft/name it walked in with.
+ *  - the deck's actual legality (>=30 cards, <=3 factions, <=1 hero) drives the "Invalid "
+ *    name prefix (added/stripped to match), regardless of whatever name it walked in with.
+ *  - `isDraft` is forced back to `false`. On DeckApi (the decks API replacing
+ *    altered-core-decks-api) `isDraft` means ARCHIVED: hidden in BGA, so a pool deck must
+ *    never be one. DeckApi validates every deck, draft or not, so validity no longer goes
+ *    through `isDraft` (it did on the old API, which skipped validation for drafts): this
+ *    also clears the `isDraft: true` the old convention left on invalid decks.
  *  - the base name itself is always re-derived from the pool (see baseDeckName below), not
  *    trusted from the deck, so a prep pool getting bound to a real tournament renames its
  *    already-minted deck too.
@@ -156,7 +160,7 @@ async function deckStillExists(poolRow, bearerToken) {
 
   const patch = {}
   if (deck.format !== 'sealed') patch.format = 'sealed'
-  if (deck.isDraft !== !valid) patch.isDraft = !valid
+  if (deck.isDraft) patch.isDraft = false
   if (deck.name !== desiredName) patch.name = desiredName
   if (!Object.keys(patch).length) return poolRow
 
@@ -208,13 +212,15 @@ export async function ensureDeck(sub, poolRow, bearerToken) {
   const faction = heroRef ? (cardMap[heroRef]?.faction ?? null) : null
   const name = `${RANDOM_PREFIX}${baseDeckName(poolRow)}`
 
-  // Create as a DRAFT first. decks-api's SealedFormatValidator only runs when isDraft is
-  // false, and it validates pool membership by calling BACK into altered-draft's own
+  // Create as a DRAFT first, link, then flip (works with both decks APIs). The decks API
+  // validates pool membership by calling BACK into altered-draft's own
   // /api/tournament-pool-by-deck — for a brand-new deck id, that link doesn't exist on our
-  // side yet (we only write it below, via updateDeckSummary). Validating with isDraft:false
-  // right away would always fail that first check, and decks-api CACHES the failure for
-  // 30s keyed by deck id — so even an immediate retry on the same deck would still read as
-  // invalid. isDraft:true skips validation entirely on creation, sidestepping the race.
+  // side yet (we only write it below, via updateDeckSummary).
+  //  - altered-core-decks-api (old) only validates non-drafts and CACHES a failure for 30s
+  //    per deck id: isDraft:true skips that first, doomed validation.
+  //  - DeckApi validates drafts too, but does not cache "no pool linked" (404), so the flip
+  //    below re-validates with the link in place. isDraft:true only means "archived" there
+  //    for the few milliseconds before the flip.
   const res = await fetch(DECKS_API, {
     method: 'POST',
     headers: { Authorization: `Bearer ${bearerToken}`, Accept: 'application/json', 'Content-Type': 'application/json' },
@@ -231,9 +237,8 @@ export async function ensureDeck(sub, poolRow, bearerToken) {
     cardQuantity: refs.length,
   })
 
-  // Now that the pool<->deck link exists on our side, flip it off draft — decks-api
-  // re-validates on this PATCH, and this time the pool-membership lookup succeeds and
-  // caches a good result instead of the earlier failure.
+  // Now that the pool<->deck link exists on our side, flip it off draft — the decks API
+  // re-validates on this PATCH, and this time the pool-membership lookup succeeds.
   const patchRes = await fetch(`${DECKS_API}/${encodeURIComponent(created.id)}`, {
     method: 'PATCH',
     // decks-api's api_platform.yaml restricts PATCH to application/merge-patch+json

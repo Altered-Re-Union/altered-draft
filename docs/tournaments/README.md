@@ -188,7 +188,7 @@ validates against a stale pool.
 ### 2.4 Interactions with other Re:Union surfaces
 
 - **altered.re / deckbuilder.alteredcore.org**: the synced deck is a regular deck in the
-  player's account (`format: sealed`, `isDraft` reflecting validity). Editing it there goes
+  player's account (`format: sealed`, never `isDraft`: archived on DeckApi). Editing it there goes
   through decks-api's generic save, which validates against the pool too (by deck id).
   decks-api refuses to change a deck's format to/from `sealed`.
 - **BGA**: only through altered-bga-api (§9.2). The BGA table option "Deck format =
@@ -577,11 +577,11 @@ keep both sides consistent:
   merely seeded from a load or a reset (`skipNextSyncRef`), so opening the page never
   renames a `Random …` deck.
 - Computes validity (`≥30`, `≤3 factions`, `≤1 hero`) and builds
-  `{ name, deckCards, isDraft: !valid, format: 'sealed' }`.
+  `{ name, deckCards, isDraft: false, format: 'sealed' }` (validity is in the name).
 - `syncDeckToPool` (`src/lib/poolDeckSync.js`): `updateDeck(deckId)` then
   `syncPoolDeck(poolId, summary)` (`POST /api/tournament-pool?id=`) if the pool has a deck.
   A **new** deck (none yet, or a 404 because it was deleted from the deckbuilder) is created
-  **as a draft**, linked with `syncPoolDeck`, and only then, if valid, PATCHed to
+  **as a draft**, linked with `syncPoolDeck`, and only then PATCHed to
   `isDraft: false` — the same sequence as `ensureDeck` below. Creating an already-valid deck
   ("Random deck": 30 cards at once) as non-draft made decks-api validate it before the link
   existed: the deck was stored as illegal ("Could not verify your sealed pool") until a later
@@ -597,13 +597,15 @@ call):
 
 - If the pool has a deck with cards: `GET` it on decks-api. 404 → treat as gone and re-mint.
   Other failures → trust the cache (never wipe a good deck on a transient error).
-- Re-derives from the live card list: `format` forced to `sealed`, `isDraft = !valid`, name
-  rebuilt from the pool. Any drift is PATCHed to decks-api and the summary refreshed.
+- Re-derives from the live card list: `format` forced to `sealed`, `isDraft` forced to
+  `false`, name rebuilt from the pool (`Invalid ` prefix when invalid). Any drift is PATCHed to decks-api and the summary refreshed.
 - If there is no deck (or it is empty/gone): `buildRandomDeck` from the pool (`loadPool`),
   `POST` as **`isDraft: true` first**, link it to the pool (`updateDeckSummary`), then
-  `PATCH { isDraft: false }`. The two-step is required: decks-api validates non-draft decks
-  by calling back `/api/tournament-pool-by-deck`, and caches a failure for 30 s per deck id,
-  so validating before the link exists would poison the cache.
+  `PATCH { isDraft: false }`. The two-step was required by altered-core-decks-api: it
+  validated non-draft decks by calling back `/api/tournament-pool-by-deck` and cached a
+  failure for 30 s per deck id, so validating before the link existed poisoned the cache.
+  DeckApi validates drafts too but does not cache a 404 (no pool linked yet), so the same
+  sequence works with both.
 
 **Naming** (fixed literals, do not translate the prefixes):
 
@@ -615,8 +617,10 @@ call):
 | Deck not valid | prefix **`Invalid `**. The BGA client (`altered.js`) matches a name starting with `invalid` (case-insensitive): it skips the deck-content call and shows "Invalid deck" with a link to fix it on altered-draft. |
 | Auto-minted, unreviewed | prefix **`Random `** (dropped on the player's next edit, since the frontend recomputes the name from scratch). The BGA client matches a name starting with `random` and warns "You didn't build your deck before the matches started. A random deck was generated using your pool." |
 
-`isDraft` mirrors validity: `true` when invalid (decks-api then skips validation and marks
-the deck not legal), `false` when valid (decks-api validates, incl. pool membership).
+`isDraft` is always `false` on a pool deck. On DeckApi it means **archived**: hidden in BGA
+(still listed and shared). DeckApi validates every deck, incl. pool membership, and reports
+legality in `legal`. (On altered-core-decks-api it meant "not validated", and used to mirror
+validity: `true` when invalid. The reconciliation clears what that convention left.)
 
 ---
 
@@ -1129,8 +1133,9 @@ the raw frames BGA sent (with `decodedEnvelope` and `userId`). altered-draft log
 7. **`Invalid ` and `Random ` prefixes are literals** matched on the BGA side; never localize
    them. The base name always tracks the tournament name (no dates).
 8. **Create every new deck as `isDraft: true` first, link, then flip** (backend `ensureDeck` and
-   frontend `syncDeckToPool`) — decks-api caches a failed
-   validation for 30 s per deck id.
+   frontend `syncDeckToPool`) — altered-core-decks-api caches a failed validation for 30 s per
+   deck id. **Never leave a pool deck with `isDraft: true`**: on DeckApi that is "archived",
+   hidden in BGA.
 9. **PATCH to decks-api uses `application/merge-patch+json`**; `application/json` is rejected.
 10. **`heroes_in_pool = false` means every hero of the set is in `cards`**; decks-api relies
     on that instead of a "any hero" carve-out.

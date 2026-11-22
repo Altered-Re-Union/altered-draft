@@ -2,19 +2,20 @@
 // (TournamentPoolView.jsx's throttled sync). Pure orchestration, decks-api / altered-draft
 // calls injected.
 //
-// Order matters for a NEW deck: decks-api validates a non-draft sealed deck as soon as it
-// is saved, by asking altered-draft for the pool linked to that deck id — a link that only
-// exists once syncPoolDeck has run. Creating an already-valid deck (e.g. "Random deck",
-// 30 cards at once) as non-draft would fail that lookup, store the deck as illegal and
-// cache the failure for 30 s. So a new deck is created as a DRAFT, linked, and only then
-// flipped off draft (decks-api re-validates on that PATCH, with the link in place) — the
-// same sequence as the backend's ensureDeck (api/_lib/tournamentPool.js).
+// Order matters for a NEW deck: the decks API validates a sealed deck as soon as it is
+// saved, by asking altered-draft for the pool linked to that deck id — a link that only
+// exists once syncPoolDeck has run. On altered-core-decks-api (old), validating a non-draft
+// before the link existed stored the deck as illegal and cached the failure for 30 s. So a
+// new deck is created as a DRAFT, linked, and only then flipped off draft (the decks API
+// re-validates on that PATCH, with the link in place) — the same sequence as the backend's
+// ensureDeck (api/_lib/tournamentPool.js). On DeckApi, isDraft means "archived" (hidden in
+// BGA): the summary always carries isDraft false, so the deck is never left archived.
 
 /**
  * @param {object} p
  * @param {string} p.poolId
  * @param {string|null} p.deckId - the deck currently linked to the pool, if any
- * @param {{ name, deckCards, isDraft, format }} p.summary - isDraft = !valid
+ * @param {{ name, deckCards, isDraft, format }} p.summary - isDraft false: a pool deck is never archived
  * @param {string|null} p.heroRef
  * @param {string|null} p.faction
  * @param {number} p.cardQuantity
