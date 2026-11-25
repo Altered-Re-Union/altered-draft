@@ -71,13 +71,57 @@ async function renderer() {
   return window.AlteredRender ?? null
 }
 
+// What the renderer loads before its first face (measured on the vendored build), relative to
+// its asset base. It discovers them one stage after another — config index, then the configs,
+// then the icon CSS, then the fonts, then the placeholder card back and the biome icons, and
+// the QR library at the first card: ~6 round trips, 9 s on a slow 3G. Fetching them all at
+// once puts them in the HTTP cache (the CDN sends `access-control-allow-origin: *` and a
+// max-age), so the renderer's own requests are answered from there. A file missing from this
+// list is just loaded by the renderer as before; one it no longer uses is a wasted download.
+const BIOMES = ['FOREST', 'MOUNTAIN', 'OCEAN'].flatMap(biome =>
+  ['ZERO', 'SMALL', 'MID', 'BIG'].map(size => `assets/biomes/ALT_COMPONENT_${biome}_${size}.svg`))
+export const RENDERER_ASSETS = [
+  'config/index.json',
+  ...['core', 'ui', 'biomes', 'elements', 'framedata', 'cards_data'].map(name => `config/${name}.json`),
+  ...['AX', 'AX_community', 'BR', 'LY', 'MU', 'MU_community', 'OR', 'YZ', 'NE'].map(f => `config/faction_${f}.json`),
+  'assets/fonts/alteredicons.css',
+  'assets/fonts/HapticPro-Regular.ttf',
+  'assets/fonts/HapticPro-Extrabold.ttf',
+  'assets/fonts/Jali_Greek_Variable_Italic.otf',
+  'assets/fonts/NotoSansSymbols-circled.woff2',
+  'assets/img/ALT_OFFICIAL_CARDBACK.png',
+  ...BIOMES,
+  'assets/vendor/qrcodejs/qrcode.min.js',
+  'assets/logos/Altered-Swirl.svg',
+]
+
+// The renderer's asset base: its own default is the community CDN's /forge/ (cdnUrl, unless
+// the page sets window.FORGE_BASE like the renderer reads).
+function rendererBase() {
+  const base = (typeof window !== 'undefined' && window.FORGE_BASE) || `${endpoints().cdnUrl}/forge/`
+  return base.endsWith('/') ? base : `${base}/`
+}
+
+function prefetchRendererAssets() {
+  if (typeof fetch !== 'function') return
+  const base = rendererBase()
+  for (const path of RENDERER_ASSETS) {
+    // Read to the end so the response lands in the HTTP cache; failures are the renderer's
+    // business (it retries the file itself).
+    fetch(base + path, { credentials: 'omit' }).then(res => res.blob()).catch(() => {})
+  }
+}
+
 let warming = null
 /**
- * Starts loading the renderer's config and fonts (~15 files from the CDN) before the first
- * face is needed, so that face doesn't pay for them. Idempotent and harmless without a DOM.
+ * Gets the renderer ready before the first face is needed: downloads its assets in parallel
+ * and runs its init (config + fonts), so that face doesn't pay for them. Call it as soon as a
+ * page knows it will show a unique to draw. Idempotent and harmless without a DOM.
  */
 export function warmUniqueRenderer() {
   if (!warming) {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return Promise.resolve()
+    prefetchRendererAssets()
     warming = renderer()
       .then(R => R?.init?.())
       .catch(() => { warming = null }) // a failed warm-up is retried by the next call

@@ -134,10 +134,23 @@ describe('uniqueFaces with the renderer', () => {
     expect(await retryUniqueFace(A, 'EN')).toBe(`data:image/jpeg;base64,${A}`)
   })
 
-  it('warms the renderer once', async () => {
-    const { warmUniqueRenderer } = await import('./uniqueFaces.js')
+  it('warms the renderer once, prefetching its assets in parallel', async () => {
+    const { warmUniqueRenderer, RENDERER_ASSETS } = await import('./uniqueFaces.js')
     const { AlteredRender } = fakeDom()
+    const fetch = vi.fn(async () => ({ blob: async () => null }))
+    vi.stubGlobal('fetch', fetch)
     await Promise.all([warmUniqueRenderer(), warmUniqueRenderer()])
     expect(AlteredRender.init).toHaveBeenCalledTimes(1)
+    expect(fetch.mock.calls.map(([url]) => url)).toEqual(RENDERER_ASSETS.map(p => `https://cdn.alteredcore.org/forge/${p}`))
+  })
+
+  it('prefetches from window.FORGE_BASE when the page sets it', async () => {
+    const { warmUniqueRenderer } = await import('./uniqueFaces.js')
+    fakeDom()
+    window.FORGE_BASE = 'https://forge.example/base'
+    const fetch = vi.fn(async () => ({ blob: async () => null }))
+    vi.stubGlobal('fetch', fetch)
+    await warmUniqueRenderer()
+    expect(fetch.mock.calls[0][0]).toBe('https://forge.example/base/config/index.json')
   })
 })
