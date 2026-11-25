@@ -12,7 +12,10 @@
 // runtime through /api/config), so the same bundle can target prod or a local Keycloak.
 import { endpoints } from './endpoints.js'
 
-const SCOPES = 'openid profile'
+// read-decks / write-deck: optional client scopes DeckApi requires on the token (the old
+// decks-api ignores them). A session opened before they were requested keeps its old scopes
+// on refresh: the player has to log in again.
+const SCOPES = 'openid profile read-decks write-deck'
 
 const PKCE_KEY = 'reunion_pkce'    // transient during the redirect dance
 const HINT_COOKIE = 'reunion_auth' // readable "has session" hint set by /api/token

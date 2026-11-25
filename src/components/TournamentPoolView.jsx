@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { fetchSet, fetchUniques, isUniqueRef, needsCardApi } from '../lib/cardData.js'
+import { warmUniqueRenderer } from '../lib/uniqueFaces.js'
 import { setCodeFromRef } from '../lib/assets.js'
 import { createDeck, updateDeck, toDeckCards, getDeck, deckCardsToRefs } from '../lib/decks.js'
 import { syncPoolDeck } from '../lib/tournamentApi.js'
@@ -92,6 +93,8 @@ export default function TournamentPoolView({ title, load, reset, backTo = null }
       setCooldownMs(cooldownFromResetAt(data.resetAt)) // show the cooldown from the start, not just after a rejected click
 
       const refs = Object.keys(data.cards)
+      // Their faces will be drawn: warm the renderer while the set files load.
+      if (refs.some(isUniqueRef)) warmUniqueRenderer()
       const map = {}
       // Client twin of the server's buildCardMap: a mono-faction pool has no set_code, so the
       // sets come from the (non-unique) refs themselves.
@@ -208,7 +211,9 @@ export default function TournamentPoolView({ title, load, reset, backTo = null }
       const summary = {
         name: `${namePrefix}${baseName}`,
         deckCards,
-        isDraft: !isValid,
+        // Never archived (isDraft = hidden in BGA on DeckApi): validity is in the name, and
+        // the decks API computes legality itself. Also clears the old `isDraft: !valid`.
+        isDraft: false,
         format: 'sealed',
       }
       // New decks: draft → link → flip (see poolDeckSync.js for why the order matters).

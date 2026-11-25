@@ -5,7 +5,7 @@ import { useLang } from '../lib/i18n/i18n.jsx'
 import { parseBgaTournamentUrl } from '../lib/bgaUrl.js'
 import { tournamentFormIssues, followCapacity } from '../lib/tournamentForm.js'
 import { VISIBILITIES } from '../lib/tournamentRules.js'
-import { validateTournamentConfig, DEFAULT_RANDOM_ONE_IN } from '../lib/tournamentConfig.js'
+import { validateTournamentConfig, DEFAULT_RANDOM_ONE_IN, SEALED_BOOSTERS } from '../lib/tournamentConfig.js'
 import { hasFactionRanges } from '../lib/uniqueFactionRanges.js'
 import { SETS } from '../lib/cardData.js'
 import { cubeCapacity, CUBE_LIMITS } from '../lib/cubeSealed.js'
@@ -150,6 +150,7 @@ export default function TournamentForm() {
   const [mixOpen, setMixOpen] = useState(false)
   const [faction, setFaction] = useState(null)
   const [setWeights, setSetWeights] = useState(() => setWeightsFrom())
+  const [factionBoosters, setFactionBoosters] = useState(SEALED_BOOSTERS) // mono-faction only
   const [heroes, setHeroes] = useState('packs')
   const [uniques, setUniques] = useState({ inBoosters: 1, guaranteed: 1, evenFactions: false, faction: null, randomOneIn: null })
   // The slider's value while the exact mode is on: each mode keeps its own (spec §13.4).
@@ -200,6 +201,7 @@ export default function TournamentForm() {
       if (d.setCounts) setSetCounts(d.setCounts); else if (d.setCode) setSetCounts({ [d.setCode]: 7 })
       if (d.mixOpen !== undefined) setMixOpen(!!d.mixOpen)
       if (d.sourceType) setSourceType(d.sourceType); if (d.faction !== undefined) setFaction(d.faction); if (d.setWeights) setSetWeights(d.setWeights)
+      if (d.factionBoosters) setFactionBoosters(d.factionBoosters)
       if (d.heroes) setHeroes(d.heroes); if (d.uniques) setUniques({ randomOneIn: null, ...d.uniques }); setExcludeBanlist(!!d.excludeBanlist)
       if (d.lastOneIn) setLastOneIn(d.lastOneIn)
       if (d.cube !== undefined) setCube(d.cube); if (d.cubeSettings) setCubeSettings(d.cubeSettings); if (Array.isArray(d.heroPool)) setHeroPool(d.heroPool)
@@ -209,7 +211,7 @@ export default function TournamentForm() {
   }
   function reconnect() {
     try {
-      sessionStorage.setItem(draftKey, JSON.stringify({ name, description, visibility, bgaUrl, startsAt, endsAt, sourceType, setCounts, mixOpen, faction, setWeights, heroes, uniques, lastOneIn, excludeBanlist, cube, cubeSettings, heroPool, maxPlayers, maxPlayersEdited }))
+      sessionStorage.setItem(draftKey, JSON.stringify({ name, description, visibility, bgaUrl, startsAt, endsAt, sourceType, setCounts, mixOpen, faction, setWeights, factionBoosters, heroes, uniques, lastOneIn, excludeBanlist, cube, cubeSettings, heroPool, maxPlayers, maxPlayersEdited }))
     } catch { /* storage unavailable: the reconnect still works, the draft is lost */ }
     login(isEdit ? `/tournament/t/${id}/edit` : '/tournament/new')
   }
@@ -239,7 +241,7 @@ export default function TournamentForm() {
         setStartsAt(toLocalInput(tn.startsAt)); setEndsAt(toLocalInput(tn.endsAt))
         const src = tn.config.source
         setSourceType(src.type === 'faction' || src.type === 'cube' ? src.type : 'set')
-        if (src.type === 'faction') { setFaction(src.faction); setSetWeights(setWeightsFrom(src.sets)) }
+        if (src.type === 'faction') { setFaction(src.faction); setSetWeights(setWeightsFrom(src.sets)); setFactionBoosters(src.boosters ?? SEALED_BOOSTERS) }
         else if (src.type === 'multiset') { setSetCounts(src.sets); setMixOpen(true) }
         else if (src.type === 'cube') {
           // The stored refs carry no faction: the card shows them at once, and while unlocked
@@ -389,7 +391,7 @@ export default function TournamentForm() {
       }
     : {
         v: 1, format: 'sealed',
-        source: isFaction ? { type: 'faction', faction, sets: setWeights, boosters: 7 } : { type: 'multiset', sets: setCounts, boosters: 7 },
+        source: isFaction ? { type: 'faction', faction, sets: setWeights, boosters: factionBoosters } : { type: 'multiset', sets: setCounts, boosters: SEALED_BOOSTERS },
         heroes,
         uniques: !uniqueSupport ? noUniques : isFaction ? { ...uniques, faction, evenFactions: false } : uniques,
         excludeBanlist,
@@ -583,6 +585,7 @@ export default function TournamentForm() {
             mixOpen={mixOpen} onMixOpen={setMixOpen}
             faction={faction} onFaction={edit('faction', setFaction)}
             weights={setWeights} onWeights={edit('sets', setSetWeights)}
+            boosters={factionBoosters} onBoosters={edit('sets', setFactionBoosters)}
             cube={cube} onCube={changeCube}
             disabled={configFrozen || saving} cubeReadOnly={configFrozen} />
           <ErrorLine field="faction" /><ErrorLine field="sets" /><ErrorLine field="cube" />

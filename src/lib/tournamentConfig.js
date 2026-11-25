@@ -8,6 +8,10 @@ import { CUBE_LIMITS, CUBE_ORIGINS, CARD_REF_RE, isHeroRefShape } from './cubeSe
 
 export const CONFIG_VERSION = 1
 export const SEALED_BOOSTERS = 7
+// A mono-faction pool's booster count is the organizer's (one faction = a narrower pool, 7
+// boosters can be a lot): 3 still leaves 36 non-hero cards for a 30-card deck. The other
+// sources stay at SEALED_BOOSTERS.
+export const MIN_FACTION_BOOSTERS = 3
 export const MAX_UNIQUES = 7
 export const HERO_MODES = ['packs', 'free']
 export const SOURCE_TYPES = ['set', 'faction', 'multiset', 'cube']
@@ -33,6 +37,16 @@ export function configSetCodes(config) {
     return i === -1 ? SETS.length : i
   }
   return Object.keys(src.sets).sort((a, b) => rank(a) - rank(b))
+}
+
+/**
+ * Whether a tournament's pools can hold uniques (guaranteed, in boosters, random hits, or
+ * unique refs in a cube's cards) — the page warms the unique-face renderer when they can.
+ */
+export function configHasUniques(config) {
+  const u = config?.uniques ?? {}
+  if ((u.guaranteed ?? 0) > 0 || (u.inBoosters ?? 0) > 0 || u.randomOneIn) return true
+  return Object.keys(config?.source?.cards ?? {}).some(ref => /_U_\d+$/.test(ref))
 }
 
 function toInt(value, fallback) {
@@ -152,7 +166,11 @@ export function validateTournamentConfig(input) {
     set = SETS.find(s => s.code === src.setCode && !s.hidden) ?? null
     if (!set) errors.push('source.setCode')
   }
-  if (!isCube && src.boosters !== undefined && src.boosters !== SEALED_BOOSTERS) errors.push('source.boosters')
+  let factionBoosters = SEALED_BOOSTERS
+  if (isFaction) {
+    factionBoosters = toInt(src.boosters, SEALED_BOOSTERS)
+    if (typeof src.boosters === 'boolean' || factionBoosters === null || factionBoosters < MIN_FACTION_BOOSTERS || factionBoosters > SEALED_BOOSTERS) errors.push('source.boosters')
+  } else if (!isCube && src.boosters !== undefined && src.boosters !== SEALED_BOOSTERS) errors.push('source.boosters')
 
   if (!HERO_MODES.includes(c.heroes)) errors.push('heroes')
 
@@ -198,7 +216,7 @@ export function validateTournamentConfig(input) {
       source: isCube
         ? cubeSource
         : isFaction
-        ? { type: 'faction', faction: src.faction, sets: factionSets, boosters: SEALED_BOOSTERS }
+        ? { type: 'faction', faction: src.faction, sets: factionSets, boosters: factionBoosters }
         : multiSets
           ? { type: 'multiset', sets: multiSets, boosters: SEALED_BOOSTERS }
           : { type: 'set', setCode: set.code, boosters: SEALED_BOOSTERS },

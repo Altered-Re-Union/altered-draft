@@ -44,6 +44,10 @@ test('opening the pool: 7 boosters and the guaranteed unique', { tag: ['@d-open'
   await page.getByRole('button', { name: t('packReveal.seeFullPool') }).last().dispatchEvent('click')
   await expect(page.getByRole('heading', { name: 'Test cup' })).toBeVisible()
   await expect(page.getByRole('link', { name: t('tournaments.backToTournament') })).toBeVisible()
+  // The uniques show their drawn face (a JPEG snapshot of the renderer), not a card back
+  // (a face can be on screen more than once, e.g. the deck list too).
+  await expect.poll(() => page.locator('img[src^="data:image/jpeg"]').count()).toBeGreaterThanOrEqual(2)
+  await expect(page.getByText(t('cardImage.retry'))).toHaveCount(0)
 
   const pool = await seed.pool('alice', id)
   expect(pool.boosters).toHaveLength(7)

@@ -128,7 +128,14 @@ All tournament pages require a Re:Union login, except the public list of declare
   waits (up to 25 s) for the unique's face to be drawn (`src/lib/uniqueFaces.js`), the current
   pack's uniques first. Past that, or in the full pool, a unique still drawing shows the card
   back with a gold sweep (`CardImage.jsx`) — never the base rare's art — and a failed draw
-  offers Retry. Drawn faces are kept in IndexedDB for 30 days.
+  offers Retry. A face is drawn with the renderer's `AlteredRender.mountFromApi()` (data from
+  the cards API's `POST /api/cards/batch`, one request for the faces asked together), which
+  resolves once the art is loaded; a face drawn without its art is a failure, never kept. The
+  renderer's files (configs, fonts, card back, biome icons, QR library: `RENDERER_ASSETS`) are
+  fetched in parallel and its init runs as soon as the page knows uniques are coming — the
+  "open my pool" click when the tournament's config has uniques, the pool response when it
+  holds one. Drawn faces are kept in IndexedDB for 30 days (cache key versioned:
+  `FACE_CACHE_VERSION`).
 - **Full-pool deckbuilder** (`PoolGrid`): every card of the pool with +/- controls, filters,
   grouping. Heroes appear in the full pool, not in any booster. Grouped by faction or by cost,
   each group header (except the Hero cost group) has **+ All / − All** (`src/lib/deckBulk.js`):
@@ -190,7 +197,7 @@ validates against a stale pool.
 ### 2.4 Interactions with other Re:Union surfaces
 
 - **altered.re / deckbuilder.alteredcore.org**: the synced deck is a regular deck in the
-  player's account (`format: sealed`, `isDraft` reflecting validity). Editing it there goes
+  player's account (`format: sealed`, never `isDraft`: archived on DeckApi). Editing it there goes
   through decks-api's generic save, which validates against the pool too (by deck id).
   decks-api refuses to change a deck's format to/from `sealed`.
 - **BGA**: only through altered-bga-api (§9.2). The BGA table option "Deck format =
@@ -579,11 +586,11 @@ keep both sides consistent:
   merely seeded from a load or a reset (`skipNextSyncRef`), so opening the page never
   renames a `Random …` deck.
 - Computes validity (`≥30`, `≤3 factions`, `≤1 hero`) and builds
-  `{ name, deckCards, isDraft: !valid, format: 'sealed' }`.
+  `{ name, deckCards, isDraft: false, format: 'sealed' }` (validity is in the name).
 - `syncDeckToPool` (`src/lib/poolDeckSync.js`): `updateDeck(deckId)` then
   `syncPoolDeck(poolId, summary)` (`POST /api/tournament-pool?id=`) if the pool has a deck.
   A **new** deck (none yet, or a 404 because it was deleted from the deckbuilder) is created
-  **as a draft**, linked with `syncPoolDeck`, and only then, if valid, PATCHed to
+  **as a draft**, linked with `syncPoolDeck`, and only then PATCHed to
   `isDraft: false` — the same sequence as `ensureDeck` below. Creating an already-valid deck
   ("Random deck": 30 cards at once) as non-draft made decks-api validate it before the link
   existed: the deck was stored as illegal ("Could not verify your sealed pool") until a later
@@ -599,13 +606,15 @@ call):
 
 - If the pool has a deck with cards: `GET` it on decks-api. 404 → treat as gone and re-mint.
   Other failures → trust the cache (never wipe a good deck on a transient error).
-- Re-derives from the live card list: `format` forced to `sealed`, `isDraft = !valid`, name
-  rebuilt from the pool. Any drift is PATCHed to decks-api and the summary refreshed.
+- Re-derives from the live card list: `format` forced to `sealed`, `isDraft` forced to
+  `false`, name rebuilt from the pool (`Invalid ` prefix when invalid). Any drift is PATCHed to decks-api and the summary refreshed.
 - If there is no deck (or it is empty/gone): `buildRandomDeck` from the pool (`loadPool`),
   `POST` as **`isDraft: true` first**, link it to the pool (`updateDeckSummary`), then
-  `PATCH { isDraft: false }`. The two-step is required: decks-api validates non-draft decks
-  by calling back `/api/tournament-pool-by-deck`, and caches a failure for 30 s per deck id,
-  so validating before the link exists would poison the cache.
+  `PATCH { isDraft: false }`. The two-step was required by altered-core-decks-api: it
+  validated non-draft decks by calling back `/api/tournament-pool-by-deck` and cached a
+  failure for 30 s per deck id, so validating before the link existed poisoned the cache.
+  DeckApi validates drafts too but does not cache a 404 (no pool linked yet), so the same
+  sequence works with both.
 
 **Naming** (fixed literals, do not translate the prefixes):
 
@@ -617,8 +626,10 @@ call):
 | Deck not valid | prefix **`Invalid `**. The BGA client (`altered.js`) matches a name starting with `invalid` (case-insensitive): it skips the deck-content call and shows "Invalid deck" with a link to fix it on altered-draft. |
 | Auto-minted, unreviewed | prefix **`Random `** (dropped on the player's next edit, since the frontend recomputes the name from scratch). The BGA client matches a name starting with `random` and warns "You didn't build your deck before the matches started. A random deck was generated using your pool." |
 
-`isDraft` mirrors validity: `true` when invalid (decks-api then skips validation and marks
-the deck not legal), `false` when valid (decks-api validates, incl. pool membership).
+`isDraft` is always `false` on a pool deck. On DeckApi it means **archived**: hidden in BGA
+(still listed and shared). DeckApi validates every deck, incl. pool membership, and reports
+legality in `legal`. (On altered-core-decks-api it meant "not validated", and used to mirror
+validity: `true` when invalid. The reconciliation clears what that convention left.)
 
 ---
 
@@ -1131,8 +1142,9 @@ the raw frames BGA sent (with `decodedEnvelope` and `userId`). altered-draft log
 7. **`Invalid ` and `Random ` prefixes are literals** matched on the BGA side; never localize
    them. The base name always tracks the tournament name (no dates).
 8. **Create every new deck as `isDraft: true` first, link, then flip** (backend `ensureDeck` and
-   frontend `syncDeckToPool`) — decks-api caches a failed
-   validation for 30 s per deck id.
+   frontend `syncDeckToPool`) — altered-core-decks-api caches a failed validation for 30 s per
+   deck id. **Never leave a pool deck with `isDraft: true`**: on DeckApi that is "archived",
+   hidden in BGA.
 9. **PATCH to decks-api uses `application/merge-patch+json`**; `application/json` is rejected.
 10. **`heroes_in_pool = false` means every hero of the set is in `cards`**; decks-api relies
     on that instead of a "any hero" carve-out.
@@ -1378,22 +1390,25 @@ time and states it, and says which pools are kept.
 
 ### 14.6 Mono-faction sealed (V2)
 
-Format: 7 boosters in which **every card of the pool belongs to one chosen faction**, drawn over
+Format: 3 to 7 boosters (7 by default, the organizer's choice) in which **every card of the pool belongs to one chosen faction**, drawn over
 one or several sets with a weight each. It removes the colour lottery of a classic sealed.
 Design approved 2026-10-30.
 
-**Config.** `source: { type: 'faction', faction, sets: { CODE: 1..3 }, boosters: 7 }`, validated in
+**Config.** `source: { type: 'faction', faction, sets: { CODE: 1..3 }, boosters: 3..7 }`, validated in
 `src/lib/tournamentConfig.js` (`SOURCE_TYPES = ['set', 'faction']`, `MAX_SET_WEIGHT = 3`,
-`configSetCodes`). Zero weights are dropped; COREKS is refused; error codes `source.type`,
-`source.faction`, `source.sets`. For this source `uniques.faction` is forced to the source faction
+`configSetCodes`, `MIN_FACTION_BOOSTERS = 3`). Zero weights are dropped; COREKS is refused; error codes `source.type`,
+`source.faction`, `source.sets`, `source.boosters` (outside 3–7; a missing count = 7; set and multiset
+stay at exactly 7, a cube has its own 3–8, §15). One faction makes a narrower pool, so 7 boosters can be a lot of
+cards: 3 still leaves 36 non-hero cards for a 30-card deck. The count is not a seed input (declared-tournament
+pools are stored), and the faction golden digest is computed at 7. For this source `uniques.faction` is forced to the source faction
 (only when the pool has uniques, else `null`) and `evenFactions` to `false`; `uniques.unsupportedSet` is raised only when the sets are otherwise
 valid but none of the included ones has faction-range data. `legacyColumnsFromConfig` writes
 `set_code: null`.
 
 **Generation.** `quotas(weights, n, rng)` (`src/lib/packGenerator.js`) splits n card **slots** over
 the sets by **largest remainder**, ties broken by shuffling the tied group with the pool rng.
-`generateFactionSealedPool` applies it separately to the 7 hero slots (heroes `packs`), the 63
-common slots and the 21 rare slots (over the sets that have a card of that rarity in the
+`generateFactionSealedPool` applies it separately to the `boosters` hero slots (heroes `packs`), the
+9 × `boosters` common slots and the 3 × `boosters` rare slots (7 / 63 / 21 at 7 boosters) (over the sets that have a card of that rarity in the
 faction), then shuffles the set labels over the slots: each set's share is exact per rarity
 across the pool, and a booster mixes sets. Each slot is drawn from the set its label assigns,
 falling back to the other included sets, then left empty (never another rarity). Each set's
@@ -1420,12 +1435,15 @@ card map instead of aborting the deck reconciliation); the pool page does the sa
 for a faction pool (`sourceType === 'faction'`, §14.7).
 
 **UI.** The tournament form's Cards step has a source switch "Sets" / "Mono-faction mix": faction
-pills, a weight stepper per set (×0 to ×3) with its share in %, and a fixed-faction line for the
-uniques. Public summary: `7 boosters · [icon] Axiom mono-faction · all sets`, or
+pills, a weight stepper per set (×0 to ×3) with its share in %, a "Boosters per player" stepper
+(3 to 7, default 7, its hint gives the 12 × n non-hero cards) and a fixed-faction line for the
+uniques. The summary and step 2 of the tournament checklist ("Your n boosters…") read the stored
+count. Public summary: `7 boosters · [icon] Axiom mono-faction · all sets`, or
 `... · SKY, ROC ×2, NEJ` when weights are not uniform.
 
 **Recette.** `docs/tournaments/acceptance-mono-faction-sealed.html` (step ids `mf-<group>-<slug>`,
-11 replayed by `tests/e2e/specs/faction-sealed.spec.js`). `scripts/e2e-acceptance-coverage.mjs`
+12 replayed by `tests/e2e/specs/faction-sealed.spec.js`; the booster count is the v1.1 step
+`mf-b-boosters`, BGA id 123487). `scripts/e2e-acceptance-coverage.mjs`
 reads the acceptance pages (`ACCEPTANCE_PAGES`, §14.7 and §14.9 add the V3 and V4 ones) and refuses an id
 present in two pages.
 

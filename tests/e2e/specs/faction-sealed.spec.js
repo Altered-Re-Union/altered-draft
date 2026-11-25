@@ -159,6 +159,44 @@ test('create "Axiom mix": stored config and summary', { tag: ['@mf-b-create'] },
   await expect(summary.locator('img')).toHaveCount(1)
 })
 
+test('create with 4 boosters: the booster stepper, the stored count, the summary and the pool', { tag: ['@mf-b-boosters'] }, async ({ openAs, api, db }) => {
+  const page = await openForm(openAs)
+  await field(page, 'nameLabel').fill('Axiom short')
+  await field(page, 'bgaUrlLabel').fill(bga(123487))
+  await sourceRadio(page, 'sourceFactionMix').click()
+  await factionPills(page).getByRole('radio', { name: 'Axiom', exact: true }).click()
+  await setWeights(page, MIX_WEIGHTS)
+  const boosters = page.getByTestId('faction-boosters')
+  await expect(boosters).toContainText('7')
+  await expect(boosters.getByRole('button', { name: '+', exact: true })).toBeDisabled()
+  for (let n = 7; n > 4; n--) await boosters.getByRole('button', { name: '−', exact: true }).click()
+  await expect(boosters).toContainText('4')
+  await expect(page.getByText(t('tournaments.factionBoostersHint', { min: 3, max: 7, cards: 48 }))).toBeVisible()
+  await boosters.getByRole('button', { name: '−', exact: true }).click()
+  await expect(boosters).toContainText('3')
+  await expect(boosters.getByRole('button', { name: '−', exact: true })).toBeDisabled()
+  await boosters.getByRole('button', { name: '+', exact: true }).click()
+  await submit(page).click()
+  await page.waitForURL(/\/tournament\/t\/[0-9a-f-]{36}$/)
+
+  const id = page.url().split('/').pop()
+  const { body } = await api(null).get(`/api/tournaments/${id}`)
+  expect(body.config.source).toEqual({ type: 'faction', faction: 'AX', sets: { CYCLONE: 1, EOLE: 2, FUGUE: 1 }, boosters: 4 })
+  await expect(page.getByTestId('tournament-summary')).toContainText(t('tournaments.summaryBoostersCount', { n: 4 }))
+  await expect(page.getByText(t('tournaments.step2Desc', { n: 4 }))).toBeVisible()
+
+  await page.getByRole('button', { name: t('tournaments.step2Button') }).click()
+  await page.waitForURL(`**/tournament/t/${id}/pool`)
+  // 4 boosters + the 5th "booster" holding the guaranteed unique.
+  await expect(page.getByText(t('packReveal.boosterOf', { n: 1, total: 5 })).first()).toBeVisible()
+  const pool = await storedPool(db, id, 'alice')
+  expect(pool.boosters).toHaveLength(4)
+  for (const booster of pool.boosters) expect(booster).toHaveLength(13)
+  // Quotas over Σ weights 4: commons 36 → 9 / 18 / 9, rares 12 → 3 / 6 / 3 (one rare slot holds the unique).
+  expect(countBySet(pool.boosters.flatMap(b => b.slice(1, 10)))).toEqual({ CYCLONE: 9, EOLE: 18, FUGUE: 9 })
+  expect(Object.values(pool.cards).reduce((a, b) => a + b, 0)).toBe(53)
+})
+
 test('the pool: reveal without a booster cover, exact per-set quotas, Axiom only', { tag: ['@mf-c-pool'] }, async ({ openAs, seed, db, request }) => {
   const { id } = await seed.tournament('alice', factionTournamentBody())
   const page = await openAs('alice')

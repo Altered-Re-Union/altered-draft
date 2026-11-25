@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { validateTournamentConfig, configFromLegacyFormat, legacyColumnsFromConfig, legacyFormatForBgaTournament, configSetCodes } from './tournamentConfig.js'
+import { validateTournamentConfig, configFromLegacyFormat, legacyColumnsFromConfig, legacyFormatForBgaTournament, configSetCodes, configHasUniques } from './tournamentConfig.js'
 
 const valid = {
   format: 'sealed',
@@ -137,6 +137,14 @@ describe('validateTournamentConfig faction source', () => {
     expect(r.ok).toBe(true)
     expect(r.config.source).toEqual({ type: 'faction', faction: 'AX', sets: { CORE: 2, BISE: 1 }, boosters: 7 })
     expect(r.config.uniques).toEqual({ inBoosters: 1, guaranteed: 0, evenFactions: false, faction: 'AX', randomOneIn: null })
+  })
+  it('takes the organizer\'s booster count (3 to 7, default 7, numeric strings coerced)', () => {
+    const withBoosters = boosters => factionCfg({ source: { type: 'faction', faction: 'AX', sets: { CORE: 1 }, boosters } })
+    expect(validateTournamentConfig(factionCfg()).config.source.boosters).toBe(7)
+    expect(validateTournamentConfig(withBoosters(3)).config.source.boosters).toBe(3)
+    expect(validateTournamentConfig(withBoosters('5')).config.source.boosters).toBe(5)
+    expect(validateTournamentConfig(withBoosters(7)).config.source.boosters).toBe(7)
+    for (const bad of [2, 8, 0, 4.5, true, 'x']) expect(validateTournamentConfig(withBoosters(bad)).errors).toEqual(['source.boosters'])
   })
   it('keeps the sets in SETS order whatever the input order', () => {
     expect(Object.keys(validateTournamentConfig(factionCfg({ source: { type: 'faction', faction: 'LY', sets: { EOLE: 1, CORE: 1 } } })).config.source.sets)).toEqual(['CORE', 'EOLE'])
@@ -297,5 +305,20 @@ describe('validateTournamentConfig cube source', () => {
     const uniques = n => Object.fromEntries(Array.from({ length: n }, (_, i) => [`ALT_CORE_B_AX_04_U_${1000 + i}`, 1]))
     expect(validateTournamentConfig(cube({ cards: uniques(1000) })).errors).toEqual([])
     expect(validateTournamentConfig(cube({ cards: uniques(1001) })).errors).toEqual(['source.cards'])
+  })
+})
+
+describe('configHasUniques', () => {
+  const none = { guaranteed: 0, inBoosters: 0, randomOneIn: null }
+  it('is true when a pool can hold a unique', () => {
+    expect(configHasUniques({ uniques: { ...none, guaranteed: 1 } })).toBe(true)
+    expect(configHasUniques({ uniques: { ...none, inBoosters: 2 } })).toBe(true)
+    expect(configHasUniques({ uniques: { ...none, randomOneIn: 8 } })).toBe(true)
+    expect(configHasUniques({ uniques: none, source: { type: 'cube', cards: { ALT_CORE_B_AX_04_U_1437: 1 } } })).toBe(true)
+  })
+  it('is false otherwise', () => {
+    expect(configHasUniques({ uniques: none, source: { type: 'set', setCode: 'CORE' } })).toBe(false)
+    expect(configHasUniques({ uniques: none, source: { type: 'cube', cards: { ALT_CORE_B_AX_04_C: 3 } } })).toBe(false)
+    expect(configHasUniques(null)).toBe(false)
   })
 })

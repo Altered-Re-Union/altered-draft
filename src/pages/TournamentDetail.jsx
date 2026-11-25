@@ -9,6 +9,8 @@ import TournamentChecklist from '../components/TournamentChecklist.jsx'
 import ShareBox from '../components/ShareBox.jsx'
 import { StatusPill, PrivateBadge, FullBadge, PlayersLine, isFull, formatDateTime, ConfigSummary } from '../components/TournamentBits.jsx'
 import { TOURNAMENT_HUB_PATH } from '../lib/links.js'
+import { configHasUniques } from '../lib/tournamentConfig.js'
+import { warmUniqueRenderer } from '../lib/uniqueFaces.js'
 
 export default function TournamentDetail() {
   const { id } = useParams()
@@ -33,6 +35,8 @@ export default function TournamentDetail() {
 
   async function handleOpenPool() {
     setOpening(true); setOpenError('')
+    // The pool's unique faces get drawn next: the renderer warms up during the pool request.
+    if (configHasUniques(tournament?.config)) warmUniqueRenderer()
     try {
       await fetchTournamentPool(id)
       navigate(`/tournament/t/${id}/pool`)

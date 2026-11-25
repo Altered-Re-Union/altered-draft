@@ -160,6 +160,12 @@ describe('buildPool faction source', () => {
     expect(Object.values(cards).reduce((a, b) => a + b, 0)).toBe(91)
     expect(Object.keys(cards).every(r => fakeFactionSet(r.split('_')[1]).find(c => c.reference === r).faction === 'AX')).toBe(true)
   })
+  it('deals the configured booster count, with uniques and the per-set quotas scaled to it', async () => {
+    const { boosters, cards } = await buildPool('sub', { config: factionConfig({ source: { type: 'faction', faction: 'AX', sets: { CORE: 1, EOLE: 2 }, boosters: 4 } }), nonce: 'n' }, { fetchCards })
+    expect(boosters).toHaveLength(4); for (const p of boosters) expect(p).toHaveLength(13)
+    expect(boosters.flatMap(p => p.slice(1, 10)).filter(r => r.startsWith('ALT_CORE_')).length).toBe(12)
+    expect(Object.values(cards).reduce((a, b) => a + b, 0)).toBe(52)
+  })
   it('appends every hero of the faction from every included set with heroes "free"', async () => {
     const { boosters, cards } = await buildPool('sub', { config: factionConfig({ heroes: 'free' }), nonce: 'n' }, { fetchCards })
     for (const p of boosters) expect(p).toHaveLength(12)

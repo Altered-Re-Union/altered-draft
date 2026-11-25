@@ -996,7 +996,7 @@ describe('mono-faction tournaments', () => {
       if (method === 'PATCH') { patches.push(JSON.parse(init.body)); return { ok: true, status: 200, json: async () => ({}) } }
       if (method === 'GET' && new URL(url).pathname === '/api/decks/deck-gina') {
         return { ok: true, status: 200, json: async () => ({
-          id: 'deck-gina', name: 'Stray cup', format: 'standard', isDraft: false,
+          id: 'deck-gina', name: 'Stray cup', format: 'standard', isDraft: true,
           deckCards: [
             { cardReference: 'ALT_CYCLONE_B_AX_01_C', quantity: 1 },
             { cardReference: 'ALT_DUSTEROP_B_AX_98_C', quantity: 1 },
@@ -1009,7 +1009,8 @@ describe('mono-faction tournaments', () => {
     try {
       const res = await call(bgaDecklist, { query: { tournamentId: '747474', tournamentName: 'x', gameId: 'g1' } })
       expect(res.statusCode).toBe(200)
-      expect(patches).toEqual([{ format: 'sealed', isDraft: true, name: 'Invalid Stray cup' }])
+      // Invalid → "Invalid " prefix only; a pool deck is never archived (isDraft forced false).
+      expect(patches).toEqual([{ format: 'sealed', isDraft: false, name: 'Invalid Stray cup' }])
       const row = (await query('SELECT deck_name FROM sealed_pools WHERE id = $1', [pool.id])).rows[0]
       expect(row.deck_name).toBe('Invalid Stray cup')
     } finally {
