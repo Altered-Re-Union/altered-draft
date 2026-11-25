@@ -1,5 +1,6 @@
 import { UNIQUES_EN } from './uniquesData.js'
 import { endpoints } from './endpoints.js'
+import { warmUniqueRenderer } from './uniqueFaces.js'
 
 // Card images: the community CDN (cdn.alteredcore.org) — the ONLY working host since Altered
 // disabled public access to BOTH its S3 buckets (altered-prod-eu AND altered-dev now return
@@ -149,6 +150,8 @@ export async function fetchUnique(reference, lang = 'EN') {
     }
   }
 
+  // Its face will be drawn: get the renderer ready while the page renders (no-op in Node).
+  if (card.faceLang) warmUniqueRenderer()
   return card
 }
 
