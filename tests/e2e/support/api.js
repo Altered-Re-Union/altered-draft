@@ -3,6 +3,7 @@
 import { tokenFor } from './auth.js'
 import { isoDaysFromNow } from './dates.js'
 import { APP_URL } from './env.js'
+import { COMMUNITY_CUBES } from '../../../src/lib/cubes.js'
 
 // `bucket` (the test's guard bucket) collects the >= 500 answers, as the browser guard does.
 export function apiAs(request, who, bucket = null) {
@@ -81,6 +82,32 @@ export function privateTournamentBody(overrides = {}) {
     name: 'Private cup',
     bgaUrl: 'https://boardgamearena.com/tournament?id=123500',
     visibility: 'private',
+    ...overrides,
+  })
+}
+
+const ALL_COMMONS_CUBE = COMMUNITY_CUBES.find(c => c.id === 'all-commons')
+export const ALL_COMMONS = { cards: ALL_COMMONS_CUBE.refs.length, heroes: ALL_COMMONS_CUBE.heroes.length }
+
+// "Commons cube" of the V5 acceptance page: the community All commons cube, 6 boosters of
+// 10 cards, one common per faction. The cards are the cube's refs (the promo-only
+// ALT_BISE_P_BR_64_C included), the hero pool its 12 heroes.
+export function cubeTournamentBody(overrides = {}) {
+  return tournamentBody({
+    name: 'Commons cube',
+    bgaUrl: 'https://boardgamearena.com/tournament?id=123510',
+    maxPlayers: 3,
+    config: {
+      source: {
+        type: 'cube', name: 'All commons', origin: 'community', cubeId: 'all-commons',
+        cards: Object.fromEntries(ALL_COMMONS_CUBE.refs.map(ref => [ref, 1])),
+        heroPool: [...ALL_COMMONS_CUBE.heroes],
+        boosters: 6, cardsPerBooster: 10, perFaction: 1,
+      },
+      heroes: 'packs',
+      uniques: { inBoosters: 0, guaranteed: 0 },
+      excludeBanlist: false,
+    },
     ...overrides,
   })
 }

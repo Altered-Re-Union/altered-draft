@@ -276,10 +276,56 @@ export function generateCubeRecipePacks(cardObjects, totalPacks, recipe) {
  * @param {string[][]} packs - packs of card references
  * @param {string[]} heroRefs - hero references to deal from
  */
-export function dealHeroSlots(packs, heroRefs) {
+export function dealHeroSlots(packs, heroRefs, rng = Math.random) {
   if (!heroRefs?.length) return packs
-  const bag = shuffle([...new Set(heroRefs)])
+  const bag = shuffle([...new Set(heroRefs)], rng)
   return packs.map((pack, i) => [bag[i % bag.length], ...pack])
+}
+
+/**
+ * Deal a cube into `slots` player lots of `boosters` boosters (spec §15.3). Every copy
+ * is used at most once over the whole deal. Rng order is a contract (pinned by
+ * cubeDeal.golden.test.js): per faction `shuffle(copies)` in FACTIONS order, then
+ * `rest = shuffle(leftovers)`, then (heroesInBoosters) per slot `shuffle(heroPool)`.
+ * A booster holds `perFaction` refs per faction (FACTIONS order), then the random
+ * refs from `rest`; the hero of a booster, when any, is prepended.
+ * @param {{ref: string, faction: string|null}[]} cards one entry per copy
+ * @returns {string[][][]} slots x boosters x refs
+ */
+export function dealCubeSlots({ cards, heroPool, slots, boosters, cardsPerBooster, perFaction, heroesInBoosters }, rng) {
+  const totalBoosters = slots * boosters
+  const restPer = cardsPerBooster - FACTIONS.length * perFaction
+  const needTotal = totalBoosters * cardsPerBooster
+  if (cards.length < needTotal) throw new Error(`cube too small: total ${cards.length}/${needTotal}`)
+  const needFaction = totalBoosters * perFaction
+  for (const f of FACTIONS) {
+    const have = cards.filter(c => c.faction === f).length
+    if (perFaction > 0 && have < needFaction) throw new Error(`cube too small: ${f} ${have}/${needFaction}`)
+  }
+  const stacks = {}
+  for (const f of FACTIONS) stacks[f] = shuffle(cards.filter(c => c.faction === f).map(c => c.ref), rng)
+  const leftovers = [
+    ...FACTIONS.flatMap(f => stacks[f].slice(needFaction)),
+    ...cards.filter(c => !FACTIONS.includes(c.faction)).map(c => c.ref),
+  ]
+  const rest = shuffle(leftovers, rng)
+  const lots = []
+  for (let s = 0; s < slots; s++) {
+    const lot = []
+    for (let i = 0; i < boosters; i++) {
+      const b = s * boosters + i
+      const booster = []
+      for (const f of FACTIONS) booster.push(...stacks[f].slice(b * perFaction, (b + 1) * perFaction))
+      booster.push(...rest.slice(b * restPer, (b + 1) * restPer))
+      lot.push(booster)
+    }
+    lots.push(lot)
+  }
+  if (!heroesInBoosters || !heroPool?.length) return lots
+  return lots.map(lot => {
+    const bag = shuffle(heroPool, rng)
+    return lot.map((booster, i) => [bag[i % bag.length], ...booster])
+  })
 }
 
 /**

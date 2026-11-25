@@ -5,14 +5,17 @@
 import { validateTournamentFields } from './tournamentRules.js'
 import { validateTournamentConfig } from './tournamentConfig.js'
 import { parseBgaTournamentUrl } from './bgaUrl.js'
+import { checkPlayerCap } from './cubeSealed.js'
 
 // Display order = order of the fields on the page.
-const FIELD_ORDER = ['name', 'description', 'visibility', 'bgaUrl', 'startsAt', 'endsAt', 'setCode', 'faction', 'sets', 'uniques']
+const FIELD_ORDER = ['name', 'description', 'visibility', 'bgaUrl', 'startsAt', 'endsAt', 'setCode', 'faction', 'sets', 'uniques', 'cube', 'cubeSettings', 'heroPool', 'maxPlayers']
 
 /**
  * @param {object} p
  * @param {object} p.body - { name, description, bgaUrl, startsAt, endsAt } as the API receives it
  * @param {object} p.config - the config object the form would send
+ * @param {{ players: number } | null} [p.capacity] - the cube's capacity (cubeCapacity), when known
+ * @param {number} [p.poolCount] - pools already created (a non-cube cap may not go below)
  * @param {Date} [p.now]
  * @param {boolean} p.isCreate - create mode (start must be in the future, every field required)
  * @param {boolean} [p.locked] - pools exist: the link and the config are not sent, so not checked
@@ -23,7 +26,7 @@ const FIELD_ORDER = ['name', 'description', 'visibility', 'bgaUrl', 'startsAt', 
  *   dates are reported under it (a start moved past the end is the start's problem)
  * @returns {{ field: string, code: string }[]}
  */
-export function tournamentFormIssues({ body, config, now = new Date(), isCreate, locked = false, takenBgaIds = null, ownId = null, mixedBgaIds = null, lastDateEdited = null }) {
+export function tournamentFormIssues({ body, config, now = new Date(), isCreate, locked = false, takenBgaIds = null, ownId = null, mixedBgaIds = null, lastDateEdited = null, capacity = null, poolCount = 0 }) {
   const issues = []
   const checked = { ...body }
   if (locked) delete checked.bgaUrl
@@ -44,14 +47,48 @@ export function tournamentFormIssues({ body, config, now = new Date(), isCreate,
     if (parsed && mixedBgaIds.has(parsed.id)) issues.push({ field: 'bgaUrl', code: 'mixed_formats' })
   }
 
+  let cfgOk = true
   if (!locked) {
     const cfg = validateTournamentConfig(config)
+    cfgOk = cfg.ok
     if (cfg.errors.includes('source.setCode')) issues.push({ field: 'setCode', code: 'required' })
     if (cfg.errors.includes('source.faction')) issues.push({ field: 'faction', code: 'required' })
     if (cfg.errors.includes('source.sets')) issues.push({ field: 'sets', code: 'required' })
-    const other = cfg.errors.filter(e => !['source.setCode', 'source.faction', 'source.sets'].includes(e))
+    const isCube = config?.source?.type === 'cube'
+    const cubeSettings = ['source.poolSize', 'source.perFaction', 'source.boosters', 'source.cardsPerBooster']
+    if (isCube) {
+      if (cfg.errors.includes('source.cards') || cfg.errors.includes('source.name')) issues.push({ field: 'cube', code: 'required' })
+      for (const code of cubeSettings) if (cfg.errors.includes(code)) issues.push({ field: 'cubeSettings', code })
+      if (cfg.errors.includes('source.heroPool')) issues.push({ field: 'heroPool', code: 'required' })
+    }
+    const handled = ['source.setCode', 'source.faction', 'source.sets', ...(isCube ? ['source.cards', 'source.name', 'source.heroPool', ...cubeSettings] : [])]
+    const other = cfg.errors.filter(e => !handled.includes(e))
     if (other.length) issues.push({ field: 'uniques', code: other[0] })
   }
 
+  // The player cap is a tournament field, not config: checked even on a locked form (a non-cube
+  // cap stays editable); a cube's cap is locked with its config, so it is not checked then.
+  const cubeCap = config?.source?.type === 'cube'
+  if (!fields.errors.maxPlayers && !(cubeCap && (locked || !cfgOk))) {
+    const cap = checkPlayerCap({ source: config?.source, maxPlayers: fields.values.maxPlayers ?? body?.maxPlayers ?? null, capacity: locked ? null : capacity, poolCount })
+    if (cap.fields.maxPlayers) issues.push({ field: 'maxPlayers', code: cap.fields.maxPlayers })
+    for (const code of cap.config) issues.push({ field: 'cube', code })
+  }
+
   return issues.sort((a, b) => FIELD_ORDER.indexOf(a.field) - FIELD_ORDER.indexOf(b.field))
+}
+
+/**
+ * The player cap the form shows when the cube's capacity changes (spec §15.2 "Capacity").
+ * Untouched, the field takes the capacity, up or down; once the organizer changed it, it is only
+ * lowered to the capacity (never raised, an emptied field stays empty). A capacity below 2 refuses
+ * the config: the field is left as is.
+ * @param {number | string} prev - the field's value ('' = no limit)
+ * @param {{ players: number } | null} capacity
+ * @param {boolean} edited - the organizer changed the field (or the tournament has a stored cap)
+ */
+export function followCapacity(prev, capacity, edited) {
+  if (!capacity || capacity.players < 2) return prev
+  if (!edited) return capacity.players
+  return prev !== '' && Number(prev) > capacity.players ? capacity.players : prev
 }

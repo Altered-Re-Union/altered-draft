@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { tournamentFormIssues } from './tournamentForm.js'
+import { tournamentFormIssues, followCapacity } from './tournamentForm.js'
 
 const NOW = new Date('2026-11-01T12:00:00Z')
 const config = { source: { type: 'set', setCode: 'CYCLONE' }, heroes: 'packs', uniques: { inBoosters: 1, guaranteed: 1 } }
@@ -114,5 +114,59 @@ describe('tournamentFormIssues (BGA tournament already played with mixed legacy 
     const mixedBgaIds = new Set(['7'])
     expect(tournamentFormIssues({ body, config, now: NOW, isCreate: true, mixedBgaIds })).toEqual([{ field: 'bgaUrl', code: 'mixed_formats' }])
     expect(tournamentFormIssues({ body: { ...body, bgaUrl: 'https://boardgamearena.com/tournament?id=8' }, config, now: NOW, isCreate: true, mixedBgaIds })).toEqual([])
+  })
+
+  describe('cube and player cap', () => {
+    const cube = over => ({
+      format: 'sealed', heroes: 'packs', uniques: {}, excludeBanlist: false,
+      source: { type: 'cube', name: 'My cube', origin: 'paste', cubeId: null, cards: { ALT_CORE_B_AX_01_C: 1 }, heroPool: ['ALT_CORE_B_BR_01_C'], boosters: 7, cardsPerBooster: 12, perFaction: 1, ...over },
+    })
+    const run = (cfg, extra = {}) => tournamentFormIssues({ body: { ...body, maxPlayers: 4 }, config: cfg, now: NOW, isCreate: true, ...extra })
+
+    it('asks for the cube cards', () => {
+      expect(run(cube({ cards: {} }))).toEqual([{ field: 'cube', code: 'required' }])
+    })
+    it('flags a too small pool under the cube settings', () => {
+      expect(run(cube({ boosters: 3, cardsPerBooster: 10 }))).toEqual([{ field: 'cubeSettings', code: 'source.poolSize' }])
+    })
+    it('asks for a hero pool', () => {
+      expect(run(cube({ heroPool: [] }))).toEqual([{ field: 'heroPool', code: 'required' }])
+    })
+    it('requires a cap for a valid cube', () => {
+      expect(run(cube(), { body: { ...body, maxPlayers: null } })).toEqual([{ field: 'maxPlayers', code: 'required_for_cube' }])
+    })
+    it('reports a capacity below 2 under the cube, before the cap', () => {
+      expect(run(cube(), { capacity: { players: 1 } })).toEqual([{ field: 'cube', code: 'source.capacity' }])
+      expect(run(cube(), { capacity: { players: 1 }, body: { ...body, maxPlayers: null } })).toEqual([
+        { field: 'cube', code: 'source.capacity' }, { field: 'maxPlayers', code: 'required_for_cube' },
+      ])
+    })
+    it('flags a cap above the capacity', () => {
+      expect(run(cube(), { capacity: { players: 3 } })).toEqual([{ field: 'maxPlayers', code: 'above_capacity' }])
+    })
+    it('flags a cap below the pool count on another source', () => {
+      expect(tournamentFormIssues({ body: { ...body, maxPlayers: 2 }, config, now: NOW, isCreate: true, poolCount: 3 }))
+        .toEqual([{ field: 'maxPlayers', code: 'below_pool_count' }])
+    })
+  })
+})
+
+describe('followCapacity', () => {
+  const cap = n => ({ players: n })
+  it('an untouched field takes the capacity, up and down', () => {
+    expect(followCapacity('', cap(2), false)).toBe(2)
+    expect(followCapacity(2, cap(3), false)).toBe(3)
+    expect(followCapacity(3, cap(2), false)).toBe(2)
+  })
+  it('a field the organizer changed is only lowered to the capacity, never raised or refilled', () => {
+    expect(followCapacity(2, cap(3), true)).toBe(2)
+    expect(followCapacity('2', cap(3), true)).toBe('2')
+    expect(followCapacity(4, cap(3), true)).toBe(3)
+    expect(followCapacity('', cap(3), true)).toBe('')
+  })
+  it('no capacity, or one below 2: the field is left as is', () => {
+    expect(followCapacity(2, null, false)).toBe(2)
+    expect(followCapacity(2, cap(1), false)).toBe(2)
+    expect(followCapacity(5, cap(0), true)).toBe(5)
   })
 })

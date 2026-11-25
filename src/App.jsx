@@ -14,6 +14,7 @@ import EditDeckRedirect from './pages/EditDeckRedirect.jsx'
 import TournamentForm from './pages/TournamentForm.jsx'
 import TournamentDetail from './pages/TournamentDetail.jsx'
 import TournamentPoolPage from './pages/TournamentPoolPage.jsx'
+import TournamentCubePage from './pages/TournamentCubePage.jsx'
 
 // The hub's address during its beta (lot 1 was tested on BGA's production with the hub hidden
 // there): bookmarks and shared links keep working, query included (?tab=…).
@@ -40,6 +41,7 @@ export default function App() {
       <Route path="/tournament/t/:id" element={<TournamentDetail />} />
       <Route path="/tournament/t/:id/edit" element={<TournamentForm />} />
       <Route path="/tournament/t/:id/pool" element={<TournamentPoolPage />} />
+      <Route path="/tournament/t/:id/cube" element={<TournamentCubePage />} />
       <Route path="/edit/deck/:deckId" element={<EditDeckRedirect />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

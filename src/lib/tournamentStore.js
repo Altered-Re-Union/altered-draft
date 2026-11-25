@@ -34,17 +34,17 @@ const RESET_HIDES = (src) => `unhidden AS (
        RETURNING 1
      )`
 
-export async function createTournament({ name, description, bgaUrl, bgaTournamentId, startsAt, endsAt, organizerSub, organizerName, config, visibility = 'public' }) {
+export async function createTournament({ name, description, bgaUrl, bgaTournamentId, startsAt, endsAt, organizerSub, organizerName, config, visibility = 'public', maxPlayers = null }) {
   try {
     const { rows } = await query(
       `WITH t AS (
          INSERT INTO tournaments
-           (name, description, bga_url, bga_tournament_id, starts_at, ends_at, organizer_sub, organizer_name, config, visibility)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+           (name, description, bga_url, bga_tournament_id, starts_at, ends_at, organizer_sub, organizer_name, config, visibility, max_players)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
          RETURNING *
        ), ${ADOPT_LEGACY('t')}, ${RESET_HIDES('t')}
        SELECT t.*, (SELECT count(*)::int FROM adopted) AS adopted_pools FROM t`,
-      [name, description ?? '', bgaUrl, bgaTournamentId, startsAt, endsAt ?? null, organizerSub, organizerName, JSON.stringify(config), visibility],
+      [name, description ?? '', bgaUrl, bgaTournamentId, startsAt, endsAt ?? null, organizerSub, organizerName, JSON.stringify(config), visibility, maxPlayers],
     )
     return rows[0]
   } catch (e) {
@@ -122,6 +122,7 @@ const COLUMN_OF = {
   cancelledAt: 'cancelled_at',
   endedAt: 'ended_at',
   visibility: 'visibility',
+  maxPlayers: 'max_players',
 }
 
 /**
@@ -191,6 +192,7 @@ export async function detachTournament(id) {
   return withTransaction(async q => {
     const locked = await q('SELECT id FROM tournaments WHERE id = $1 AND detached_at IS NULL FOR UPDATE', [id])
     if (!locked.rows[0]) return null
+    await q('DELETE FROM tournament_cube_slots WHERE tournament_ref = $1', [id])
     const released = await q('UPDATE sealed_pools SET tournament_ref = NULL, adopted_at = NULL WHERE tournament_ref = $1 AND adopted_at IS NOT NULL', [id])
     const deleted = await q('DELETE FROM sealed_pools WHERE tournament_ref = $1', [id])
     const { rows } = await q('UPDATE tournaments SET detached_at = now(), updated_at = now() WHERE id = $1 RETURNING *', [id])
@@ -230,6 +232,7 @@ export function toTournamentJson(row, extras = {}) {
     endsAt: iso(row.ends_at),
     status: tournamentStatus(row),
     visibility: row.visibility ?? 'public',
+    maxPlayers: row.max_players ?? null,
     organizer: { name: row.organizer_name },
     config: row.config,
     cancelledAt: iso(row.cancelled_at),

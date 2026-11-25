@@ -71,6 +71,12 @@ export function createDecksApi({ authenticate }) {
 
   return {
     router,
+    seed(sub, { name, deckCards, format = 'sandbox', isDraft = false }) {
+      const now = new Date().toISOString()
+      const deck = { id: randomUUID(), name, format, isDraft, isPublic: false, deckCards, createdAt: now, updatedAt: now }
+      decks.set(deck.id, { owner: sub, deck })
+      return deck
+    },
     decksOf: sub => [...decks.values()].filter(e => e.owner === sub).map(e => e.deck),
     get requests() { return requests },
     reset() { decks = new Map(); requests = [] },

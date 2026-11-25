@@ -7,7 +7,7 @@ export const setOf = ref => ref.split('_')[1]
 
 // The pool of `who` on `tournamentId`, as stored (exactly one row expected).
 export async function storedPool(db, tournamentId, who) {
-  const { rows } = await db.query('SELECT set_code, created_by, boosters, cards FROM sealed_pools WHERE tournament_ref = $1 AND sub = $2', [tournamentId, PERSONAS[who].sub])
+  const { rows } = await db.query('SELECT set_code, created_by, boosters, cards, cube_slot FROM sealed_pools WHERE tournament_ref = $1 AND sub = $2', [tournamentId, PERSONAS[who].sub])
   expect(rows).toHaveLength(1)
   return rows[0]
 }

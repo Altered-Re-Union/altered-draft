@@ -6,6 +6,7 @@ export const NAME_MIN = 3
 export const NAME_MAX = 80
 export const DESCRIPTION_MAX = 2000
 export const VISIBILITIES = ['public', 'private']
+export const MAX_PLAYERS_MAX = 256
 export const MAX_OPEN_TOURNAMENTS = 10
 export const OPEN_STATUSES = ['upcoming', 'ongoing']
 
@@ -95,6 +96,18 @@ export function validateTournamentFields(body, { now = new Date(), isCreate = fa
     else {
       values.bgaUrl = parsed.url
       values.bgaTournamentId = parsed.id
+    }
+  }
+
+  // Player cap (spec §15.2): null = no limit. Whether it suits the cube / the pool count is
+  // checkPlayerCap's job (cubeSealed.js), it needs the source and the capacity.
+  if (isCreate || has('maxPlayers')) {
+    const v = body?.maxPlayers
+    if (v === undefined || v === null || v === '') values.maxPlayers = null
+    else {
+      const n = typeof v === 'number' ? v : typeof v === 'string' ? Number(v) : NaN
+      if (Number.isInteger(n) && n >= 2 && n <= MAX_PLAYERS_MAX) values.maxPlayers = n
+      else errors.maxPlayers = 'invalid_max_players'
     }
   }
 

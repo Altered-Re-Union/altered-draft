@@ -15,7 +15,7 @@ export function query(text, params) {
 }
 
 export async function resetDb() {
-  await query('TRUNCATE sealed_pool_games, sealed_pools, hidden_tournaments, tournaments, draft_rooms')
+  await query('TRUNCATE sealed_pool_games, sealed_pools, hidden_tournaments, tournament_cube_slots, tournaments, draft_rooms')
 }
 
 export async function closeDb() {

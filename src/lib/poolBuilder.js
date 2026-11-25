@@ -78,6 +78,7 @@ export function buildPoolSeedString(sub, cols) {
  * @returns {Promise<{ cards: Record<string, number>, boosters: string[][] }>}
  */
 export async function buildPool(sub, { config, nonce }, { fetchCards = fetchSet } = {}) {
+  if (config.source.type === 'cube') throw new Error('cube pools are dealt per tournament: poolStore.insertCappedPool')
   if (config.source.type === 'faction') return buildFactionPool(sub, { config, nonce }, fetchCards)
   if (config.source.type === 'multiset') return buildMultisetPool(sub, { config, nonce }, fetchCards)
   const setCode = config.source.setCode
