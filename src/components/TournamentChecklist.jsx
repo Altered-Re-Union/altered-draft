@@ -54,7 +54,7 @@ export default function TournamentChecklist({ tournament, viewer, user, onLogin,
         </div>
       </Step>
 
-      <Step n={2} title={t('tournaments.step2Title')} desc={t('tournaments.step2Desc')} done={hasPool}>
+      <Step n={2} title={t('tournaments.step2Title')} desc={t('tournaments.step2Desc', { n: tournament.config?.source?.boosters ?? 7 })} done={hasPool}>
         {!user ? (
           <button type="button" onClick={onLogin} className={btn}>{t('tournaments.connectToPrepare')}</button>
         ) : hasPool ? (
