@@ -1381,22 +1381,25 @@ time and states it, and says which pools are kept.
 
 ### 14.6 Mono-faction sealed (V2)
 
-Format: 7 boosters in which **every card of the pool belongs to one chosen faction**, drawn over
+Format: 3 to 7 boosters (7 by default, the organizer's choice) in which **every card of the pool belongs to one chosen faction**, drawn over
 one or several sets with a weight each. It removes the colour lottery of a classic sealed.
 Design approved 2026-10-30.
 
-**Config.** `source: { type: 'faction', faction, sets: { CODE: 1..3 }, boosters: 7 }`, validated in
+**Config.** `source: { type: 'faction', faction, sets: { CODE: 1..3 }, boosters: 3..7 }`, validated in
 `src/lib/tournamentConfig.js` (`SOURCE_TYPES = ['set', 'faction']`, `MAX_SET_WEIGHT = 3`,
-`configSetCodes`). Zero weights are dropped; COREKS is refused; error codes `source.type`,
-`source.faction`, `source.sets`. For this source `uniques.faction` is forced to the source faction
+`configSetCodes`, `MIN_FACTION_BOOSTERS = 3`). Zero weights are dropped; COREKS is refused; error codes `source.type`,
+`source.faction`, `source.sets`, `source.boosters` (outside 3–7; a missing count = 7, the other
+sources stay at exactly 7). One faction makes a narrower pool, so 7 boosters can be a lot of
+cards: 3 still leaves 36 non-hero cards for a 30-card deck. The count is not a seed input (declared-tournament
+pools are stored), and the faction golden digest is computed at 7. For this source `uniques.faction` is forced to the source faction
 (only when the pool has uniques, else `null`) and `evenFactions` to `false`; `uniques.unsupportedSet` is raised only when the sets are otherwise
 valid but none of the included ones has faction-range data. `legacyColumnsFromConfig` writes
 `set_code: null`.
 
 **Generation.** `quotas(weights, n, rng)` (`src/lib/packGenerator.js`) splits n card **slots** over
 the sets by **largest remainder**, ties broken by shuffling the tied group with the pool rng.
-`generateFactionSealedPool` applies it separately to the 7 hero slots (heroes `packs`), the 63
-common slots and the 21 rare slots (over the sets that have a card of that rarity in the
+`generateFactionSealedPool` applies it separately to the `boosters` hero slots (heroes `packs`), the
+9 × `boosters` common slots and the 3 × `boosters` rare slots (7 / 63 / 21 at 7 boosters) (over the sets that have a card of that rarity in the
 faction), then shuffles the set labels over the slots: each set's share is exact per rarity
 across the pool, and a booster mixes sets. Each slot is drawn from the set its label assigns,
 falling back to the other included sets, then left empty (never another rarity). Each set's
@@ -1423,12 +1426,15 @@ card map instead of aborting the deck reconciliation); the pool page does the sa
 for a faction pool (`sourceType === 'faction'`, §14.7).
 
 **UI.** The tournament form's Cards step has a source switch "Sets" / "Mono-faction mix": faction
-pills, a weight stepper per set (×0 to ×3) with its share in %, and a fixed-faction line for the
-uniques. Public summary: `7 boosters · [icon] Axiom mono-faction · all sets`, or
+pills, a weight stepper per set (×0 to ×3) with its share in %, a "Boosters per player" stepper
+(3 to 7, default 7, its hint gives the 12 × n non-hero cards) and a fixed-faction line for the
+uniques. The summary and step 2 of the tournament checklist ("Your n boosters…") read the stored
+count. Public summary: `7 boosters · [icon] Axiom mono-faction · all sets`, or
 `... · SKY, ROC ×2, NEJ` when weights are not uniform.
 
 **Recette.** `docs/tournaments/acceptance-mono-faction-sealed.html` (step ids `mf-<group>-<slug>`,
-11 replayed by `tests/e2e/specs/faction-sealed.spec.js`). `scripts/e2e-acceptance-coverage.mjs`
+12 replayed by `tests/e2e/specs/faction-sealed.spec.js`; the booster count is the v1.1 step
+`mf-b-boosters`, BGA id 123487). `scripts/e2e-acceptance-coverage.mjs`
 reads the acceptance pages (`ACCEPTANCE_PAGES`, §14.7 and §14.9 add the V3 and V4 ones) and refuses an id
 present in two pages.
 

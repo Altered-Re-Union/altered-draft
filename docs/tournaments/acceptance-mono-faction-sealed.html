@@ -315,9 +315,9 @@ const PSQL = (sql) => pre(`${DB} -c "${sql}"`);
 
 // Steps replayed by the Playwright suite. Rewritten by `npm run test:e2e:coverage -- --write`
 // (scripts/e2e-acceptance-coverage.mjs) from the tests' tags: do not edit this line by hand.
-const AUTO_STEPS = ['mf-a-issues', 'mf-a-switch-r2', 'mf-b-create', 'mf-c-pool', 'mf-d-nej', 'mf-d-nej-alone', 'mf-e-api', 'mf-e-forced', 'mf-f-bga', 'mf-g-locked', 'mf-h-mobile'];
+const AUTO_STEPS = ['mf-a-issues', 'mf-a-switch-r2', 'mf-b-boosters', 'mf-b-create', 'mf-c-pool', 'mf-d-nej', 'mf-d-nej-alone', 'mf-e-api', 'mf-e-forced', 'mf-f-bga', 'mf-g-locked', 'mf-h-mobile'];
 // Steps the suite covers with a narrower assertion than the acceptance steps (hand-maintained).
-const AUTO_PARTIAL = { 'mf-a-switch-r2': 'switch, pills, weights, shares and disabled buttons; the greyed look of an excluded row stays a human check', 'mf-c-pool': 'reveal and stored pool on the e2e fixtures (SKY ×1, ROC ×2, NEJ ×1); the psql line on the real card data (no Trial by Frost ref) stays manual', 'mf-h-mobile': 'no horizontal scroll on the form, tournament page and pool page, stepper and share on one line; truncated set names stay a human check' };
+const AUTO_PARTIAL = { 'mf-b-boosters': 'stepper bounds, hint, stored count, summary, checklist and the 4-booster pool; the Sets round trip and the locked edit stay human checks', 'mf-a-switch-r2': 'switch, pills, weights, shares and disabled buttons; the greyed look of an excluded row stays a human check', 'mf-c-pool': 'reveal and stored pool on the e2e fixtures (SKY ×1, ROC ×2, NEJ ×1); the psql line on the real card data (no Trial by Frost ref) stays manual', 'mf-h-mobile': 'no horizontal scroll on the form, tournament page and pool page, stepper and share on one line; truncated set names stay a human check' };
 
 const GROUPS = [
   {
@@ -389,6 +389,19 @@ packs</pre><p class="note">No <code>ALIZE</code> key: a set at ×0 is dropped fr
         html: `<ul><li>Tournament page: “7 boosters · <em>[Axiom icon]</em> Axiom mono-faction · BTG, WTM ×2, SKY, SDU, ROC, NEJ · 1 guaranteed unique”. No separate “Axiom uniques” part (implied).</li>
 <li>${url(WEB + '/tournament?tab=upcoming')}: the “Axiom mix” card shows the same line, icon included.</li>
 <li>Same two places in the light theme and at 375 px (DevTools): the icon stays aligned with the text, the line wraps without horizontal scroll.</li></ul>` },
+      { id: 'mf-b-boosters', v11: true, who: 'alice', title: 'Booster count: “Axiom short” with 4 boosters',
+        html: `<p>BGA id 123487. Start without it:</p>${PSQL(`DELETE FROM sealed_pools WHERE tournament_id = '123487' OR tournament_ref IN (SELECT id FROM tournaments WHERE bga_tournament_id = '123487'); DELETE FROM tournaments WHERE bga_tournament_id = '123487'`)}
+<ul><li>${url(WEB + '/tournament/new')}: name ${chip('Axiom short')}, link ${chip('https://boardgamearena.com/tournament?id=123487')}, start tomorrow. Cards: “Mono-faction mix”, Axiom, weights left at ×1.</li>
+<li>Under the weights: a row “Boosters per player” at <strong>7</strong>, “+” greyed out, hint “3 to 7: fewer boosters, tighter pool (84 cards outside the heroes).”</li>
+<li>“−” down to 3: “−” greys out at 3, the hint reads 36 cards. “+” once: <strong>4</strong>, 48 cards.</li>
+<li>Switch to “Sets” and back: still 4. Settings: uniques 1 / 1. Create.</li></ul>
+${pre(`curl -s "${API}/api/tournaments?bgaId=123487" | node -pe 'JSON.parse(require("fs").readFileSync(0)).tournaments.map(t => t.name + "  boosters=" + t.config.source.boosters).join("\\n")'`)}
+<p>Expected: <code>Axiom short  boosters=4</code>.</p>
+<ul><li>Tournament page: the summary starts with “<strong>4 boosters</strong> · Axiom mono-faction”; step 2 of the checklist reads “Your <strong>4</strong> boosters are generated once and locked.”</li>
+<li>“Open my pool”: “Booster 1 / 5” … “Booster 4 / 5”, 13 Axiom cards each, then the 5th with the guaranteed unique.</li></ul>
+${PSQL(`SELECT jsonb_array_length(p.boosters) AS boosters, (SELECT sum(v::int) FROM jsonb_each_text(p.cards) AS c(k, v)) AS cards FROM sealed_pools p JOIN tournaments t ON t.id = p.tournament_ref WHERE t.bga_tournament_id = '123487' AND p.sub = '11111111-1111-1111-1111-111111111111'`)}
+<p>Expected: <code>4 | 53</code> (4 × 13 + the guaranteed unique).</p>
+<ul><li>Edit the tournament: the booster row is disabled (pool exists), like the weights.</li></ul>` },
     ],
   },
   {

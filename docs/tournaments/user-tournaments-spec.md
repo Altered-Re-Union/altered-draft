@@ -226,7 +226,7 @@ One shape for tournaments, for the legacy format (converted on read), and later 
 }
 ```
 
-- `source.type`: lot 1 accepts `set`; **V2 (2026-10-30) accepts `faction`**: `{ type: 'faction', faction, sets: { CODE: 1..3 }, boosters: 7 }` (weights 1–3, zero dropped, COREKS refused, `uniques.faction` forced to `faction`, `evenFactions` false); **V3 (2026-11-01, §13) accepts `multiset`**: `{ type: 'multiset', sets: { CODE: boosters }, boosters: 7 }` (counts 0–7, zero dropped, Σ = 7, COREKS refused; a multiset left with one set is **normalized to `set`**). Lot 2 adds `cube` (`{ type, cubeId?, name, cards[],
+- `source.type`: lot 1 accepts `set`; **V2 (2026-10-30) accepts `faction`**: `{ type: 'faction', faction, sets: { CODE: 1..3 }, boosters: 3..7 }` (booster count chosen by the organizer since 2026-11-25, default 7; weights 1–3, zero dropped, COREKS refused, `uniques.faction` forced to `faction`, `evenFactions` false); **V3 (2026-11-01, §13) accepts `multiset`**: `{ type: 'multiset', sets: { CODE: boosters }, boosters: 7 }` (counts 0–7, zero dropped, Σ = 7, COREKS refused; a multiset left with one set is **normalized to `set`**). Lot 2 adds `cube` (`{ type, cubeId?, name, cards[],
   heroes[] }` — built-in cubes are snapshotted by refs, not referenced by id).
 - `uniques.randomOneIn` (V3, §13): `null` (default: the exact counts below) or an integer 1–10,
   "one unique in N boosters": every booster independently gets a unique in its last rare slot

@@ -1,17 +1,20 @@
 import { useLang } from '../lib/i18n/i18n.jsx'
-import { SEALED_BOOSTERS } from '../lib/tournamentConfig.js'
+import { SEALED_BOOSTERS, MIN_FACTION_BOOSTERS } from '../lib/tournamentConfig.js'
 import SetPresetGrid from './SetPresetGrid.jsx'
 import FactionPills from './FactionPills.jsx'
 import SetWeightsList from './SetWeightsList.jsx'
+import Stepper from './Stepper.jsx'
 
 // The Cards section of the tournament form (spec §8.1, §13.4): "Sets" (the 7 boosters split
-// over one or more sets) or "Mono-faction mix" (one faction, several weighted sets). Both
+// over one or more sets) or "Mono-faction mix" (one faction, several weighted sets, and its own
+// booster count: 3 to 7, a single faction makes 7 a lot of cards). Both
 // sources' values live in the form, so flipping back and forth loses nothing; only the
 // active one is sent. The Sets tab has one model, `setCounts` ({ CODE: n }, n > 0 only), and
 // two views: the grid (one click = all 7 boosters of that set) and the "Mix several sets"
 // disclosure, one stepper per set.
 export default function TournamentCardsSource({
   sourceType, onSourceType, setCounts, onSetCounts, faction, onFaction, weights, onWeights,
+  boosters = SEALED_BOOSTERS, onBoosters,
   mixOpen, onMixOpen, disabled = false,
 }) {
   const { t } = useLang()
@@ -41,6 +44,14 @@ export default function TournamentCardsSource({
           <div className="space-y-1.5">
             <span className="text-sm text-ink2">{t('tournaments.setsWeightsLabel')}</span>
             <SetWeightsList weights={weights} onChange={onWeights} disabled={disabled} />
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="flex-1 min-w-0">
+              <span id="tn-faction-boosters-label" className="block text-sm text-ink2">{t('tournaments.factionBoostersLabel')}</span>
+              <span className="block text-xs text-muted">{t('tournaments.factionBoostersHint', { min: MIN_FACTION_BOOSTERS, max: SEALED_BOOSTERS, cards: boosters * 12 })}</span>
+            </span>
+            <Stepper value={boosters} onChange={onBoosters} min={MIN_FACTION_BOOSTERS} max={SEALED_BOOSTERS}
+              disabled={disabled} testId="faction-boosters" />
           </div>
           <p className="text-sm text-muted">{t('tournaments.factionMixHint')}</p>
         </>

@@ -7,6 +7,10 @@ import { CURRENT_BANLIST } from './banlist.js'
 
 export const CONFIG_VERSION = 1
 export const SEALED_BOOSTERS = 7
+// A mono-faction pool's booster count is the organizer's (one faction = a narrower pool, 7
+// boosters can be a lot): 3 still leaves 36 non-hero cards for a 30-card deck. The other
+// sources stay at SEALED_BOOSTERS.
+export const MIN_FACTION_BOOSTERS = 3
 export const MAX_UNIQUES = 7
 export const HERO_MODES = ['packs', 'free']
 export const SOURCE_TYPES = ['set', 'faction', 'multiset']
@@ -96,7 +100,11 @@ export function validateTournamentConfig(input) {
     set = SETS.find(s => s.code === src.setCode && !s.hidden) ?? null
     if (!set) errors.push('source.setCode')
   }
-  if (src.boosters !== undefined && src.boosters !== SEALED_BOOSTERS) errors.push('source.boosters')
+  let factionBoosters = SEALED_BOOSTERS
+  if (isFaction) {
+    factionBoosters = toInt(src.boosters, SEALED_BOOSTERS)
+    if (typeof src.boosters === 'boolean' || factionBoosters === null || factionBoosters < MIN_FACTION_BOOSTERS || factionBoosters > SEALED_BOOSTERS) errors.push('source.boosters')
+  } else if (src.boosters !== undefined && src.boosters !== SEALED_BOOSTERS) errors.push('source.boosters')
 
   if (!HERO_MODES.includes(c.heroes)) errors.push('heroes')
 
@@ -140,7 +148,7 @@ export function validateTournamentConfig(input) {
       v: CONFIG_VERSION,
       format: 'sealed',
       source: isFaction
-        ? { type: 'faction', faction: src.faction, sets: factionSets, boosters: SEALED_BOOSTERS }
+        ? { type: 'faction', faction: src.faction, sets: factionSets, boosters: factionBoosters }
         : multiSets
           ? { type: 'multiset', sets: multiSets, boosters: SEALED_BOOSTERS }
           : { type: 'set', setCode: set.code, boosters: SEALED_BOOSTERS },
