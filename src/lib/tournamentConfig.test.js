@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { validateTournamentConfig, configFromLegacyFormat, legacyColumnsFromConfig, legacyFormatForBgaTournament, configSetCodes } from './tournamentConfig.js'
+import { validateTournamentConfig, configFromLegacyFormat, legacyColumnsFromConfig, legacyFormatForBgaTournament, configSetCodes, configHasUniques } from './tournamentConfig.js'
 
 const valid = {
   format: 'sealed',
@@ -247,5 +247,20 @@ describe('validateTournamentConfig randomOneIn', () => {
   it('forces even factions off for a multi-set split, keeps it for the normalized single set', () => {
     expect(validateTournamentConfig({ ...multi({ CYCLONE: 4, EOLE: 3 }), uniques: { inBoosters: 2, guaranteed: 0, evenFactions: true } }).config.uniques.evenFactions).toBe(false)
     expect(validateTournamentConfig({ ...multi({ CYCLONE: 7 }), uniques: { inBoosters: 2, guaranteed: 0, evenFactions: true } }).config.uniques.evenFactions).toBe(true)
+  })
+})
+
+describe('configHasUniques', () => {
+  const none = { guaranteed: 0, inBoosters: 0, randomOneIn: null }
+  it('is true when a pool can hold a unique', () => {
+    expect(configHasUniques({ uniques: { ...none, guaranteed: 1 } })).toBe(true)
+    expect(configHasUniques({ uniques: { ...none, inBoosters: 2 } })).toBe(true)
+    expect(configHasUniques({ uniques: { ...none, randomOneIn: 8 } })).toBe(true)
+    expect(configHasUniques({ uniques: none, source: { type: 'cube', cards: { ALT_CORE_B_AX_04_U_1437: 1 } } })).toBe(true)
+  })
+  it('is false otherwise', () => {
+    expect(configHasUniques({ uniques: none, source: { type: 'set', setCode: 'CORE' } })).toBe(false)
+    expect(configHasUniques({ uniques: none, source: { type: 'cube', cards: { ALT_CORE_B_AX_04_C: 3 } } })).toBe(false)
+    expect(configHasUniques(null)).toBe(false)
   })
 })

@@ -39,6 +39,19 @@ test('renderer stub paints a stable face', { tag: ['@j-console'] }, async ({ pag
   expect(stable).toBe(true)
 })
 
+test('renderer stub draws a face through AlteredRender.mountFromApi', { tag: ['@j-console'] }, async ({ page }) => {
+  await page.goto('/')
+  const [length, art, mounted] = await page.evaluate(async () => {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const { canvas, state } = await window.AlteredRender.mountFromApi(host, { reference: 'ALT_CYCLONE_B_AX_01_U_1' })
+    return [canvas.toDataURL('image/jpeg', 0.85).length, !!state.images.bg, host.contains(canvas)]
+  })
+  expect(length).toBeGreaterThan(8000)
+  expect(art).toBe(true)
+  expect(mounted).toBe(true)
+})
+
 test('guards collect leaks, console errors and 5xx', async ({ page, guardBucket }) => {
   await page.goto('/')
   await page.evaluate(async () => {

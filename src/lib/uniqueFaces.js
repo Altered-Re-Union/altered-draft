@@ -1,10 +1,11 @@
 import { createTaskQueue } from './taskQueue.js'
 import { getCachedFace, putCachedFace } from './faceCache.js'
+import { endpoints } from './endpoints.js'
 
 // The TRUE face of a unique card, as an image. The real unique faces live on no host (Altered's
 // S3 is locked, the community CDN only has the base rare …_R1), so we draw them with the
-// <altered-card> web component (the Altered Card Renderer, vendored in public/ and loaded by
-// index.html) and snapshot its canvas to a JPEG data URL.
+// Altered Card Renderer (vendored in public/ and loaded by index.html, which also exposes it as
+// `window.AlteredRender`) on a canvas and snapshot it to a JPEG data URL.
 //
 // Faces are requested separately from the card DATA (fetchUnique returns the data at once,
 // with `imagePath: null` and `faceLang` set): pages render the pool straight away and each
@@ -12,13 +13,31 @@ import { getCachedFace, putCachedFace } from './faceCache.js'
 // time (a render is CPU-heavy, all at once they all crawl), the one about to be revealed can
 // jump the line, and finished faces are kept in IndexedDB (faceCache.js) across visits.
 //
+// We call `AlteredRender.mountFromApi()` ourselves instead of mounting an <altered-card>
+// element: the element signals nothing when it is done, and its canvas first shows a
+// "Loading… <ref>" placeholder (card back) while the art downloads. Guessing the end by
+// polling the canvas snapshotted that placeholder on any slow network (mobile) and cached it
+// for 30 days. mountFromApi resolves once the art is loaded and the card drawn, and its state
+// tells whether the art made it.
+//
 // Never falls back to the base rare's art: opening a unique is the highlight of a booster, and
 // showing the wrong card in its place is worse than a moment of card back.
 
 // Bump with the vendored renderer (index.html pins its commit) so cached faces get redrawn.
 const RENDERER_VERSION = '84adbb8'
+// Bump to drop every cached face — v2 drops the "Loading…" placeholders cached by the
+// canvas-polling version.
+const FACE_CACHE_VERSION = 2
+const CACHE_PREFIX = `${RENDERER_VERSION}.${FACE_CACHE_VERSION}`
 const CONCURRENCY = 2
 const RENDER_ATTEMPTS = 2
+// A cold render first loads the renderer's config, fonts and art (~15 files): on a slow mobile
+// network that takes well over 10 s, so the budget is generous — a face that takes it all is
+// still better than a failed one, and the card back shows meanwhile.
+const RENDER_TIMEOUT_MS = 30000
+const RENDERER_WAIT_MS = 6000
+const DATA_TIMEOUT_MS = 10000
+const BATCH_MAX = 50
 const LOCALE = { EN: 'en', FR: 'fr', ES: 'es', DE: 'de', IT: 'it' }
 
 const queue = createTaskQueue(CONCURRENCY)
@@ -34,42 +53,160 @@ function setFace(key, patch) {
   for (const fn of listeners.get(key) ?? []) fn()
 }
 
-// Draws one face; null if the renderer isn't loaded / times out / the canvas is tainted.
-async function renderUniqueFace(reference, lang) {
-  if (typeof document === 'undefined' || typeof window === 'undefined' || !window.customElements) return null
-  const CE = window.customElements
-  if (!CE.get('altered-card')) {
-    try { await Promise.race([CE.whenDefined('altered-card'), new Promise((_, rej) => setTimeout(rej, 6000))]) }
-    catch { return null }
+function withTimeout(promise, ms) {
+  let timer
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('timeout')), ms) }),
+  ]).finally(() => clearTimeout(timer))
+}
+
+// The renderer API, once its script has run; null without a DOM or when it never loads.
+async function renderer() {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return null
+  if (window.AlteredRender) return window.AlteredRender
+  if (!window.customElements) return null
+  try { await withTimeout(window.customElements.whenDefined('altered-card'), RENDERER_WAIT_MS) }
+  catch { return null }
+  return window.AlteredRender ?? null
+}
+
+// What the renderer loads before its first face (measured on the vendored build), relative to
+// its asset base. It discovers them one stage after another — config index, then the configs,
+// then the icon CSS, then the fonts, then the placeholder card back and the biome icons, and
+// the QR library at the first card: ~6 round trips, 9 s on a slow 3G. Fetching them all at
+// once puts them in the HTTP cache (the CDN sends `access-control-allow-origin: *` and a
+// max-age), so the renderer's own requests are answered from there. A file missing from this
+// list is just loaded by the renderer as before; one it no longer uses is a wasted download.
+const BIOMES = ['FOREST', 'MOUNTAIN', 'OCEAN'].flatMap(biome =>
+  ['ZERO', 'SMALL', 'MID', 'BIG'].map(size => `assets/biomes/ALT_COMPONENT_${biome}_${size}.svg`))
+export const RENDERER_ASSETS = [
+  'config/index.json',
+  ...['core', 'ui', 'biomes', 'elements', 'framedata', 'cards_data'].map(name => `config/${name}.json`),
+  ...['AX', 'AX_community', 'BR', 'LY', 'MU', 'MU_community', 'OR', 'YZ', 'NE'].map(f => `config/faction_${f}.json`),
+  'assets/fonts/alteredicons.css',
+  'assets/fonts/HapticPro-Regular.ttf',
+  'assets/fonts/HapticPro-Extrabold.ttf',
+  'assets/fonts/Jali_Greek_Variable_Italic.otf',
+  'assets/fonts/NotoSansSymbols-circled.woff2',
+  'assets/img/ALT_OFFICIAL_CARDBACK.png',
+  ...BIOMES,
+  'assets/vendor/qrcodejs/qrcode.min.js',
+  'assets/logos/Altered-Swirl.svg',
+]
+
+// The renderer's asset base: its own default is the community CDN's /forge/ (cdnUrl, unless
+// the page sets window.FORGE_BASE like the renderer reads).
+function rendererBase() {
+  const base = (typeof window !== 'undefined' && window.FORGE_BASE) || `${endpoints().cdnUrl}/forge/`
+  return base.endsWith('/') ? base : `${base}/`
+}
+
+function prefetchRendererAssets() {
+  if (typeof fetch !== 'function') return
+  const base = rendererBase()
+  for (const path of RENDERER_ASSETS) {
+    // Read to the end so the response lands in the HTTP cache; failures are the renderer's
+    // business (it retries the file itself).
+    fetch(base + path, { credentials: 'omit' }).then(res => res.blob()).catch(() => {})
   }
+}
+
+let warming = null
+/**
+ * Gets the renderer ready before the first face is needed: downloads its assets in parallel
+ * and runs its init (config + fonts), so that face doesn't pay for them. Call it as soon as a
+ * page knows it will show a unique to draw. Idempotent and harmless without a DOM.
+ */
+export function warmUniqueRenderer() {
+  if (!warming) {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return Promise.resolve()
+    prefetchRendererAssets()
+    warming = renderer()
+      .then(R => R?.init?.())
+      .catch(() => { warming = null }) // a failed warm-up is retried by the next call
+  }
+  return warming
+}
+
+// The renderer's card data (raw cards API shape) comes from the batch endpoint, like the
+// renderer's own <altered-card> path: the faces requested in the same tick (a pool page mounts
+// them all at once) share one request. Failures are not remembered, so a retry asks again.
+const cardData = new Map() // `${ref}|${locale}` -> Promise<card | null>
+let batch = null // { locale -> Map<ref, { resolve }> }
+
+function fetchCardData(reference, locale) {
+  const key = `${reference}|${locale}`
+  if (cardData.has(key)) return cardData.get(key)
+  const promise = new Promise(resolve => {
+    if (!batch) {
+      batch = new Map()
+      setTimeout(flushBatch, 0)
+    }
+    if (!batch.has(locale)) batch.set(locale, new Map())
+    batch.get(locale).set(reference, resolve)
+  }).then(card => {
+    if (!card) cardData.delete(key)
+    return card
+  })
+  cardData.set(key, promise)
+  return promise
+}
+
+function flushBatch() {
+  const pending = batch
+  batch = null
+  for (const [locale, waiting] of pending) {
+    const refs = [...waiting.keys()]
+    for (let i = 0; i < refs.length; i += BATCH_MAX) {
+      const chunk = refs.slice(i, i + BATCH_MAX)
+      postBatch(chunk, locale).then(cards => {
+        const byRef = new Map(cards.map(card => [card?.reference, card]))
+        for (const ref of chunk) waiting.get(ref)(byRef.get(ref) ?? null)
+      })
+    }
+  }
+}
+
+async function postBatch(references, locale) {
+  try {
+    const res = await fetch(`${endpoints().cardsApiUrl}/api/cards/batch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ references, locale }),
+      signal: AbortSignal.timeout?.(DATA_TIMEOUT_MS),
+    })
+    if (!res.ok) return []
+    const cards = await res.json()
+    return Array.isArray(cards) ? cards : []
+  } catch {
+    return []
+  }
+}
+
+// Draws one face; null if the renderer isn't loaded, the card or its art is missing, it times
+// out or the canvas is tainted — never the renderer's placeholder.
+async function renderUniqueFace(reference, lang) {
+  const locale = LOCALE[lang] ?? 'en'
+  const [R, card] = await Promise.all([renderer(), fetchCardData(reference, locale)])
+  if (!R?.mountFromApi || !card) return null
   const host = document.createElement('div')
   host.setAttribute('aria-hidden', 'true')
   host.style.cssText = 'position:fixed;left:-10000px;top:0;width:744px;height:1039px;opacity:0;pointer-events:none;z-index:-1'
-  const el = document.createElement('altered-card')
-  el.setAttribute('ref', reference)
-  el.setAttribute('locale', LOCALE[lang] ?? 'en')
-  host.appendChild(el)
   document.body.appendChild(host)
   try {
-    // The renderer signals nothing when it's done: poll the canvas until two reads match.
-    const start = Date.now()
-    let prev = ''
-    while (Date.now() - start < 10000) {
-      await new Promise(r => setTimeout(r, 250))
-      const canvas = el.querySelector('canvas')
-      if (!canvas || !canvas.width) continue
-      let url
-      try { url = canvas.toDataURL('image/jpeg', 0.85) } catch { return null } // CORS-tainted → give up
-      if (url && url.length > 8000 && url === prev) return url // two identical reads → fully drawn
-      prev = url
-    }
-    return (prev && prev.length > 8000) ? prev : null
+    const { canvas, state } = await withTimeout(
+      R.mountFromApi(host, { ...card, forge: { collection: 'official', lang: locale } }),
+      RENDER_TIMEOUT_MS,
+    )
+    if (!canvas?.width || !state?.images?.bg) return null // no art: a frame on a blank card
+    try { return canvas.toDataURL('image/jpeg', 0.85) } catch { return null } // CORS-tainted
   } finally {
     try { document.body.removeChild(host) } catch { /* already detached */ }
   }
 }
 
-// A cold page load can lose the race against the renderer's own script, hence a retry.
+// A transient failure (art or data request) gets a second chance.
 async function renderWithRetries(reference, lang) {
   for (let attempt = 0; attempt < RENDER_ATTEMPTS; attempt++) {
     const src = await renderUniqueFace(reference, lang).catch(() => null)
@@ -104,7 +241,10 @@ export function requestUniqueFace(reference, lang = 'EN', { front = false } = {}
   }
   // The cache lookup runs inside the queued task (a few ms), so the task is queued right away
   // and prioritizeUniqueFaces can reorder it immediately.
-  const cacheKey = `${RENDERER_VERSION}:${key}`
+  const cacheKey = `${CACHE_PREFIX}:${key}`
+  // Asked now rather than in the task, so the faces requested together share one batch
+  // request instead of one per queue slot (cheap even when the face turns out to be cached).
+  fetchCardData(reference, LOCALE[lang] ?? 'en')
   const promise = queue.add(key, async () => {
     const cached = await getCachedFace(cacheKey)
     if (cached) return cached

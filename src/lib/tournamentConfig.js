@@ -29,6 +29,16 @@ export function configSetCodes(config) {
   return Object.keys(src.sets).sort((a, b) => rank(a) - rank(b))
 }
 
+/**
+ * Whether a tournament's pools can hold uniques (guaranteed, in boosters, random hits, or
+ * unique refs in a cube's cards) — the page warms the unique-face renderer when they can.
+ */
+export function configHasUniques(config) {
+  const u = config?.uniques ?? {}
+  if ((u.guaranteed ?? 0) > 0 || (u.inBoosters ?? 0) > 0 || u.randomOneIn) return true
+  return Object.keys(config?.source?.cards ?? {}).some(ref => /_U_\d+$/.test(ref))
+}
+
 function toInt(value, fallback) {
   if (value === undefined || value === null || value === '') return fallback
   const n = typeof value === 'number' ? value : Number(String(value))

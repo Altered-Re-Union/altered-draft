@@ -126,7 +126,14 @@ All tournament pages require a Re:Union login, except the public list of declare
   waits (up to 25 s) for the unique's face to be drawn (`src/lib/uniqueFaces.js`), the current
   pack's uniques first. Past that, or in the full pool, a unique still drawing shows the card
   back with a gold sweep (`CardImage.jsx`) — never the base rare's art — and a failed draw
-  offers Retry. Drawn faces are kept in IndexedDB for 30 days.
+  offers Retry. A face is drawn with the renderer's `AlteredRender.mountFromApi()` (data from
+  the cards API's `POST /api/cards/batch`, one request for the faces asked together), which
+  resolves once the art is loaded; a face drawn without its art is a failure, never kept. The
+  renderer's files (configs, fonts, card back, biome icons, QR library: `RENDERER_ASSETS`) are
+  fetched in parallel and its init runs as soon as the page knows uniques are coming — the
+  "open my pool" click when the tournament's config has uniques, the pool response when it
+  holds one. Drawn faces are kept in IndexedDB for 30 days (cache key versioned:
+  `FACE_CACHE_VERSION`).
 - **Full-pool deckbuilder** (`PoolGrid`): every card of the pool with +/- controls, filters,
   grouping. Heroes appear in the full pool, not in any booster. Grouped by faction or by cost,
   each group header (except the Hero cost group) has **+ All / − All** (`src/lib/deckBulk.js`):

@@ -55,5 +55,11 @@ export function createCardsApi() {
     // Rooms' "add random uniques" (out of scope): must answer, never crash.
     res.json({ member: [] })
   })
+  // The renderer's data for the unique faces (src/lib/uniqueFaces.js): an array, the
+  // references the API doesn't know are left out.
+  router.post('/api/cards/batch', (req, res) => {
+    const refs = Array.isArray(req.body?.references) ? req.body.references : []
+    res.json(refs.map(ref => synthesizeUnique(String(ref))).filter(Boolean))
+  })
   return { router }
 }
